@@ -8,9 +8,9 @@ public final class SkyesightClientEntityHandler {
 
     public static void handle(SkyesightEntitySnapshotPayload payload) {
         SkyesightVisualWorld world =
-                SkyesightVisualWorldManager.getOrCreate(payload.dimension());
+                SkyesightVisualWorldManager.get(payload.viewId());
 
-        if (world == null) {
+        if (world == null || world.isClosed()) {
             return;
         }
 

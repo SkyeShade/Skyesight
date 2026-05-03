@@ -285,7 +285,18 @@ public final class SkyesightRemoteChunkReceiver {
             unloadChunk(pos);
         }
     }
+    public void clear() {
+        LongSet copy = new LongOpenHashSet(this.loadedChunks);
 
+        for (long packed : copy) {
+            unloadChunk(new ChunkPos(
+                    ChunkPos.getX(packed),
+                    ChunkPos.getZ(packed)
+            ));
+        }
+
+        this.loadedChunks.clear();
+    }
     public void unloadChunk(ChunkPos pos) {
         this.loadedChunks.remove(pos.toLong());
         this.level.getChunkSource().drop(pos);

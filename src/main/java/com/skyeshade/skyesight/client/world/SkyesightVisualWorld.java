@@ -16,11 +16,15 @@ public final class SkyesightVisualWorld implements AutoCloseable {
     private final ResourceKey<Level> dimension;
     private final ClientLevel level;
     private final ChunkTracker chunkTracker;
-
+    private boolean closed;
     private final SkyesightSodiumWorldRenderer renderer;
     private final SkyesightRemoteChunkReceiver chunkReceiver;
     private final SkyesightVisualEntityStore entityStore;
     private final SkyesightVisualParticleManager particles;
+    public static SkyesightVisualWorld create(ResourceKey<Level> dimension) {
+        ClientLevel level = SkyesightClientLevelFactory.create(dimension);
+        return new SkyesightVisualWorld(dimension, level);
+    }
     public SkyesightVisualWorld(
             ResourceKey<Level> dimension,
             ClientLevel level
@@ -35,6 +39,7 @@ public final class SkyesightVisualWorld implements AutoCloseable {
         this.renderer.setLevel(level);
 
     }
+
     public SkyesightVisualParticleManager particles() {
         return this.particles;
     }
@@ -60,9 +65,6 @@ public final class SkyesightVisualWorld implements AutoCloseable {
     public SkyesightSodiumWorldRenderer renderer() {
         return this.renderer;
     }
-    public void scheduleBlockUpdate(BlockPos pos) {
-        this.renderer.scheduleBlockUpdate(pos);
-    }
     public void renderTerrain(
             Camera camera,
             Frustum frustum,
@@ -76,9 +78,6 @@ public final class SkyesightVisualWorld implements AutoCloseable {
                 modelMatrix,
                 projectionMatrix
         );
-    }
-    public void tickBlockEntities() {
-        this.chunkReceiver.tickBlockEntities();
     }
     public void renderBlockEntities(
             Camera camera,
@@ -104,6 +103,7 @@ public final class SkyesightVisualWorld implements AutoCloseable {
                 partialTick
         );
     }
+
     public ResourceKey<Level> dimension() {
         return dimension;
     }
@@ -115,9 +115,19 @@ public final class SkyesightVisualWorld implements AutoCloseable {
     public ChunkTracker chunkTracker() {
         return chunkTracker;
     }
+    public boolean isClosed() {
+        return this.closed;
+    }
 
     @Override
     public void close() {
+        if (this.closed) {
+            return;
+        }
+
+        this.closed = true;
+
+        this.chunkReceiver.clear();
         this.entityStore.clear();
         this.renderer.close();
     }

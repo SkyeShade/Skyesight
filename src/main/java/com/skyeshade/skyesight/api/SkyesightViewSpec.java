@@ -14,5 +14,6 @@ public record SkyesightViewSpec(
         int renderDistanceChunks,
         int width,
         int height,
+        float fov,
         SkyesightRenderMode renderMode
 ) {}

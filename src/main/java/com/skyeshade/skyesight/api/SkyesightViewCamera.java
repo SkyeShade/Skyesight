@@ -19,8 +19,9 @@ public interface SkyesightViewCamera {
     void setRotation(float yaw, float pitch);
 
     void setRotation(float yaw, float pitch, float roll);
-
+    void setRotation(Quaternionf rotation);
     void copyFromMainCamera();
 
     void copyFromMainCameraWithOffset(Vec3 offset);
+
 }

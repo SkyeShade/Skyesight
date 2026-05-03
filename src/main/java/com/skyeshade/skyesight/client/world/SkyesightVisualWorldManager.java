@@ -4,25 +4,41 @@ import com.skyeshade.skyesight.Skyesight;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
 
 import java.util.HashMap;
 import java.util.Map;
 
 public final class SkyesightVisualWorldManager {
-    private static final Map<ResourceKey<Level>, SkyesightVisualWorld> WORLDS = new HashMap<>();
+    private static final Map<ResourceLocation, SkyesightVisualWorld> WORLDS = new HashMap<>();
 
     private SkyesightVisualWorldManager() {}
+
     public static void tickAll() {
         for (SkyesightVisualWorld world : WORLDS.values()) {
-            world.tick();
+            if (!world.isClosed()) {
+                world.tick();
+            }
         }
     }
-    public static SkyesightVisualWorld getOrCreate(ResourceKey<Level> dimension) {
-        SkyesightVisualWorld existing = WORLDS.get(dimension);
+
+    public static SkyesightVisualWorld get(ResourceLocation viewId) {
+        return WORLDS.get(viewId);
+    }
+
+    public static SkyesightVisualWorld getOrCreate(
+            ResourceLocation viewId,
+            ResourceKey<Level> dimension
+    ) {
+        SkyesightVisualWorld existing = WORLDS.get(viewId);
+
+        if (existing != null && !existing.isClosed()) {
+            return existing;
+        }
 
         if (existing != null) {
-            return existing;
+            WORLDS.remove(viewId);
         }
 
         Minecraft minecraft = Minecraft.getInstance();
@@ -33,35 +49,21 @@ public final class SkyesightVisualWorldManager {
 
         ClientLevel skyesightLevel = SkyesightClientLevelFactory.create(dimension);
         SkyesightVisualWorld world = new SkyesightVisualWorld(dimension, skyesightLevel);
-        Skyesight.LOGGER.info(
-                "[Skyesight] Visual world dimension={} hasSkyLight={} ambientLight={}",
-                dimension.location(),
-                skyesightLevel.dimensionType().hasSkyLight(),
-                skyesightLevel.dimensionType().ambientLight()
-        );
-        WORLDS.put(dimension, world);
 
         Skyesight.LOGGER.info(
-                "[Skyesight] Created visual world dimension={} sameObjectAsMain={}",
+                "[Skyesight] Created visual world view={} dimension={} sameObjectAsMain={}",
+                viewId,
                 dimension.location(),
                 skyesightLevel == minecraft.level
         );
 
+        WORLDS.put(viewId, world);
+
         return world;
     }
 
-    public static SkyesightVisualWorld getOrCreateCurrentLevelWorld() {
-        Minecraft minecraft = Minecraft.getInstance();
-
-        if (minecraft.level == null) {
-            return null;
-        }
-
-        return getOrCreate(minecraft.level.dimension());
-    }
-
-    public static void close(ResourceKey<Level> dimension) {
-        SkyesightVisualWorld world = WORLDS.remove(dimension);
+    public static void close(ResourceLocation viewId) {
+        SkyesightVisualWorld world = WORLDS.remove(viewId);
 
         if (world != null) {
             world.close();

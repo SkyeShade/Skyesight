@@ -30,12 +30,15 @@ public final class SkyesightClientApi implements SkyesightApi {
 
 
     @Override
-    public void destroyView(ResourceLocation id) {
+    public boolean destroyView(ResourceLocation id) {
         SkyesightView view = this.views.remove(id);
 
-        if (view != null) {
-            view.close();
+        if (view == null) {
+            return false;
         }
+
+        view.close();
+        return true;
     }
 
     @Override

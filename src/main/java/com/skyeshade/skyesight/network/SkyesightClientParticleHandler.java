@@ -8,9 +8,9 @@ public final class SkyesightClientParticleHandler {
 
     public static void handle(SkyesightParticlePayload payload) {
         SkyesightVisualWorld world =
-                SkyesightVisualWorldManager.getOrCreate(payload.dimension());
+                SkyesightVisualWorldManager.get(payload.viewId());
 
-        if (world == null) {
+        if (world == null || world.isClosed()) {
             return;
         }
 

@@ -3,6 +3,7 @@ package com.skyeshade.skyesight.client.view;
 import net.minecraft.client.Camera;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Quaternionf;
+import org.joml.Vector3f;
 
 public final class SkyesightMutableCamera extends Camera {
     public void setPositionPublic(Vec3 position) {
@@ -34,10 +35,21 @@ public final class SkyesightMutableCamera extends Camera {
     }
 
     private static float yawFromRotation(Quaternionf rotation) {
-        return 0.0F;
+        Vector3f forward = new Vector3f(0.0F, 0.0F, -1.0F);
+        forward.rotate(rotation);
+
+        return (float) Math.toDegrees(Math.atan2(-forward.x(), forward.z()));
     }
 
     private static float pitchFromRotation(Quaternionf rotation) {
-        return 0.0F;
+        Vector3f forward = new Vector3f(0.0F, 0.0F, -1.0F);
+        forward.rotate(rotation);
+
+        double horizontalLength = Math.sqrt(
+                forward.x() * forward.x() +
+                        forward.z() * forward.z()
+        );
+
+        return (float) Math.toDegrees(Math.atan2(-forward.y(), horizontalLength));
     }
 }

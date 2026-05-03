@@ -10,7 +10,7 @@ public interface SkyesightApi {
 
     Optional<SkyesightViewHandle> getView(ResourceLocation id);
 
-    void destroyView(ResourceLocation id);
+    boolean destroyView(ResourceLocation id);
 
     Collection<? extends SkyesightViewHandle> views();
 }

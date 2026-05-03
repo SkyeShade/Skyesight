@@ -1,8 +1,5 @@
-package com.skyeshade.skyesight.client;
+package com.skyeshade.skyesight.client.world;
 
-import com.skyeshade.skyesight.Skyesight;
-import com.skyeshade.skyesight.client.world.SkyesightVisualWorld;
-import com.skyeshade.skyesight.client.world.SkyesightVisualWorldManager;
 import com.skyeshade.skyesight.network.SkyesightChunkRequestPayload;
 import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
 import net.minecraft.client.Camera;
@@ -15,55 +12,67 @@ import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public final class SkyesightClientChunkRequester {
-    private static final ResourceLocation DEBUG_VIEW_ID =
-            ResourceLocation.fromNamespaceAndPath(Skyesight.MODID, "debug_gui_view");
-    private static ChunkPos lastRequestedCenter;
-    private static ResourceKey<Level> lastRequestedDimension;
-    private static final ObjectOpenHashSet<PendingChunkKey> pendingChunks = new ObjectOpenHashSet<>();
-    private record PendingChunkKey(ResourceKey<Level> dimension, int chunkX, int chunkZ) {}
+    private static final Map<ResourceLocation, ViewRequestState> STATES = new HashMap<>();
+
     private SkyesightClientChunkRequester() {}
 
-    public static void requestChunksFor(ResourceKey<Level> dimension, Camera camera, int radius) {
+    public static void requestChunksFor(
+            ResourceLocation viewId,
+            ResourceKey<Level> dimension,
+            Camera camera,
+            int radius
+    ) {
         Minecraft minecraft = Minecraft.getInstance();
 
         if (minecraft.level == null || minecraft.player == null || minecraft.getConnection() == null) {
             return;
         }
 
-        int centerChunkX = Mth.floor(camera.getPosition().x()) >> 4;
-        int centerChunkZ = Mth.floor(camera.getPosition().z()) >> 4;
-
         SkyesightVisualWorld world =
-                SkyesightVisualWorldManager.getOrCreate(dimension);
+                SkyesightVisualWorldManager.getOrCreate(viewId, dimension);
 
         if (world == null) {
             return;
         }
 
+        ViewRequestState state = STATES.computeIfAbsent(viewId, ignored -> new ViewRequestState());
+
+        int centerChunkX = Mth.floor(camera.getPosition().x()) >> 4;
+        int centerChunkZ = Mth.floor(camera.getPosition().z()) >> 4;
+
         int cacheRadius = radius + 3;
 
         world.chunkReceiver().setViewCenter(centerChunkX, centerChunkZ, cacheRadius);
         world.chunkReceiver().pruneOutside(centerChunkX, centerChunkZ, cacheRadius);
-        prunePendingOutside(dimension, centerChunkX, centerChunkZ, cacheRadius);
+        prunePendingOutside(state, dimension, centerChunkX, centerChunkZ, cacheRadius);
 
-        List<ChunkPos> missing = collectMissingChunks(world, dimension, centerChunkX, centerChunkZ, radius);
+        List<ChunkPos> missing = collectMissingChunks(
+                state,
+                world,
+                dimension,
+                centerChunkX,
+                centerChunkZ,
+                radius
+        );
 
         ChunkPos center = new ChunkPos(centerChunkX, centerChunkZ);
 
-        boolean centerChanged = lastRequestedCenter == null
-                || !lastRequestedCenter.equals(center)
-                || lastRequestedDimension == null
-                || !lastRequestedDimension.equals(dimension);
+        boolean centerChanged = state.lastRequestedCenter == null
+                || !state.lastRequestedCenter.equals(center)
+                || state.lastRequestedDimension == null
+                || !state.lastRequestedDimension.equals(dimension);
 
         if (missing.isEmpty() && !centerChanged) {
             return;
         }
 
-        lastRequestedCenter = center;
-        lastRequestedDimension = dimension;
+        state.lastRequestedCenter = center;
+        state.lastRequestedDimension = dimension;
 
         missing.sort((a, b) -> {
             int da = Math.abs(a.x - centerChunkX) + Math.abs(a.z - centerChunkZ);
@@ -72,12 +81,12 @@ public final class SkyesightClientChunkRequester {
         });
 
         for (ChunkPos pos : missing) {
-            pendingChunks.add(packPending(dimension, pos.x, pos.z));
+            state.pendingChunks.add(packPending(dimension, pos.x, pos.z));
         }
 
         PacketDistributor.sendToServer(
                 new SkyesightChunkRequestPayload(
-                        DEBUG_VIEW_ID,
+                        viewId,
                         dimension,
                         centerChunkX,
                         centerChunkZ,
@@ -86,14 +95,32 @@ public final class SkyesightClientChunkRequester {
                 )
         );
     }
-    private static PendingChunkKey packPending(ResourceKey<Level> dimension, int chunkX, int chunkZ) {
-        return new PendingChunkKey(dimension, chunkX, chunkZ);
-    }
-    public static void markChunkReceived(ResourceKey<Level> dimension, int chunkX, int chunkZ) {
-        pendingChunks.remove(packPending(dimension, chunkX, chunkZ));
+
+    public static void markChunkReceived(
+            ResourceLocation viewId,
+            ResourceKey<Level> dimension,
+            int chunkX,
+            int chunkZ
+    ) {
+        ViewRequestState state = STATES.get(viewId);
+
+        if (state == null) {
+            return;
+        }
+
+        state.pendingChunks.remove(packPending(dimension, chunkX, chunkZ));
     }
 
-    public static void prunePendingOutside(
+    public static void reset(ResourceLocation viewId) {
+        STATES.remove(viewId);
+    }
+
+    public static void reset() {
+        STATES.clear();
+    }
+
+    private static void prunePendingOutside(
+            ViewRequestState state,
             ResourceKey<Level> dimension,
             int centerChunkX,
             int centerChunkZ,
@@ -101,7 +128,7 @@ public final class SkyesightClientChunkRequester {
     ) {
         ObjectOpenHashSet<PendingChunkKey> toRemove = new ObjectOpenHashSet<>();
 
-        for (PendingChunkKey key : pendingChunks) {
+        for (PendingChunkKey key : state.pendingChunks) {
             if (!key.dimension().equals(dimension)) {
                 continue;
             }
@@ -112,13 +139,12 @@ public final class SkyesightClientChunkRequester {
         }
 
         for (PendingChunkKey key : toRemove) {
-            pendingChunks.remove(key);
+            state.pendingChunks.remove(key);
         }
     }
-    public static void reset() {
-        pendingChunks.clear();
-    }
+
     private static List<ChunkPos> collectMissingChunks(
+            ViewRequestState state,
             SkyesightVisualWorld world,
             ResourceKey<Level> dimension,
             int centerChunkX,
@@ -131,14 +157,15 @@ public final class SkyesightClientChunkRequester {
             for (int dx = -radius; dx <= radius; dx++) {
                 int chunkX = centerChunkX + dx;
                 int chunkZ = centerChunkZ + dz;
+
                 PendingChunkKey key = packPending(dimension, chunkX, chunkZ);
 
                 if (world.chunkReceiver().hasChunk(chunkX, chunkZ)) {
-                    pendingChunks.remove(key);
+                    state.pendingChunks.remove(key);
                     continue;
                 }
 
-                if (pendingChunks.contains(key)) {
+                if (state.pendingChunks.contains(key)) {
                     continue;
                 }
 
@@ -148,4 +175,24 @@ public final class SkyesightClientChunkRequester {
 
         return missing;
     }
+
+    private static PendingChunkKey packPending(
+            ResourceKey<Level> dimension,
+            int chunkX,
+            int chunkZ
+    ) {
+        return new PendingChunkKey(dimension, chunkX, chunkZ);
+    }
+
+    private static final class ViewRequestState {
+        private ChunkPos lastRequestedCenter;
+        private ResourceKey<Level> lastRequestedDimension;
+        private final ObjectOpenHashSet<PendingChunkKey> pendingChunks = new ObjectOpenHashSet<>();
+    }
+
+    private record PendingChunkKey(
+            ResourceKey<Level> dimension,
+            int chunkX,
+            int chunkZ
+    ) {}
 }

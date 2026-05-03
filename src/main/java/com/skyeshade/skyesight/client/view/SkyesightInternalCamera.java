@@ -54,10 +54,10 @@ public final class SkyesightInternalCamera implements SkyesightViewCamera {
         this.camera.setRotationPublic(yaw, pitch, roll);
     }
 
+    @Override
     public void setRotation(Quaternionf rotation) {
         this.camera.setRotationPublic(rotation);
     }
-
     @Override
     public void copyFromMainCamera() {
         Minecraft minecraft = Minecraft.getInstance();

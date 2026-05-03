@@ -11,9 +11,9 @@ public final class SkyesightClientEntityAnimationHandler {
 
     public static void handle(SkyesightEntityAnimationPayload payload) {
         SkyesightVisualWorld world =
-                SkyesightVisualWorldManager.getOrCreate(payload.dimension());
+                SkyesightVisualWorldManager.get(payload.viewId());
 
-        if (world == null) {
+        if (world == null || world.isClosed()) {
             return;
         }
 
