@@ -21,6 +21,7 @@ import net.minecraft.world.level.block.entity.BlockEntityTicker;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.DataLayer;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.lighting.LevelLightEngine;
 
 import java.util.BitSet;
@@ -60,13 +61,11 @@ public final class SkyesightRemoteChunkReceiver {
             return false;
         }
 
+        updateChunkLightSectionStatus(chunkX, chunkZ);
+
         applyLightData(chunkX, chunkZ, lightData);
 
-        LevelChunk chunk = this.level.getChunkSource().getChunk(chunkX, chunkZ, false);
-
-        if (chunk != null) {
-            enableChunkLight(chunkX, chunkZ);
-        }
+        enableChunkLight(chunkX, chunkZ);
 
         afterLightApplied.run();
 
@@ -122,14 +121,46 @@ public final class SkyesightRemoteChunkReceiver {
             return false;
         }
 
+        LevelLightEngine lightEngine = this.level.getChunkSource().getLightEngine();
+
+        BlockState oldState = this.level.getBlockState(pos);
+
+        int oldEmission = oldState.getLightEmission();
+        int newEmission = state.getLightEmission();
+
+        lightEngine.checkBlock(pos);
+
         this.level.setBlock(pos, state, 19);
 
-        SectionPos sectionPos = SectionPos.of(pos);
+        updateChunkLightSectionStatus(chunkPos.x, chunkPos.z);
 
-        this.level.getChunkSource().onLightUpdate(LightLayer.BLOCK, sectionPos);
+        lightEngine.checkBlock(pos);
 
-        if (this.level.dimensionType().hasSkyLight()) {
-            this.level.getChunkSource().onLightUpdate(LightLayer.SKY, sectionPos);
+        if (oldEmission != newEmission) {
+            for (BlockPos neighbor : BlockPos.betweenClosed(
+                    pos.offset(-1, -1, -1),
+                    pos.offset(1, 1, 1)
+            )) {
+                lightEngine.checkBlock(neighbor);
+            }
+        }
+
+        lightEngine.runLightUpdates();
+
+        SectionPos centerSection = SectionPos.of(pos);
+
+        for (int sectionY = centerSection.y() - 1; sectionY <= centerSection.y() + 1; sectionY++) {
+            SectionPos sectionPos = SectionPos.of(
+                    centerSection.x(),
+                    sectionY,
+                    centerSection.z()
+            );
+
+            this.level.getChunkSource().onLightUpdate(LightLayer.BLOCK, sectionPos);
+
+            if (this.level.dimensionType().hasSkyLight()) {
+                this.level.getChunkSource().onLightUpdate(LightLayer.SKY, sectionPos);
+            }
         }
 
         return true;
@@ -140,6 +171,9 @@ public final class SkyesightRemoteChunkReceiver {
             ClientboundLightUpdatePacketData data
     ) {
         LevelLightEngine lightEngine = this.level.getChunkSource().getLightEngine();
+        ChunkPos chunkPos = new ChunkPos(chunkX, chunkZ);
+
+        lightEngine.setLightEnabled(chunkPos, true);
 
         readSectionList(
                 chunkX,
@@ -161,9 +195,31 @@ public final class SkyesightRemoteChunkReceiver {
                 data.getBlockUpdates().iterator()
         );
 
-        lightEngine.setLightEnabled(new ChunkPos(chunkX, chunkZ), true);
+        lightEngine.runLightUpdates();
     }
+    private void updateChunkLightSectionStatus(int chunkX, int chunkZ) {
+        LevelChunk chunk = this.level.getChunkSource().getChunk(chunkX, chunkZ, false);
 
+        if (chunk == null) {
+            return;
+        }
+
+        LevelLightEngine lightEngine = this.level.getChunkSource().getLightEngine();
+
+        for (int sectionY = lightEngine.getMinLightSection(); sectionY < lightEngine.getMaxLightSection(); sectionY++) {
+            SectionPos sectionPos = SectionPos.of(chunkX, sectionY, chunkZ);
+
+            boolean empty = true;
+
+            if (sectionY >= this.level.getMinSection() && sectionY < this.level.getMaxSection()) {
+                int sectionIndex = this.level.getSectionIndexFromSectionY(sectionY);
+                LevelChunkSection section = chunk.getSection(sectionIndex);
+                empty = section.hasOnlyAir();
+            }
+
+            lightEngine.updateSectionStatus(sectionPos, empty);
+        }
+    }
     private void readSectionList(
             int chunkX,
             int chunkZ,

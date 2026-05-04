@@ -1,5 +1,6 @@
 package com.skyeshade.skyesight.server;
 
+import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.network.SkyesightBlockUpdatesPayload;
 import com.skyeshade.skyesight.network.SkyesightLightDataPayload;
 import net.minecraft.core.BlockPos;
@@ -9,13 +10,19 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.state.BlockState;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.List;
-
+@EventBusSubscriber(modid = Skyesight.MODID)
 public final class SkyesightServerBlockUpdateBroadcaster {
     private SkyesightServerBlockUpdateBroadcaster() {}
-
+    @SubscribeEvent
+    public static void onServerTick(ServerTickEvent.Post event) {
+        SkyesightPendingLightUpdates.flush(event.getServer());
+    }
     public static void send(ServerLevel level, BlockPos pos, BlockState state) {
         ChunkPos changedChunk = new ChunkPos(pos);
         MinecraftServer server = level.getServer();
@@ -37,7 +44,7 @@ public final class SkyesightServerBlockUpdateBroadcaster {
                     )
             );
 
-            sendLightForNeighborChunks(level, player, watched, changedChunk);
+            SkyesightPendingLightUpdates.queue(level, player.getUUID(), watched, changedChunk);
         }
     }
 

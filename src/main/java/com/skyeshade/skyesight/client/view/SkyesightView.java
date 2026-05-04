@@ -363,24 +363,30 @@ public final class SkyesightView implements SkyesightViewHandle {
 
             RenderSystem.enableCull();
 
-            visualWorld.renderBlockEntities(
-                    this.camera.minecraftCamera(),
-                    modelMatrix,
-                    partialTick
-            );
+            minecraft.gameRenderer.lightTexture().turnOnLightLayer();
 
-            visualWorld.renderEntities(
-                    this.camera.minecraftCamera(),
-                    modelMatrix,
-                    partialTick
-            );
+            try {
+                visualWorld.renderBlockEntities(
+                        this.camera.minecraftCamera(),
+                        modelMatrix,
+                        partialTick
+                );
 
-            visualWorld.renderParticles(
-                    this.camera.minecraftCamera(),
-                    modelMatrix,
-                    renderProjectionMatrix,
-                    partialTick
-            );
+                visualWorld.renderEntities(
+                        this.camera.minecraftCamera(),
+                        modelMatrix,
+                        partialTick
+                );
+
+                visualWorld.renderParticles(
+                        this.camera.minecraftCamera(),
+                        modelMatrix,
+                        renderProjectionMatrix,
+                        partialTick
+                );
+            } finally {
+                minecraft.gameRenderer.lightTexture().turnOffLightLayer();
+            }
         } finally {
             SkyesightFogRenderer.clear();
             SkyesightLightTextureUpdater.restoreMain(partialTick);
