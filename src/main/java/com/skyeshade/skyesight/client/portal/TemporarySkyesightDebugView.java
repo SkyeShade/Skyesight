@@ -29,7 +29,7 @@ public final class TemporarySkyesightDebugView {
     private static final ResourceLocation VIEW_SHOWN_ON_PORTAL_B_ID =
             ResourceLocation.fromNamespaceAndPath(Skyesight.MODID, "debug_view_shown_on_portal_b");
 
-    private static final int RENDER_DIST = 8;
+    private static final int RENDER_DIST = 2;
     private static final int VIEW_WIDTH = 300;
     private static final int VIEW_HEIGHT = 600;
     private static final float VIEW_FOV = 70.0F;
@@ -77,7 +77,23 @@ public final class TemporarySkyesightDebugView {
 
         SkyesightViewHandle viewShownOnPortalB =
                 ensureView(VIEW_SHOWN_ON_PORTAL_B_ID, PORTAL_A.position(), Level.OVERWORLD);
+        TemporaryPortalViewPlacement placementShownOnPortalA =
+                renderPortalView(
+                        viewShownOnPortalA,
+                        mainCamera,
+                        PORTAL_A,
+                        PORTAL_B,
+                        partialTick
+                );
 
+        TemporaryPortalViewPlacement placementShownOnPortalB =
+                renderPortalView(
+                        viewShownOnPortalB,
+                        mainCamera,
+                        PORTAL_B,
+                        PORTAL_A,
+                        partialTick
+                );
         renderPortalView(
                 viewShownOnPortalA,
                 mainCamera,
@@ -105,9 +121,21 @@ public final class TemporarySkyesightDebugView {
                 PORTAL_B,
                 viewShownOnPortalB
         );
+
+        TemporaryPortalDebugRenderer.renderPortalDebug(
+                mainCamera,
+                PORTAL_A,
+                placementShownOnPortalB
+        );
+
+        TemporaryPortalDebugRenderer.renderPortalDebug(
+                mainCamera,
+                PORTAL_B,
+                placementShownOnPortalA
+        );
     }
 
-    private static void renderPortalView(
+    private static TemporaryPortalViewPlacement renderPortalView(
             SkyesightViewHandle view,
             Camera mainCamera,
             TemporaryPortalFrame entrancePortal,
@@ -127,6 +155,7 @@ public final class TemporarySkyesightDebugView {
                 0.05F,
                 RENDER_DIST * 16.0F
         );
+
         view.camera().setPosition(placement.cameraPosition());
         view.camera().setRotation(placement.cameraRotation());
         view.setClipPlane(placement.clipPlane());
@@ -138,6 +167,8 @@ public final class TemporarySkyesightDebugView {
             view.clearClipPlane();
             view.clearProjectionOverride();
         }
+
+        return placement;
     }
 
     private static void renderPortalPanel(
