@@ -94,21 +94,7 @@ public final class TemporarySkyesightDebugView {
                         PORTAL_A,
                         partialTick
                 );
-        renderPortalView(
-                viewShownOnPortalA,
-                mainCamera,
-                PORTAL_A,
-                PORTAL_B,
-                partialTick
-        );
 
-        renderPortalView(
-                viewShownOnPortalB,
-                mainCamera,
-                PORTAL_B,
-                PORTAL_A,
-                partialTick
-        );
 
         renderPortalPanel(
                 mainCamera,
