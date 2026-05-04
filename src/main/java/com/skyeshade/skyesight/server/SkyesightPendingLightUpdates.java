@@ -1,50 +1,60 @@
 package com.skyeshade.skyesight.server;
 
-import com.skyeshade.skyesight.Skyesight;
-import com.skyeshade.skyesight.network.SkyesightBlockUpdatesPayload;
 import com.skyeshade.skyesight.network.SkyesightLightDataPayload;
-import net.minecraft.core.BlockPos;
-import net.minecraft.network.protocol.game.ClientboundLightUpdatePacketData;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.block.state.BlockState;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import net.minecraft.world.level.Level;
+import net.minecraft.network.protocol.game.ClientboundLightUpdatePacketData;
 import net.neoforged.neoforge.network.PacketDistributor;
 
+import java.util.ArrayList;
 import java.util.List;
-@EventBusSubscriber(modid = Skyesight.MODID)
-public final class SkyesightServerBlockUpdateBroadcaster {
-    private SkyesightServerBlockUpdateBroadcaster() {}
-    @SubscribeEvent
-    public static void onServerTick(ServerTickEvent.Post event) {
-        SkyesightPendingLightUpdates.flush(event.getServer());
-    }
-    public static void send(ServerLevel level, BlockPos pos, BlockState state) {
-        ChunkPos changedChunk = new ChunkPos(pos);
-        MinecraftServer server = level.getServer();
+import java.util.UUID;
 
-        for (SkyesightServerViewTracker.WatchedPlayerView watched :
-                SkyesightServerViewTracker.viewsWatching(level.dimension(), changedChunk)) {
-            ServerPlayer player = server.getPlayerList().getPlayer(watched.playerId());
+public final class SkyesightPendingLightUpdates {
+    private static final List<Entry> QUEUED = new ArrayList<>();
+
+    private SkyesightPendingLightUpdates() {}
+
+    public static void queue(
+            ServerLevel level,
+            UUID playerId,
+            SkyesightServerViewTracker.WatchedPlayerView watched,
+            ChunkPos center
+    ) {
+        QUEUED.add(new Entry(
+                level.dimension(),
+                playerId,
+                watched,
+                center
+        ));
+    }
+
+    public static void flush(MinecraftServer server) {
+        if (QUEUED.isEmpty()) {
+            return;
+        }
+
+        List<Entry> entries = new ArrayList<>(QUEUED);
+        QUEUED.clear();
+
+        for (Entry entry : entries) {
+            ServerLevel level = server.getLevel(entry.dimension());
+
+            if (level == null) {
+                continue;
+            }
+
+            ServerPlayer player = server.getPlayerList().getPlayer(entry.playerId());
 
             if (player == null) {
                 continue;
             }
 
-            PacketDistributor.sendToPlayer(
-                    player,
-                    new SkyesightBlockUpdatesPayload(
-                            watched.watch().viewId(),
-                            level.dimension(),
-                            List.of(new SkyesightBlockUpdatesPayload.Entry(pos.immutable(), state))
-                    )
-            );
-
-            SkyesightPendingLightUpdates.queue(level, player.getUUID(), watched, changedChunk);
+            sendLightForNeighborChunks(level, player, entry.watched(), entry.center());
         }
     }
 
@@ -83,4 +93,11 @@ public final class SkyesightServerBlockUpdateBroadcaster {
             }
         }
     }
+
+    private record Entry(
+            ResourceKey<Level> dimension,
+            UUID playerId,
+            SkyesightServerViewTracker.WatchedPlayerView watched,
+            ChunkPos center
+    ) {}
 }

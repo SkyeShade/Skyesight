@@ -14,12 +14,16 @@ import net.caffeinemc.mods.sodium.client.render.viewport.ViewportProvider;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.phys.Vec3;
@@ -83,6 +87,12 @@ public final class SkyesightSodiumWorldRenderer implements AutoCloseable {
         try {
             this.minecraft.level = this.level;
 
+            this.minecraft.getEntityRenderDispatcher().prepare(
+                    this.level,
+                    camera,
+                    this.minecraft.crosshairPickEntity
+            );
+
             try (SkyesightNameTagSuppressor.Scope ignored =
                          SkyesightNameTagSuppressor.suppressOwner(this.minecraft.player.getUUID())) {
                 for (SkyesightVisualEntity visualEntity : entities) {
@@ -90,6 +100,7 @@ public final class SkyesightSodiumWorldRenderer implements AutoCloseable {
 
                     Entity entity = visualEntity.entity();
 
+                    int packedLight = getPackedEntityLight(entity, partialTick);
                     this.minecraft.getEntityRenderDispatcher().render(
                             entity,
                             entity.getX() - cameraPos.x(),
@@ -99,7 +110,7 @@ public final class SkyesightSodiumWorldRenderer implements AutoCloseable {
                             partialTick,
                             poseStack,
                             bufferSource,
-                            this.minecraft.getEntityRenderDispatcher().getPackedLightCoords(entity, partialTick)
+                            packedLight
                     );
                 }
             }
@@ -115,6 +126,19 @@ public final class SkyesightSodiumWorldRenderer implements AutoCloseable {
             RenderSystem.enableCull();
             RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
         }
+    }
+
+    private int getPackedEntityLight(Entity entity, float partialTick) {
+        BlockPos lightPos = BlockPos.containing(entity.getLightProbePosition(partialTick));
+
+        if (!this.level.hasChunkAt(lightPos)) {
+            return LightTexture.FULL_BRIGHT;
+        }
+
+        int blockLight = this.level.getBrightness(LightLayer.BLOCK, lightPos);
+        int skyLight = this.level.getBrightness(LightLayer.SKY, lightPos);
+
+        return LightTexture.pack(blockLight, skyLight);
     }
     public void renderTerrain(
             Camera camera,
