@@ -10,4 +10,14 @@ public final class PortalRemoteChunkRuntimeState {
     public static boolean loadedAfterWait;
 
     private PortalRemoteChunkRuntimeState() {}
+
+    public static void reset() {
+        forceLoadFramesSinceTicketing = 0;
+        forceLoadRequestedChunks = 0;
+        loadedChunksInRadius = 0;
+        requiredLoadedChunksInRadius = 0;
+        clientChunkNonAirSamples = 0;
+        clientCenterSectionNonAirCount = 0;
+        loadedAfterWait = false;
+    }
 }

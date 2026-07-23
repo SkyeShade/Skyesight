@@ -67,6 +67,10 @@ public final class SkyesightVisualWorldManager {
         WORLDS.forEach(consumer);
     }
 
+    public static int count() {
+        return WORLDS.size();
+    }
+
     public static SkyesightVisualWorld getIfCurrent(
             ResourceLocation viewId,
             ResourceKey<Level> dimension

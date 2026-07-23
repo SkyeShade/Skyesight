@@ -452,6 +452,15 @@ public final class SecondaryViewContext {
             this.renderTarget.destroyBuffers();
             this.renderTarget = null;
         }
+        if (this.sodiumRenderer != null) {
+            try {
+                this.sodiumRenderer.setLevel(null);
+            } catch (RuntimeException exception) {
+                Skyesight.LOGGER.warn("[Skyesight] Failed to release secondary Sodium renderer during context close", exception);
+            }
+            this.sodiumRenderer = null;
+            this.sodiumRendererLevel = null;
+        }
 
         this.resetFrozenRemoteCenter();
         this.pendingSodiumRebuildChunks.clear();

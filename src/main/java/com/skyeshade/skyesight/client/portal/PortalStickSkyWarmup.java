@@ -18,6 +18,11 @@ final class PortalStickSkyWarmup {
         activeLastFrameByView.remove(viewId);
     }
 
+    static void clearAll() {
+        activeFramesByView.clear();
+        activeLastFrameByView.clear();
+    }
+
     static boolean shouldSkip(ResourceLocation viewId, long frame) {
         Long lastFrame = activeLastFrameByView.get(viewId);
         int frames;
