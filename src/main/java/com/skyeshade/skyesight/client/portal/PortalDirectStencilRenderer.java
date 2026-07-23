@@ -146,6 +146,24 @@ public final class PortalDirectStencilRenderer {
         PortalStickSkyWarmup.clear(viewId);
     }
 
+    public static int invalidateLevelBoundCaches(String reason) {
+        int contextCount = PORTAL_VIEW_CONTEXTS.size();
+        for (SecondaryViewContext context : PORTAL_VIEW_CONTEXTS.values()) {
+            context.close();
+        }
+        PORTAL_VIEW_CONTEXTS.clear();
+        portalMaskWroteThisFrameByView.clear();
+        portalMainViewProjectionByView.clear();
+        portalVisibilityThisFrameByView.clear();
+        portalFrameVisibilityStateByView.clear();
+        portalRenderedThisFrameByView.clear();
+        invalidPortalStencilRefWarnings.clear();
+        PortalStickSkyWarmup.clearAll();
+        PORTAL_SKY_CAPTURE_MANAGER.close();
+        portalSkyCaptureTarget = null;
+        return contextCount;
+    }
+
     public static void softReplaceViewCaches(ResourceLocation viewId) {
         if (viewId == null) {
             return;
