@@ -37,6 +37,14 @@ public final class SkyesightServerViewTracker {
                         Set.copyOf(chunks)
                 )
         );
+        PortalSimulationCoordinator.update(
+                player,
+                viewId,
+                dimension,
+                centerChunkX,
+                centerChunkZ,
+                radius
+        );
     }
 
     public static ViewWatch getWatch(ServerPlayer player, ResourceLocation viewId) {
@@ -49,6 +57,18 @@ public final class SkyesightServerViewTracker {
         return playerWatches.get(viewId);
     }
 
+    public static ViewWatch firstWatch(ResourceLocation viewId) {
+        for (Map<ResourceLocation, ViewWatch> playerWatches : WATCHES.values()) {
+            ViewWatch watch = playerWatches.get(viewId);
+
+            if (watch != null) {
+                return watch;
+            }
+        }
+
+        return null;
+    }
+
     public static void forEachWatch(BiConsumer<UUID, ViewWatch> consumer) {
         for (Map.Entry<UUID, Map<ResourceLocation, ViewWatch>> playerEntry : WATCHES.entrySet()) {
             UUID playerId = playerEntry.getKey();
@@ -59,8 +79,55 @@ public final class SkyesightServerViewTracker {
         }
     }
 
+    public static String activeWatchSummary() {
+        Map<ResourceKey<Level>, Integer> byDimension = new HashMap<>();
+        int total = 0;
+        StringBuilder sample = new StringBuilder();
+
+        for (Map<ResourceLocation, ViewWatch> playerWatches : WATCHES.values()) {
+            for (ViewWatch watch : playerWatches.values()) {
+                total++;
+                byDimension.merge(watch.dimension(), 1, Integer::sum);
+                if (sample.length() < 240) {
+                    if (sample.length() > 0) {
+                        sample.append(";");
+                    }
+                    sample.append(watch.viewId())
+                            .append("@")
+                            .append(watch.dimension().location())
+                            .append(" c=")
+                            .append(watch.centerChunkX())
+                            .append(",")
+                            .append(watch.centerChunkZ())
+                            .append(" r=")
+                            .append(watch.radius());
+                }
+            }
+        }
+
+        StringBuilder dims = new StringBuilder();
+        byDimension.forEach((dimension, count) -> {
+            if (dims.length() > 0) {
+                dims.append(",");
+            }
+            dims.append(dimension.location()).append("=").append(count);
+        });
+
+        return "total=" + total
+                + " byDimension=" + (dims.length() == 0 ? "-" : dims)
+                + " sample=" + (sample.length() == 0 ? "-" : sample);
+    }
+
     public static void removePlayer(ServerPlayer player) {
         WATCHES.remove(player.getUUID());
+    }
+
+    public static void removeView(ResourceLocation viewId) {
+        if (viewId == null) {
+            return;
+        }
+        WATCHES.values().forEach(playerWatches -> playerWatches.remove(viewId));
+        WATCHES.entrySet().removeIf(entry -> entry.getValue().isEmpty());
     }
 
     public static Collection<WatchedPlayerView> viewsWatching(

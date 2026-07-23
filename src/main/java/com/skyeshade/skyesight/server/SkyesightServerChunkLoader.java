@@ -5,6 +5,7 @@ import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.ChunkPos;
@@ -66,6 +67,25 @@ public final class SkyesightServerChunkLoader {
         for (long packed : view.chunks()) {
             removeTicket(level, new ChunkPos(packed));
         }
+    }
+
+    public static void removeView(MinecraftServer server, ResourceLocation viewId) {
+        if (server == null || viewId == null) {
+            return;
+        }
+        LOADED_VIEWS.entrySet().removeIf(entry -> {
+            if (!entry.getKey().viewId().equals(viewId)) {
+                return false;
+            }
+            LoadedView view = entry.getValue();
+            ServerLevel level = server.getLevel(view.dimension());
+            if (level != null) {
+                for (long packed : view.chunks()) {
+                    removeTicket(level, new ChunkPos(packed));
+                }
+            }
+            return true;
+        });
     }
 
     public static void removeAllForPlayer(ServerPlayer player, Map<ResourceKey<Level>, ServerLevel> levels) {

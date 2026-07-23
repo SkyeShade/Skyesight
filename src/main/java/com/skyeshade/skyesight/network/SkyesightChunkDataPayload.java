@@ -13,6 +13,7 @@ import net.minecraft.world.level.Level;
 
 public record SkyesightChunkDataPayload(
         ResourceLocation viewId,
+        long viewGeneration,
         ResourceKey<Level> dimension,
         int centerChunkX,
         int centerChunkZ,
@@ -33,6 +34,7 @@ public record SkyesightChunkDataPayload(
 
     private static SkyesightChunkDataPayload read(RegistryFriendlyByteBuf buffer) {
         ResourceLocation viewId = buffer.readResourceLocation();
+        long viewGeneration = buffer.readVarLong();
         ResourceLocation dimensionId = buffer.readResourceLocation();
 
         int centerChunkX = buffer.readInt();
@@ -50,6 +52,7 @@ public record SkyesightChunkDataPayload(
 
         return new SkyesightChunkDataPayload(
                 viewId,
+                viewGeneration,
                 ResourceKey.create(Registries.DIMENSION, dimensionId),
                 centerChunkX,
                 centerChunkZ,
@@ -63,6 +66,7 @@ public record SkyesightChunkDataPayload(
 
     private static void write(RegistryFriendlyByteBuf buffer, SkyesightChunkDataPayload payload) {
         buffer.writeResourceLocation(payload.viewId);
+        buffer.writeVarLong(payload.viewGeneration);
         buffer.writeResourceLocation(payload.dimension.location());
 
         buffer.writeInt(payload.centerChunkX);

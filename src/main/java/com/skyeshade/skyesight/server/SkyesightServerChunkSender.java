@@ -1,6 +1,9 @@
 package com.skyeshade.skyesight.server;
 
 import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.SkyesightDebugConfig;
+import com.skyeshade.skyesight.api.RegisteredPortalView;
+import com.skyeshade.skyesight.api.SkyesightPortalApi;
 import com.skyeshade.skyesight.network.SkyesightChunkDataPayload;
 import com.skyeshade.skyesight.network.SkyesightChunkRequestPayload;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkPacketData;
@@ -26,6 +29,13 @@ public final class SkyesightServerChunkSender {
     ) {
         context.enqueueWork(() -> {
             if (!(context.player() instanceof ServerPlayer player)) {
+                return;
+            }
+
+            RegisteredPortalView currentView = SkyesightPortalApi.getPortal(payload.viewId().toString());
+            if (currentView == null
+                    || currentView.generation() != payload.viewGeneration()
+                    || !currentView.target().dimension().equals(payload.dimension())) {
                 return;
             }
 
@@ -81,6 +91,7 @@ public final class SkyesightServerChunkSender {
                         player,
                         new SkyesightChunkDataPayload(
                                 payload.viewId(),
+                                payload.viewGeneration(),
                                 payload.dimension(),
                                 payload.centerChunkX(),
                                 payload.centerChunkZ(),
@@ -91,6 +102,17 @@ public final class SkyesightServerChunkSender {
                                 lightData
                         )
                 );
+                if (SkyesightDebugConfig.WATCH_DEBUG
+                        && !player.serverLevel().dimension().equals(level.dimension())) {
+                    Skyesight.LOGGER.info(
+                            "[Skyesight] SKYESIGHT_CROSS_DIM_INITIAL_BLOCK_ENTITY_SEND: viewId={} cameraDimension={} chunkPos={},{} blockEntityCount={}",
+                            payload.viewId(),
+                            level.dimension().location(),
+                            pos.x,
+                            pos.z,
+                            chunk.getBlockEntitiesPos().size()
+                    );
+                }
 
                 sent++;
             }
@@ -116,14 +138,30 @@ public final class SkyesightServerChunkSender {
             if (watch != null) {
                 SkyesightServerEntitySnapshotSender.sendSnapshot(player, watch, level);
             }
-            Skyesight.LOGGER.info(
-                    "[Skyesight] Sent {} chunks for view {} and watching {} chunks around {}, {}",
-                    sent,
-                    payload.viewId(),
-                    watchedChunks.size(),
-                    payload.centerChunkX(),
-                    payload.centerChunkZ()
-            );
+            if (SkyesightDebugConfig.WATCH_DEBUG
+                    && level != null
+                    && !player.serverLevel().dimension().equals(level.dimension())) {
+                Skyesight.LOGGER.info(
+                        "[Skyesight] SKYESIGHT_CROSS_DIM_WATCH_REGION: viewId={} displayDimension={} cameraDimension={} centerChunk={},{} radius={} chunksSent={}",
+                        payload.viewId(),
+                        player.serverLevel().dimension().location(),
+                        level.dimension().location(),
+                        payload.centerChunkX(),
+                        payload.centerChunkZ(),
+                        payload.radius(),
+                        sent
+                );
+            }
+            if (SkyesightDebugConfig.WATCH_DEBUG) {
+                Skyesight.LOGGER.info(
+                        "[Skyesight] Sent {} chunks for view {} and watching {} chunks around {}, {}",
+                        sent,
+                        payload.viewId(),
+                        watchedChunks.size(),
+                        payload.centerChunkX(),
+                        payload.centerChunkZ()
+                );
+            }
         });
     }
 

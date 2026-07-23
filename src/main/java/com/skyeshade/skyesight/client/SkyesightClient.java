@@ -21,6 +21,6 @@ public class SkyesightClient {
 
     @SubscribeEvent
     static void onClientSetup(FMLClientSetupEvent event) {
-
+        PortalViewCacheInvalidator.register();
     }
 }

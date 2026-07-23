@@ -20,12 +20,24 @@ import net.minecraft.world.level.material.FogType;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 
+/**
+ * Legacy cloned/manual sky renderer retained as an emergency fallback and
+ * diagnostic comparison path. Stabilized direct-stencil portals should prefer
+ * offscreen vanilla {@code LevelRenderer.renderSky} capture through
+ * {@code PortalSkyCaptureManager}.
+ */
 public final class SkyesightClonedSkyRenderer {
     private static final ResourceLocation SUN_LOCATION =
             ResourceLocation.withDefaultNamespace("textures/environment/sun.png");
 
     private static final ResourceLocation MOON_LOCATION =
             ResourceLocation.withDefaultNamespace("textures/environment/moon_phases.png");
+
+    private static volatile boolean lastUpperSkyRendered;
+    private static volatile boolean lastDarkLowerSkyRendered;
+    private static volatile boolean lastSunMoonAttempted;
+    private static volatile boolean lastStarsAttempted;
+    private static volatile boolean lastDimensionSpecialSkyRendered;
 
     private SkyesightClonedSkyRenderer() {}
 
@@ -36,6 +48,19 @@ public final class SkyesightClonedSkyRenderer {
             Matrix4f projectionMatrix,
             float partialTick
     ) {
+        renderSky(level, camera, frustumMatrix, projectionMatrix, partialTick, () -> {});
+    }
+
+    public static void renderSky(
+            ClientLevel level,
+            Camera camera,
+            Matrix4f frustumMatrix,
+            Matrix4f projectionMatrix,
+            float partialTick,
+            Runnable beforeSkyPiece
+    ) {
+        resetDiagnostics();
+
         Minecraft minecraft = Minecraft.getInstance();
         LevelRendererSkyBufferAccessor buffers =
                 (LevelRendererSkyBufferAccessor) minecraft.levelRenderer;
@@ -43,6 +68,7 @@ public final class SkyesightClonedSkyRenderer {
         int ticks = buffers.skyesight$getTicks();
 
         if (tryRenderCustomSky(level, camera, frustumMatrix, projectionMatrix, partialTick, ticks)) {
+            lastDimensionSpecialSkyRendered = true;
             restoreState();
             return;
         }
@@ -61,7 +87,9 @@ public final class SkyesightClonedSkyRenderer {
         DimensionSpecialEffects.SkyType skyType = level.effects().skyType();
 
         if (skyType == DimensionSpecialEffects.SkyType.END) {
+            beforeSkyPiece.run();
             renderEndSky(poseStack);
+            lastDimensionSpecialSkyRendered = true;
             restoreState();
             return;
         }
@@ -71,8 +99,20 @@ public final class SkyesightClonedSkyRenderer {
             return;
         }
 
-        renderNormalSky(level, camera, buffers, poseStack, projectionMatrix, partialTick);
+        renderNormalSky(level, camera, buffers, poseStack, projectionMatrix, partialTick, beforeSkyPiece);
         restoreState();
+    }
+
+    private static void resetDiagnostics() {
+        lastUpperSkyRendered = false;
+        lastDarkLowerSkyRendered = false;
+        lastSunMoonAttempted = false;
+        lastStarsAttempted = false;
+        lastDimensionSpecialSkyRendered = false;
+    }
+
+    public static void resetDiagnosticsForExternalSky() {
+        resetDiagnostics();
     }
     private static boolean tryRenderCustomSky(
             ClientLevel level,
@@ -120,7 +160,8 @@ public final class SkyesightClonedSkyRenderer {
             LevelRendererSkyBufferAccessor buffers,
             PoseStack poseStack,
             Matrix4f projectionMatrix,
-            float partialTick
+            float partialTick,
+            Runnable beforeSkyPiece
     ) {
         Vec3 skyColor = level.getSkyColor(camera.getPosition(), partialTick);
         float skyR = (float) skyColor.x();
@@ -131,6 +172,7 @@ public final class SkyesightClonedSkyRenderer {
 
         Tesselator tesselator = Tesselator.getInstance();
 
+        beforeSkyPiece.run();
         RenderSystem.depthMask(false);
         RenderSystem.setShader(GameRenderer::getPositionShader);
         RenderSystem.setShaderColor(skyR, skyG, skyB, 1.0F);
@@ -144,18 +186,25 @@ public final class SkyesightClonedSkyRenderer {
                 skyShader
         );
         VertexBuffer.unbind();
+        lastUpperSkyRendered = true;
 
         RenderSystem.enableBlend();
 
+        beforeSkyPiece.run();
         renderSunrise(level, poseStack, tesselator, partialTick);
+        beforeSkyPiece.run();
+        lastSunMoonAttempted = true;
         renderSunMoon(level, poseStack, tesselator, partialTick);
+        beforeSkyPiece.run();
+        lastStarsAttempted = true;
         renderStars(level, buffers, poseStack, projectionMatrix, partialTick);
 
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
         RenderSystem.disableBlend();
         RenderSystem.defaultBlendFunc();
 
-        renderDarkHorizon(level, camera, buffers, poseStack, projectionMatrix, skyShader);
+        beforeSkyPiece.run();
+        lastDarkLowerSkyRendered = renderDarkHorizon(level, camera, buffers, poseStack, projectionMatrix, skyShader);
 
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
         RenderSystem.depthMask(true);
@@ -324,7 +373,7 @@ public final class SkyesightClonedSkyRenderer {
         FogRenderer.setupNoFog();
     }
 
-    private static void renderDarkHorizon(
+    private static boolean renderDarkHorizon(
             ClientLevel level,
             Camera camera,
             LevelRendererSkyBufferAccessor buffers,
@@ -336,7 +385,7 @@ public final class SkyesightClonedSkyRenderer {
                 camera.getPosition().y() - level.getLevelData().getHorizonHeight(level);
 
         if (cameraRelativeHorizon >= 0.0D) {
-            return;
+            return false;
         }
 
         RenderSystem.setShaderColor(0.0F, 0.0F, 0.0F, 1.0F);
@@ -353,6 +402,7 @@ public final class SkyesightClonedSkyRenderer {
         VertexBuffer.unbind();
 
         poseStack.popPose();
+        return true;
     }
 
     private static void restoreState() {
@@ -361,5 +411,25 @@ public final class SkyesightClonedSkyRenderer {
         RenderSystem.disableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+    }
+
+    public static boolean lastUpperSkyRendered() {
+        return lastUpperSkyRendered;
+    }
+
+    public static boolean lastDarkLowerSkyRendered() {
+        return lastDarkLowerSkyRendered;
+    }
+
+    public static boolean lastSunMoonAttempted() {
+        return lastSunMoonAttempted;
+    }
+
+    public static boolean lastStarsAttempted() {
+        return lastStarsAttempted;
+    }
+
+    public static boolean lastDimensionSpecialSkyRendered() {
+        return lastDimensionSpecialSkyRendered;
     }
 }

@@ -3,6 +3,8 @@ package com.skyeshade.skyesight.client.world;
 import com.skyeshade.skyesight.mixin.common.LivingEntityAnimationAccessor;
 import com.skyeshade.skyesight.mixin.common.LivingEntityWalkAnimationAccessor;
 import com.skyeshade.skyesight.mixin.common.WalkAnimationStateAccessor;
+import com.skyeshade.skyesight.entity.PortalMultipartEntityUtil;
+import com.skyeshade.skyesight.client.render.entity.PortalVisualEntityAnimationUpdater;
 import com.skyeshade.skyesight.network.SkyesightEntitySnapshotPayload;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.util.Mth;
@@ -52,6 +54,7 @@ public final class SkyesightVisualEntity {
     private long snapshotStartMs;
     private long snapshotEndMs;
     private long animationSnapshotMs;
+    private Vec3 lastSnapshotPosition;
 
     private Vec3 deltaMovement;
     private boolean onGround;
@@ -92,27 +95,28 @@ public final class SkyesightVisualEntity {
         this.deltaMovement = entry.deltaMovement();
         this.onGround = entry.onGround();
         this.fallDistance = entry.fallDistance();
-        this.previousYRot = entry.yRot();
-        this.currentYRot = entry.yRot();
+        this.previousYRot = wrapDegrees(entry.yRot());
+        this.currentYRot = wrapDegrees(entry.yRot());
 
-        this.previousXRot = entry.xRot();
-        this.currentXRot = entry.xRot();
+        this.previousXRot = wrapDegrees(entry.xRot());
+        this.currentXRot = wrapDegrees(entry.xRot());
 
-        this.previousYBodyRot = entry.yBodyRot();
-        this.currentYBodyRot = entry.yBodyRot();
+        this.previousYBodyRot = wrapDegrees(entry.yBodyRot());
+        this.currentYBodyRot = wrapDegrees(entry.yBodyRot());
 
-        this.previousYBodyRotO = entry.yBodyRotO();
-        this.currentYBodyRotO = entry.yBodyRotO();
+        this.previousYBodyRotO = wrapDegrees(entry.yBodyRotO());
+        this.currentYBodyRotO = wrapDegrees(entry.yBodyRotO());
 
-        this.previousYHeadRot = entry.yHeadRot();
-        this.currentYHeadRot = entry.yHeadRot();
+        this.previousYHeadRot = wrapDegrees(entry.yHeadRot());
+        this.currentYHeadRot = wrapDegrees(entry.yHeadRot());
 
-        this.previousYHeadRotO = entry.yHeadRotO();
-        this.currentYHeadRotO = entry.yHeadRotO();
+        this.previousYHeadRotO = wrapDegrees(entry.yHeadRotO());
+        this.currentYHeadRotO = wrapDegrees(entry.yHeadRotO());
 
         this.snapshotStartMs = now;
         this.snapshotEndMs = now + DEFAULT_SNAPSHOT_INTERVAL_MS;
         this.animationSnapshotMs = now;
+        this.lastSnapshotPosition = entry.position();
 
         this.playerTargetWalkSpeed = 0.0F;
         this.playerWalkSpeed = 0.0F;
@@ -128,6 +132,29 @@ public final class SkyesightVisualEntity {
 
     public Entity entity() {
         return this.entity;
+    }
+
+    public void clientTick() {
+        applyInterpolated();
+        PortalVisualEntityAnimationUpdater.updateForRender(this.entity, 0.0F, "visual_snapshot_client_tick");
+    }
+
+    public void prepareForRender() {
+        applyInterpolated();
+        PortalVisualEntityAnimationUpdater.updateForRender(this.entity, debugInterpolationAlpha(), "visual_snapshot_prepare_render");
+    }
+
+    public void applyRenderStateTo(Entity target, float partialTick, String source) {
+        if (target == null) {
+            return;
+        }
+        applyInterpolated();
+        copyRenderState(this.entity, target);
+        PortalVisualEntityAnimationUpdater.updateForRender(
+                target,
+                partialTick,
+                source
+        );
     }
 
     public void acceptSnapshot(SkyesightEntitySnapshotPayload.Entry entry) {
@@ -148,13 +175,14 @@ public final class SkyesightVisualEntity {
         this.previousYHeadRotO = interpolatedYHeadRotO(now);
 
         this.currentPosition = entry.position();
-        this.currentYRot = entry.yRot();
-        this.currentXRot = entry.xRot();
+        this.lastSnapshotPosition = entry.position();
+        this.currentYRot = wrapDegrees(entry.yRot());
+        this.currentXRot = wrapDegrees(entry.xRot());
 
-        this.currentYBodyRot = entry.yBodyRot();
-        this.currentYBodyRotO = entry.yBodyRotO();
-        this.currentYHeadRot = entry.yHeadRot();
-        this.currentYHeadRotO = entry.yHeadRotO();
+        this.currentYBodyRot = wrapDegrees(entry.yBodyRot());
+        this.currentYBodyRotO = wrapDegrees(entry.yBodyRotO());
+        this.currentYHeadRot = wrapDegrees(entry.yHeadRot());
+        this.currentYHeadRotO = wrapDegrees(entry.yHeadRotO());
 
         this.snapshotStartMs = now;
         this.snapshotEndMs = now + DEFAULT_SNAPSHOT_INTERVAL_MS;
@@ -169,8 +197,8 @@ public final class SkyesightVisualEntity {
 
         Vec3 position = interpolatedPosition(now);
 
-        float yRot = interpolatedYRot(now);
-        float xRot = interpolatedXRot(now);
+        float yRot = wrapDegrees(interpolatedYRot(now));
+        float xRot = wrapDegrees(interpolatedXRot(now));
 
         float elapsedTicks = elapsedAnimationTicks();
 
@@ -180,32 +208,36 @@ public final class SkyesightVisualEntity {
         this.entity.setDeltaMovement(this.deltaMovement);
         this.entity.setOnGround(this.onGround);
         this.entity.fallDistance = this.fallDistance;
-        this.entity.xo = position.x();
-        this.entity.yo = position.y();
-        this.entity.zo = position.z();
+        Vec3 previousPosition = interpolatedPositionAtAlpha(Math.max(0.0F, alpha - 0.05F));
+        this.entity.xOld = previousPosition.x();
+        this.entity.yOld = previousPosition.y();
+        this.entity.zOld = previousPosition.z();
+        this.entity.xo = previousPosition.x();
+        this.entity.yo = previousPosition.y();
+        this.entity.zo = previousPosition.z();
 
         this.entity.setYRot(yRot);
         this.entity.setXRot(xRot);
-        this.entity.yRotO = yRot;
-        this.entity.xRotO = xRot;
+        this.entity.yRotO = wrapDegrees(lerpDegrees(Math.max(0.0F, alpha - 0.05F), this.previousYRot, this.currentYRot));
+        this.entity.xRotO = wrapDegrees(lerpDegrees(Math.max(0.0F, alpha - 0.05F), this.previousXRot, this.currentXRot));
 
         if (this.entity instanceof LivingEntity livingEntity) {
             if (this.entity instanceof Player) {
                 stepPlayerBodyYaw();
 
-                float bodyYaw = lerpDegrees(alpha, this.playerBodyYawO, this.playerBodyYaw);
+                float bodyYaw = wrapDegrees(lerpDegrees(alpha, this.playerBodyYawO, this.playerBodyYaw));
 
-                livingEntity.yBodyRotO = this.playerBodyYawO;
+                livingEntity.yBodyRotO = wrapDegrees(this.playerBodyYawO);
                 livingEntity.yBodyRot = bodyYaw;
 
 
-                livingEntity.yHeadRot = lerpDegrees(alpha, this.previousYHeadRot, this.currentYHeadRot);
-                livingEntity.yHeadRotO = lerpDegrees(alpha, this.previousYHeadRotO, this.currentYHeadRotO);
+                livingEntity.yHeadRot = wrapDegrees(lerpDegrees(alpha, this.previousYHeadRot, this.currentYHeadRot));
+                livingEntity.yHeadRotO = wrapDegrees(lerpDegrees(alpha, this.previousYHeadRotO, this.currentYHeadRotO));
             } else {
-                livingEntity.yBodyRot = lerpDegrees(alpha, this.previousYBodyRot, this.currentYBodyRot);
-                livingEntity.yBodyRotO = lerpDegrees(alpha, this.previousYBodyRotO, this.currentYBodyRotO);
-                livingEntity.yHeadRot = lerpDegrees(alpha, this.previousYHeadRot, this.currentYHeadRot);
-                livingEntity.yHeadRotO = lerpDegrees(alpha, this.previousYHeadRotO, this.currentYHeadRotO);
+                livingEntity.yBodyRot = wrapDegrees(lerpDegrees(alpha, this.previousYBodyRot, this.currentYBodyRot));
+                livingEntity.yBodyRotO = wrapDegrees(lerpDegrees(alpha, this.previousYBodyRotO, this.currentYBodyRotO));
+                livingEntity.yHeadRot = wrapDegrees(lerpDegrees(alpha, this.previousYHeadRot, this.currentYHeadRot));
+                livingEntity.yHeadRotO = wrapDegrees(lerpDegrees(alpha, this.previousYHeadRotO, this.currentYHeadRotO));
             }
             applyLivingAnimationState(livingEntity);
             applyWalkAnimation(livingEntity, elapsedTicks);
@@ -331,29 +363,19 @@ public final class SkyesightVisualEntity {
         this.hurtTime = entry.hurtTime();
         this.hurtDuration = entry.hurtDuration();
         this.deathTime = entry.deathTime();
-
-    }
-    public void triggerSwing(InteractionHand hand) {
-        long now = System.currentTimeMillis();
-
-        this.localSwinging = true;
-        this.localSwingingArm = hand;
-        this.localSwingStartMs = now;
-        this.localSwingLastMs = now;
-        this.localAttackAnim = 0.0F;
-        this.localOAttackAnim = 0.0F;
-
-        if (this.entity instanceof LivingEntity livingEntity) {
-            LivingEntityAnimationAccessor accessor =
-                    (LivingEntityAnimationAccessor) livingEntity;
-
-            accessor.skyesight$setSwinging(true);
-            accessor.skyesight$setSwingingArm(hand);
-            accessor.skyesight$setSwingTime(0);
-            accessor.skyesight$setOAttackAnim(0.0F);
-            accessor.skyesight$setAttackAnim(0.0F);
+        if (entry.swinging()) {
+            long swingStartMs = this.animationSnapshotMs - Math.max(0, entry.swingTime()) * 50L;
+            if (!this.localSwinging || entry.swingingArm() != this.localSwingingArm) {
+                this.localSwingStartMs = swingStartMs;
+                this.localSwingLastMs = this.animationSnapshotMs;
+                this.localAttackAnim = entry.attackAnim();
+                this.localOAttackAnim = entry.oAttackAnim();
+            }
+            this.localSwinging = true;
+            this.localSwingingArm = entry.swingingArm() == null ? InteractionHand.MAIN_HAND : entry.swingingArm();
         }
     }
+
     private void updatePlayerMovementAnimation(Vec3 from, Vec3 to) {
         double dx = to.x() - from.x();
         double dz = to.z() - from.z();
@@ -413,6 +435,10 @@ public final class SkyesightVisualEntity {
         return this.previousPosition.lerp(this.currentPosition, interpolationAlpha(nowMs));
     }
 
+    private Vec3 interpolatedPositionAtAlpha(float alpha) {
+        return this.previousPosition.lerp(this.currentPosition, Mth.clamp(alpha, 0.0F, 1.0F));
+    }
+
     private float interpolatedYRot(long nowMs) {
         return lerpDegrees(interpolationAlpha(nowMs), this.previousYRot, this.currentYRot);
     }
@@ -449,8 +475,74 @@ public final class SkyesightVisualEntity {
         return elapsedMs / 50.0F;
     }
 
+    public Vec3 debugPreviousPosition() {
+        return this.previousPosition;
+    }
+
+    public Vec3 debugCurrentPosition() {
+        return this.currentPosition;
+    }
+
+    public Vec3 debugLastSnapshotPosition() {
+        return this.lastSnapshotPosition;
+    }
+
+    public long debugSnapshotStartMs() {
+        return this.snapshotStartMs;
+    }
+
+    public long debugSnapshotEndMs() {
+        return this.snapshotEndMs;
+    }
+
+    public float debugInterpolationAlpha() {
+        return interpolationAlpha(System.currentTimeMillis());
+    }
+
     private static float lerpDegrees(float alpha, float from, float to) {
         float delta = Mth.wrapDegrees(to - from);
-        return from + alpha * delta;
+        return wrapDegrees(from + alpha * delta);
+    }
+
+    private static float wrapDegrees(float degrees) {
+        return Mth.wrapDegrees(degrees);
+    }
+
+    private static void copyRenderState(Entity source, Entity target) {
+        target.tickCount = source.tickCount;
+        target.setPos(source.position());
+        target.xo = source.xo;
+        target.yo = source.yo;
+        target.zo = source.zo;
+        target.xOld = source.xOld;
+        target.yOld = source.yOld;
+        target.zOld = source.zOld;
+        target.setDeltaMovement(source.getDeltaMovement());
+        target.setYRot(source.getYRot());
+        target.setXRot(source.getXRot());
+        target.yRotO = source.yRotO;
+        target.xRotO = source.xRotO;
+        target.setOnGround(source.onGround());
+        target.fallDistance = source.fallDistance;
+
+        if (source instanceof LivingEntity sourceLiving && target instanceof LivingEntity targetLiving) {
+            targetLiving.yBodyRot = sourceLiving.yBodyRot;
+            targetLiving.yBodyRotO = sourceLiving.yBodyRotO;
+            targetLiving.yHeadRot = sourceLiving.yHeadRot;
+            targetLiving.yHeadRotO = sourceLiving.yHeadRotO;
+            targetLiving.hurtTime = sourceLiving.hurtTime;
+            targetLiving.hurtDuration = sourceLiving.hurtDuration;
+            targetLiving.deathTime = sourceLiving.deathTime;
+
+            WalkAnimationState sourceWalk =
+                    ((LivingEntityWalkAnimationAccessor) sourceLiving).skyesight$getWalkAnimation();
+            WalkAnimationState targetWalk =
+                    ((LivingEntityWalkAnimationAccessor) targetLiving).skyesight$getWalkAnimation();
+            WalkAnimationStateAccessor sourceAccessor = (WalkAnimationStateAccessor) sourceWalk;
+            WalkAnimationStateAccessor targetAccessor = (WalkAnimationStateAccessor) targetWalk;
+            targetAccessor.skyesight$setPosition(sourceAccessor.skyesight$getPosition());
+            targetAccessor.skyesight$setSpeed(sourceAccessor.skyesight$getSpeed());
+            targetAccessor.skyesight$setSpeedOld(sourceAccessor.skyesight$getSpeedOld());
+        }
     }
 }

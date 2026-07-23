@@ -9,6 +9,15 @@ import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
 
+/**
+ * Disabled legacy diagnostic renderer.
+ *
+ * <p>The active direct-stencil portal environment path is
+ * {@code PortalSkyCaptureManager}: it captures sky/clouds into an offscreen
+ * texture with vanilla caller preconditions and composites that texture through
+ * stencil. This class clears the bound framebuffer color/depth directly and is
+ * not safe for the stabilized portal pass.</p>
+ */
 public final class SkyesightVanillaEnvironmentRenderer implements SkyesightEnvironmentRenderer {
     @Override
     public void renderSky(

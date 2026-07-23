@@ -1,7 +1,9 @@
 package com.skyeshade.skyesight.network;
 
 import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.SkyesightDebugConfig;
 import com.skyeshade.skyesight.server.SkyesightServerChunkSender;
+import com.skyeshade.skyesight.server.portal.PortalProxyArmorStandDebugManager;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
@@ -9,7 +11,9 @@ public final class SkyesightPayloads {
     private SkyesightPayloads() {}
 
     public static void register(RegisterPayloadHandlersEvent event) {
-        Skyesight.LOGGER.info("[Skyesight] Registering network payloads");
+        if (SkyesightDebugConfig.SOURCE_MAP) {
+            Skyesight.LOGGER.info("[Skyesight] Registering network payloads");
+        }
 
         PayloadRegistrar registrar = event.registrar(Skyesight.MODID)
                 .versioned("1");
@@ -18,6 +22,17 @@ public final class SkyesightPayloads {
                 SkyesightChunkRequestPayload.TYPE,
                 SkyesightChunkRequestPayload.STREAM_CODEC,
                 SkyesightServerChunkSender::handleChunkRequest
+        );
+        registrar.playToServer(
+                SkyesightProxyMarkerPayload.TYPE,
+                SkyesightProxyMarkerPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> {
+                            if (context.player() instanceof net.minecraft.server.level.ServerPlayer player) {
+                                PortalProxyArmorStandDebugManager.handleMarker(payload, player);
+                            }
+                        }
+                )
         );
 
         registrar.playToClient(
@@ -47,17 +62,17 @@ public final class SkyesightPayloads {
                 )
         );
         registrar.playToClient(
+                SkyesightVisualEntityVanillaPacketPayload.TYPE,
+                SkyesightVisualEntityVanillaPacketPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> SkyesightPortalEntityPacketApplier.handle(payload)
+                )
+        );
+        registrar.playToClient(
                 SkyesightBlockEventPayload.TYPE,
                 SkyesightBlockEventPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
                         () -> SkyesightClientBlockEventHandler.handle(payload)
-                )
-        );
-        registrar.playToClient(
-                SkyesightEntityAnimationPayload.TYPE,
-                SkyesightEntityAnimationPayload.STREAM_CODEC,
-                (payload, context) -> context.enqueueWork(
-                        () -> SkyesightClientEntityAnimationHandler.handle(payload)
                 )
         );
         registrar.playToClient(

@@ -3,6 +3,7 @@ package com.skyeshade.skyesight.network;
 import com.skyeshade.skyesight.Skyesight;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
@@ -39,7 +40,8 @@ public record SkyesightBlockUpdatesPayload(
         for (int i = 0; i < size; i++) {
             BlockPos pos = buffer.readBlockPos();
             BlockState state = Block.BLOCK_STATE_REGISTRY.byId(buffer.readVarInt());
-            updates.add(new Entry(pos, state));
+            CompoundTag blockEntityTag = buffer.readNbt();
+            updates.add(new Entry(pos, state, blockEntityTag));
         }
 
         return new SkyesightBlockUpdatesPayload(
@@ -58,6 +60,7 @@ public record SkyesightBlockUpdatesPayload(
         for (Entry update : payload.updates()) {
             buffer.writeBlockPos(update.pos());
             buffer.writeVarInt(Block.BLOCK_STATE_REGISTRY.getId(update.state()));
+            buffer.writeNbt(update.blockEntityTag());
         }
     }
 
@@ -66,5 +69,5 @@ public record SkyesightBlockUpdatesPayload(
         return TYPE;
     }
 
-    public record Entry(BlockPos pos, BlockState state) {}
+    public record Entry(BlockPos pos, BlockState state, CompoundTag blockEntityTag) {}
 }

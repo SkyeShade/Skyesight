@@ -1,9 +1,13 @@
 package com.skyeshade.skyesight.server;
 
-import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.mixin.common.LivingEntityAnimationAccessor;
 import com.skyeshade.skyesight.mixin.common.LivingEntityWalkAnimationAccessor;
 import com.skyeshade.skyesight.mixin.common.WalkAnimationStateAccessor;
+import com.skyeshade.skyesight.SkyesightNativeVisualEntityRoutingDebug;
+import com.skyeshade.skyesight.SkyesightPortalEntityPoolConfig;
+import com.skyeshade.skyesight.api.RegisteredPortalView;
+import com.skyeshade.skyesight.api.SkyesightPortalApi;
+import com.skyeshade.skyesight.entity.PortalMultipartEntityUtil;
 import com.skyeshade.skyesight.network.SkyesightEntitySnapshotPayload;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
@@ -27,6 +31,11 @@ public final class SkyesightServerEntitySnapshotSender {
             SkyesightServerViewTracker.ViewWatch watch,
             ServerLevel level
     ) {
+        updatePortalEntityPoolTracker(receivingPlayer, watch, level);
+        if (crossDimSnapshotDisabled(watch, level)) {
+            return;
+        }
+
         int radiusBlocks = watch.radius() * 16 + 16;
         double centerX = watch.centerChunkX() * 16.0D + 8.0D;
         double centerZ = watch.centerChunkZ() * 16.0D + 8.0D;
@@ -41,10 +50,16 @@ public final class SkyesightServerEntitySnapshotSender {
         );
 
         List<SkyesightEntitySnapshotPayload.Entry> entries = new ArrayList<>();
+        List<Entity> candidates = level.getEntities((Entity) null, area, entity -> true);
 
-        for (Entity entity : level.getEntities((Entity) null, area, entity -> true)) {
+        for (Entity entity : candidates) {
             if (entries.size() >= MAX_ENTITIES_PER_SNAPSHOT) {
                 break;
+            }
+            if (PortalMultipartEntityUtil.shouldSkipStandaloneVisualEntity(entity)) {
+                PortalMultipartEntityUtil.warnSkippedStandalonePart(entity, "entity_snapshot");
+                SkyesightNativeVisualEntityRoutingDebug.serverEntitySkippedPartEntity(watch.viewId());
+                continue;
             }
 
             entries.add(createEntry(entity));
@@ -72,9 +87,46 @@ public final class SkyesightServerEntitySnapshotSender {
         );
     }
 
-    private static SkyesightEntitySnapshotPayload.Entry createEntry(Entity entity) {
-        boolean living = entity instanceof LivingEntity;
+    private static boolean crossDimSnapshotDisabled(SkyesightServerViewTracker.ViewWatch watch, ServerLevel level) {
+        if (!SkyesightPortalEntityPoolConfig.crossDimEntitySnapshotsDisabled()) {
+            return false;
+        }
+        RegisteredPortalView view = SkyesightPortalApi.getPortal(watch.viewId().toString());
+        return view != null
+                && view.active()
+                && view.isCrossDimension()
+                && view.target().dimension().equals(level.dimension());
+    }
 
+    private static void updatePortalEntityPoolTracker(
+            ServerPlayer receivingPlayer,
+            SkyesightServerViewTracker.ViewWatch watch,
+            ServerLevel level
+    ) {
+        if (!SkyesightPortalEntityPoolConfig.portalEntityPoolPopulationEnabled()) {
+            return;
+        }
+        RegisteredPortalView view = SkyesightPortalApi.getPortal(watch.viewId().toString());
+        if (view == null) {
+            SkyesightNativeVisualEntityRoutingDebug.serverTrackerSkipped(watch.viewId(), "view_missing");
+            return;
+        }
+        if (!view.active()) {
+            SkyesightNativeVisualEntityRoutingDebug.serverTrackerSkipped(watch.viewId(), "view_inactive");
+            return;
+        }
+        if (!view.isCrossDimension()) {
+            SkyesightNativeVisualEntityRoutingDebug.serverTrackerSkipped(watch.viewId(), "same_dim");
+            return;
+        }
+        if (!view.target().dimension().equals(level.dimension())) {
+            SkyesightNativeVisualEntityRoutingDebug.serverTrackerSkipped(watch.viewId(), "target_dim_mismatch");
+            return;
+        }
+        SkyesightServerVisualEntityPacketTracker.update(receivingPlayer, watch, level);
+    }
+
+    private static SkyesightEntitySnapshotPayload.Entry createEntry(Entity entity) {
         float yBodyRot = entity.getYRot();
         float yBodyRotO = entity.getYRot();
         float yHeadRot = entity.getYRot();
@@ -142,7 +194,6 @@ public final class SkyesightServerEntitySnapshotSender {
                 entity.fallDistance,
                 entity.getYRot(),
                 entity.getXRot(),
-                living,
                 entity.tickCount,
                 yBodyRot,
                 yBodyRotO,

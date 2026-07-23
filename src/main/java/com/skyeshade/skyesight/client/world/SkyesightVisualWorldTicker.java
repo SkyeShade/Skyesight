@@ -15,5 +15,6 @@ public final class SkyesightVisualWorldTicker {
     @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Post event) {
         SkyesightVisualWorldManager.tickAll();
+        SkyesightEntityDimensionContextReporter.tick();
     }
 }
