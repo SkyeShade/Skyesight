@@ -5,6 +5,7 @@ import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.skyeshade.skyesight.api.*;
 
+import com.skyeshade.skyesight.client.SkyesightClientThreading;
 import com.skyeshade.skyesight.client.render.SkyesightCameraMatrices;
 import com.skyeshade.skyesight.client.render.SkyesightFrustumFactory;
 import com.skyeshade.skyesight.client.render.SkyesightProjectionMatrices;
@@ -26,6 +27,8 @@ import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.lwjgl.opengl.GL11;
 
+import java.util.Objects;
+
 public final class SkyesightView implements SkyesightViewHandle {
     private final ResourceLocation id;
     private final SkyesightInternalCamera camera;
@@ -36,25 +39,27 @@ public final class SkyesightView implements SkyesightViewHandle {
     private int width;
     private int height;
     private float fov;
-    private TextureTarget target;
+    private volatile TextureTarget target;
     private SkyesightClipPlane clipPlane;
-    private boolean closed;
+    private volatile boolean closed;
     private Matrix4f projectionOverride;
+    private final Object targetLock = new Object();
 
     public SkyesightView(SkyesightViewSpec spec) {
-        this.id = spec.id();
+        Objects.requireNonNull(spec, "view spec");
+        this.id = Objects.requireNonNull(spec.id(), "view id");
 
-        this.dimension = spec.dimension();
+        this.dimension = Objects.requireNonNull(spec.dimension(), "view dimension");
 
-        this.renderDistanceChunks = spec.renderDistanceChunks();
-        this.width = spec.width();
-        this.height = spec.height();
+        this.renderDistanceChunks = Math.max(1, spec.renderDistanceChunks());
+        this.width = Math.max(1, spec.width());
+        this.height = Math.max(1, spec.height());
         this.fov = Math.max(1.0F, spec.fov());
-        this.renderMode = spec.renderMode();
+        this.renderMode = Objects.requireNonNull(spec.renderMode(), "view render mode");
         this.camera = new SkyesightInternalCamera();
 
-        this.camera.setPosition(spec.position());
-        this.camera.setRotation(spec.rotation());
+        this.camera.setPosition(Objects.requireNonNull(spec.position(), "view position"));
+        this.camera.setRotation(Objects.requireNonNull(spec.rotation(), "view rotation"));
 
         resize(this.width, this.height);
     }
@@ -145,18 +150,35 @@ public final class SkyesightView implements SkyesightViewHandle {
         width = Math.max(1, width);
         height = Math.max(1, height);
 
-        if (this.target != null && this.width == width && this.height == height) {
-            return;
+        synchronized (this.targetLock) {
+            if (this.closed) {
+                return;
+            }
+            if (this.target != null && this.width == width && this.height == height) {
+                return;
+            }
+            this.width = width;
+            this.height = height;
         }
 
-        this.width = width;
-        this.height = height;
+        int targetWidth = width;
+        int targetHeight = height;
+        SkyesightClientThreading.runOnRenderThread(() -> resizeTargetOnRenderThread(targetWidth, targetHeight));
+    }
 
-        if (this.target != null) {
-            this.target.destroyBuffers();
+    private void resizeTargetOnRenderThread(int width, int height) {
+        synchronized (this.targetLock) {
+            if (this.closed || this.width != width || this.height != height) {
+                return;
+            }
+            if (this.target != null && this.target.width == width && this.target.height == height) {
+                return;
+            }
+            if (this.target != null) {
+                this.target.destroyBuffers();
+            }
+            this.target = new TextureTarget(width, height, true, Minecraft.ON_OSX);
         }
-
-        this.target = new TextureTarget(width, height, true, Minecraft.ON_OSX);
     }
 
     @Override
@@ -369,6 +391,7 @@ public final class SkyesightView implements SkyesightViewHandle {
                 visualWorld.renderBlockEntities(
                         this.camera.minecraftCamera(),
                         modelMatrix,
+                        renderProjectionMatrix,
                         partialTick
                 );
 
@@ -411,18 +434,22 @@ public final class SkyesightView implements SkyesightViewHandle {
 
     @Override
     public void close() {
-        if (this.closed) {
-            return;
-        }
+        TextureTarget targetToDestroy;
+        synchronized (this.targetLock) {
+            if (this.closed) {
+                return;
+            }
 
-        this.closed = true;
+            this.closed = true;
+            targetToDestroy = this.target;
+            this.target = null;
+        }
 
         SkyesightClientChunkRequester.reset(this.id);
         SkyesightVisualWorldManager.close(this.id);
 
-        if (this.target != null) {
-            this.target.destroyBuffers();
-            this.target = null;
+        if (targetToDestroy != null) {
+            SkyesightClientThreading.runOnRenderThread(targetToDestroy::destroyBuffers);
         }
     }
     @Override

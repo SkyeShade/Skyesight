@@ -15,7 +15,7 @@ import java.util.Optional;
 public final class SkyesightClientLevelFactory {
     private SkyesightClientLevelFactory() {}
 
-    public static ClientLevel create(ResourceKey<Level> dimension) {
+    public static SkyesightVisualClientLevel create(ResourceKey<Level> dimension) {
         Minecraft minecraft = Minecraft.getInstance();
         ClientPacketListener connection = minecraft.getConnection();
 
@@ -29,7 +29,7 @@ public final class SkyesightClientLevelFactory {
         return create(dimension, dimensionType);
     }
 
-    public static ClientLevel create(
+    public static SkyesightVisualClientLevel create(
             ResourceKey<Level> dimension,
             Holder<DimensionType> dimensionType
     ) {
@@ -51,7 +51,7 @@ public final class SkyesightClientLevelFactory {
         boolean debug = false;
         long biomeZoomSeed = 0L;
 
-        return new ClientLevel(
+        return new SkyesightVisualClientLevel(
                 connection,
                 levelData,
                 dimension,

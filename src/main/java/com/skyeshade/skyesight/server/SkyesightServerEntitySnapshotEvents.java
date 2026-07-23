@@ -15,6 +15,7 @@ public final class SkyesightServerEntitySnapshotEvents {
 
     @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
+        PortalSimulationCoordinator.tick(event.getServer());
         if (event.getServer().getTickCount() % SNAPSHOT_INTERVAL_TICKS != 0) {
             return;
         }

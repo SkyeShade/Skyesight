@@ -5,13 +5,18 @@ import com.skyeshade.skyesight.api.SkyesightViewHandle;
 import com.skyeshade.skyesight.api.SkyesightViewSpec;
 import net.minecraft.resources.ResourceLocation;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 public final class SkyesightClientApi implements SkyesightApi {
     private final Map<ResourceLocation, SkyesightView> views = new HashMap<>();
 
     @Override
-    public SkyesightViewHandle createView(SkyesightViewSpec spec) {
+    public synchronized SkyesightViewHandle createView(SkyesightViewSpec spec) {
         SkyesightView existing = this.views.get(spec.id());
 
         if (existing != null) {
@@ -24,13 +29,13 @@ public final class SkyesightClientApi implements SkyesightApi {
     }
 
     @Override
-    public Optional<SkyesightViewHandle> getView(ResourceLocation id) {
+    public synchronized Optional<SkyesightViewHandle> getView(ResourceLocation id) {
         return Optional.ofNullable(this.views.get(id));
     }
 
 
     @Override
-    public boolean destroyView(ResourceLocation id) {
+    public synchronized boolean destroyView(ResourceLocation id) {
         SkyesightView view = this.views.remove(id);
 
         if (view == null) {
@@ -42,15 +47,16 @@ public final class SkyesightClientApi implements SkyesightApi {
     }
 
     @Override
-    public Collection<? extends SkyesightViewHandle> views() {
-        return this.views.values();
+    public synchronized Collection<? extends SkyesightViewHandle> views() {
+        return List.copyOf(this.views.values());
     }
 
-    public void closeAll() {
-        for (SkyesightView view : this.views.values()) {
+    public synchronized void closeAll() {
+        List<SkyesightView> viewsToClose = new ArrayList<>(this.views.values());
+        this.views.clear();
+
+        for (SkyesightView view : viewsToClose) {
             view.close();
         }
-
-        this.views.clear();
     }
 }

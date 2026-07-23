@@ -15,6 +15,7 @@ import java.util.List;
 
 public record SkyesightChunkRequestPayload(
         ResourceLocation viewId,
+        long viewGeneration,
         ResourceKey<Level> dimension,
         int centerChunkX,
         int centerChunkZ,
@@ -32,6 +33,7 @@ public record SkyesightChunkRequestPayload(
 
     private static SkyesightChunkRequestPayload read(RegistryFriendlyByteBuf buffer) {
         ResourceLocation viewId = buffer.readResourceLocation();
+        long viewGeneration = buffer.readVarLong();
         ResourceLocation dimensionId = buffer.readResourceLocation();
 
         int centerChunkX = buffer.readInt();
@@ -47,6 +49,7 @@ public record SkyesightChunkRequestPayload(
 
         return new SkyesightChunkRequestPayload(
                 viewId,
+                viewGeneration,
                 ResourceKey.create(Registries.DIMENSION, dimensionId),
                 centerChunkX,
                 centerChunkZ,
@@ -57,6 +60,7 @@ public record SkyesightChunkRequestPayload(
 
     private static void write(RegistryFriendlyByteBuf buffer, SkyesightChunkRequestPayload payload) {
         buffer.writeResourceLocation(payload.viewId);
+        buffer.writeVarLong(payload.viewGeneration);
         buffer.writeResourceLocation(payload.dimension.location());
 
         buffer.writeInt(payload.centerChunkX);

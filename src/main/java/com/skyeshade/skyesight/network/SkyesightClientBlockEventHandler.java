@@ -8,7 +8,7 @@ public final class SkyesightClientBlockEventHandler {
 
     public static void handle(SkyesightBlockEventPayload payload) {
         SkyesightVisualWorld world =
-                SkyesightVisualWorldManager.get(payload.viewId());
+                SkyesightVisualWorldManager.getIfCurrent(payload.viewId(), payload.dimension());
 
         if (world == null || world.isClosed()) {
             return;

@@ -9,4 +9,7 @@ import org.spongepowered.asm.mixin.gen.Invoker;
 public interface CameraInvoker {
     @Invoker("setPosition")
     void skyesight$setPosition(Vec3 position);
+
+    @Invoker("setRotation")
+    void skyesight$setRotation(float yaw, float pitch, float roll);
 }

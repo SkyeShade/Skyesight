@@ -2,12 +2,13 @@
   "itemGroup.skyesight": "Example Mod Tab",
   "block.skyesight.example_block": "Example Block",
   "item.skyesight.example_item": "Example Item",
+  "item.skyesight.debug_portal_stick": "Debug Portal Stick",
+  "item.skyesight.masked_portal_debug_stick": "Masked Portal Debug Stick",
 
   "skyesight.configuration.title": "SkyeSight Configs",
-  "skyesight.configuration.section.skyesight.common.toml": "SkyeSight Configs",
-  "skyesight.configuration.section.skyesight.common.toml.title": "SkyeSight Configs",
-  "skyesight.configuration.items": "Item List",
-  "skyesight.configuration.logDirtBlock": "Log Dirt Block",
-  "skyesight.configuration.magicNumberIntroduction": "Magic Number Text",
-  "skyesight.configuration.magicNumber": "Magic Number"
+  "skyesight.configuration.section.skyesight-client.toml": "SkyeSight Client Config",
+  "skyesight.configuration.section.skyesight-client.toml.title": "SkyeSight Client Config",
+  "skyesight.configuration.enableBoundsScaledPortalResolution": "Bounds-Scaled Portal Resolution",
+  "skyesight.configuration.enablePortalFrustumCulling": "Portal Frustum Culling",
+  "skyesight.configuration.portalRenderDistanceBlocks": "Portal Render Distance"
 }

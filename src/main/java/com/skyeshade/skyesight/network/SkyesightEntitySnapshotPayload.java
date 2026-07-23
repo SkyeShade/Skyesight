@@ -68,7 +68,6 @@ public record SkyesightEntitySnapshotPayload(
             float yRot = buffer.readFloat();
             float xRot = buffer.readFloat();
 
-            boolean living = buffer.readBoolean();
             int tickCount = buffer.readVarInt();
 
             float yBodyRot = buffer.readFloat();
@@ -103,7 +102,6 @@ public record SkyesightEntitySnapshotPayload(
                     fallDistance,
                     yRot,
                     xRot,
-                    living,
                     tickCount,
                     yBodyRot,
                     yBodyRotO,
@@ -164,7 +162,6 @@ public record SkyesightEntitySnapshotPayload(
             buffer.writeFloat(entity.yRot());
             buffer.writeFloat(entity.xRot());
 
-            buffer.writeBoolean(entity.living());
             buffer.writeVarInt(entity.tickCount());
 
             buffer.writeFloat(entity.yBodyRot());
@@ -265,7 +262,6 @@ public record SkyesightEntitySnapshotPayload(
             float fallDistance,
             float yRot,
             float xRot,
-            boolean living,
             int tickCount,
             float yBodyRot,
             float yBodyRotO,
