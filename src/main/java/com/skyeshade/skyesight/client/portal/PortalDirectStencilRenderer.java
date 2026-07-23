@@ -24,7 +24,7 @@ import com.skyeshade.skyesight.api.SkyesightPortalApi;
 import com.skyeshade.skyesight.client.chunk.SkyesightPortalChunkStorage;
 import com.skyeshade.skyesight.client.chunk.SkyesightPortalRenderLevelView;
 import com.skyeshade.skyesight.client.compat.iris.SkyesightIrisCompat;
-import com.skyeshade.skyesight.client.render.DirectStencilSkyPass;
+
 import com.skyeshade.skyesight.client.render.PortalVisualDisplayTickDriver;
 import com.skyeshade.skyesight.client.render.SecondaryEntityPass;
 import com.skyeshade.skyesight.client.render.SecondaryParticlePass;
