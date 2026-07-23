@@ -5,6 +5,7 @@ import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
 import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
 import net.minecraft.network.protocol.game.ClientboundSectionBlocksUpdatePacket;
 import net.minecraft.world.level.ChunkPos;
@@ -17,7 +18,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class ClientPacketListenerPortalBlockUpdateMixin {
     @Inject(method = "handleBlockUpdate", at = @At("RETURN"))
     private void skyesight$schedulePortalTerrainBlockUpdate(ClientboundBlockUpdatePacket packet, CallbackInfo ci) {
-        DirectStencilPortalRenderPipeline.scheduleSodiumBlockUpdate(packet.getPos());
+        scheduleBlock(packet.getPos());
+    }
+
+    @Inject(method = "handleBlockEntityData", at = @At("RETURN"))
+    private void skyesight$schedulePortalTerrainBlockEntityUpdate(ClientboundBlockEntityDataPacket packet, CallbackInfo ci) {
+        scheduleBlock(packet.getPos());
     }
 
     @Inject(method = "handleChunkBlocksUpdate", at = @At("RETURN"))
@@ -33,6 +39,12 @@ public abstract class ClientPacketListenerPortalBlockUpdateMixin {
 
         long chunk = new ChunkPos(pos).toLong();
         if (scheduledChunks.add(chunk)) {
+            scheduleBlock(pos);
+        }
+    }
+
+    private static void scheduleBlock(BlockPos pos) {
+        if (pos != null) {
             DirectStencilPortalRenderPipeline.scheduleSodiumBlockUpdate(pos);
         }
     }
