@@ -3,14 +3,11 @@ package com.skyeshade.skyesight.client.render;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexSorting;
-import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.SkyesightClientConfig;
-import com.skyeshade.skyesight.SkyesightDebugConfig;
 import com.skyeshade.skyesight.client.render.entity.PortalEntityRenderContextScope;
 import com.skyeshade.skyesight.client.render.entity.PortalMultipartPartEligibility;
 import com.skyeshade.skyesight.client.render.entity.PortalRenderableEntity;
 import com.skyeshade.skyesight.mixin.client.EntityRenderDispatcherAccessor;
-import com.skyeshade.skyesight.client.world.SkyesightMultipartEntityDebug;
 import com.skyeshade.skyesight.client.world.SkyesightVisualEntity;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -40,21 +37,10 @@ import java.util.List;
 import java.util.Set;
 
 public final class SecondaryEntityPass {
-    private static final boolean DEBUG_VERBOSE_PORTAL_FRAMEBUFFER_DIAGNOSTICS = false;
-    private static final boolean DEBUG_SECONDARY_DISABLE_ENTITY_FRUSTUM_CULLING = false;
-    private static final boolean DEBUG_SECONDARY_ENTITY_DEPTH_TEST = true;
     private static final double ENTITY_FRUSTUM_CULL_PADDING_BLOCKS = 0.75D;
     private static final double PLAYER_ENTITY_FRUSTUM_CULL_PADDING_BLOCKS = 1.25D;
-    private static final boolean DEBUG_SECONDARY_RENDER_LOCAL_PLAYER = true;
-    private static final int DEBUG_PORTAL_ENTITY_RENDER_CHUNK_RADIUS = 6;
-    private static final double DEBUG_PORTAL_ENTITY_RENDER_MARGIN = 16.0D;
-    private static final SecondaryEntityCoordinateMode DEBUG_SECONDARY_ENTITY_COORDINATE_MODE =
-            SecondaryEntityCoordinateMode.CAMERA_RELATIVE;
-    private static final SecondaryEntityPoseMode DEBUG_SECONDARY_ENTITY_POSE_MODE =
-            SecondaryEntityPoseMode.VANILLA_EMPTY_POSESTACK;
-    private static long lastPortalEntityDistanceCheckLogMillis;
-    private static long lastFramebufferMismatchLogMillis;
-    private static long nextMultipartRenderTraceFrameId;
+    private static final int DEFAULT_PORTAL_ENTITY_RENDER_CHUNK_RADIUS = 6;
+    private static final double PORTAL_ENTITY_RENDER_MARGIN_BLOCKS = 16.0D;
 
     private SecondaryEntityPass() {}
 
@@ -79,9 +65,9 @@ public final class SecondaryEntityPass {
                 0,
                 configuredEntityChunkRadius > 0
                         ? configuredEntityChunkRadius
-                        : DEBUG_PORTAL_ENTITY_RENDER_CHUNK_RADIUS
+                        : DEFAULT_PORTAL_ENTITY_RENDER_CHUNK_RADIUS
         );
-        double portalEntityBlockRadius = portalEntityChunkRadius * 16.0D + DEBUG_PORTAL_ENTITY_RENDER_MARGIN;
+        double portalEntityBlockRadius = portalEntityChunkRadius * 16.0D + PORTAL_ENTITY_RENDER_MARGIN_BLOCKS;
         double minEntityY = Math.max(level.getMinBuildHeight(), cameraPosition.y() - portalEntityBlockRadius);
         double maxEntityY = Math.min(level.getMaxBuildHeight(), cameraPosition.y() + portalEntityBlockRadius);
         AABB bounds = new AABB(
@@ -94,7 +80,7 @@ public final class SecondaryEntityPass {
         );
         Collection<Entity> portalEntityCandidates = level.getEntitiesOfClass(Entity.class, bounds, entity -> true);
         int duplicateRenderAttempts = 0;
-        PoseStack poseStack = createEntityPoseStack(frame);
+        PoseStack poseStack = createEntityPoseStack();
         MultiBufferSource.BufferSource bufferSource = minecraft.renderBuffers().bufferSource();
         EntityRenderDispatcher dispatcher = minecraft.getEntityRenderDispatcher();
         EntityRenderDispatcherAccessor dispatcherAccessor = (EntityRenderDispatcherAccessor) dispatcher;
@@ -116,12 +102,9 @@ public final class SecondaryEntityPass {
         int skippedDistance = 0;
         int skippedFrustum = 0;
         int rendered = 0;
-        boolean entityFrustumCullingEnabled = !DEBUG_SECONDARY_DISABLE_ENTITY_FRUSTUM_CULLING
-                && SkyesightClientConfig.enablePortalEntityFrustumCulling();
+        boolean entityFrustumCullingEnabled = SkyesightClientConfig.enablePortalEntityFrustumCulling();
         boolean entityFrustumAvailable = entityFrustumCullingEnabled && frame.frustum() != null;
         int framebufferBeforePass = GL30.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
-        long multipartTraceFrameId = ++nextMultipartRenderTraceFrameId;
-        List<String> multipartTraceEntries = new ArrayList<>();
 
         modelViewStack.pushMatrix();
 
@@ -134,11 +117,9 @@ public final class SecondaryEntityPass {
             modelViewStack.identity();
             modelViewStack.mul(frame.modelViewMatrix());
             RenderSystem.applyModelViewMatrix();
-            if (DEBUG_SECONDARY_ENTITY_DEPTH_TEST) {
-                RenderSystem.enableDepthTest();
-            } else {
-                RenderSystem.disableDepthTest();
-            }
+
+            RenderSystem.enableDepthTest();
+
             RenderSystem.depthMask(true);
             RenderSystem.disableBlend();
             RenderSystem.enableCull();
@@ -146,11 +127,6 @@ public final class SecondaryEntityPass {
             dispatcher.prepare(level, frame.camera(), minecraft.crosshairPickEntity);
 
             for (Entity entity : portalEntityCandidates) {
-                boolean isLocalPlayer = entity == minecraft.player;
-
-                if (isLocalPlayer && !DEBUG_SECONDARY_RENDER_LOCAL_PLAYER) {
-                    continue;
-                }
 
                 if (entity.isRemoved()) {
                     continue;
@@ -194,24 +170,14 @@ public final class SecondaryEntityPass {
                         poseStack,
                         bufferSource,
                         dispatcher,
-                        multipartTraceFrameId,
-                        "main_level",
                         false,
                         true,
-                        -1,
-                        cameraPosition,
-                        renderCoordinates,
-                        multipartTraceEntries
+                        -1
                 );
                 rendered++;
             }
 
             bufferSource.endBatch();
-            SkyesightMultipartEntityDebug.finishMultipartRenderTraceFrame(
-                    multipartTraceFrameId,
-                    frame.diagnostics().portalInstanceId(),
-                    multipartTraceEntries
-            );
 
             dispatcher.prepare(dispatcherLevelBefore, dispatcherCameraBefore, dispatcherCrosshairBefore);
             if (dispatcherOrientationBefore != null) {
@@ -239,13 +205,13 @@ public final class SecondaryEntityPass {
                     dispatcher.overrideCameraOrientation(dispatcherOrientationBefore);
                 }
             } catch (RuntimeException ignored) {
-                // Diagnostic cleanup should not hide the original pass failure.
+
             }
             try {
                 modelViewStack.popMatrix();
                 RenderSystem.applyModelViewMatrix();
             } catch (RuntimeException ignored) {
-                // Preserve the original exception.
+                // Preserve the original exception
             }
             RenderSystem.setProjectionMatrix(projectionBefore, vertexSortingBefore);
             restoreFramebuffer(minecraft, framebufferBeforePass);
@@ -265,31 +231,7 @@ public final class SecondaryEntityPass {
         }
     }
 
-    public static Result renderVisualWorldEntities(
-            SecondaryViewFrame frame,
-            Minecraft minecraft,
-            ClientLevel renderLevel,
-            Iterable<SkyesightVisualEntity> visualEntities,
-            int portalEntityChunkRadius,
-            float partialTick,
-            boolean renderSlotMarkers,
-            boolean renderDepthOffSlotMarker,
-            boolean renderProofBox,
-            int expectedFramebufferId
-    ) {
-        return renderPortalEntities(
-                frame,
-                minecraft,
-                renderLevel,
-                renderablesFromVisualEntities(visualEntities, renderLevel),
-                portalEntityChunkRadius,
-                partialTick,
-                renderSlotMarkers,
-                renderDepthOffSlotMarker,
-                renderProofBox,
-                expectedFramebufferId
-        );
-    }
+
 
     public static Result renderPortalEntities(
             SecondaryViewFrame frame,
@@ -335,7 +277,7 @@ public final class SecondaryEntityPass {
 
         Vec3 cameraPosition = frame.camera().getPosition();
         ChunkPos cameraChunkPos = new ChunkPos(BlockPos.containing(cameraPosition));
-        double portalEntityBlockRadius = Math.max(0, portalEntityChunkRadius) * 16.0D + DEBUG_PORTAL_ENTITY_RENDER_MARGIN;
+        double portalEntityBlockRadius = Math.max(0, portalEntityChunkRadius) * 16.0D + PORTAL_ENTITY_RENDER_MARGIN_BLOCKS;
         AABB renderBounds = new AABB(
                 cameraPosition.x() - portalEntityBlockRadius,
                 renderLevel.getMinBuildHeight(),
@@ -344,7 +286,7 @@ public final class SecondaryEntityPass {
                 renderLevel.getMaxBuildHeight(),
                 cameraPosition.z() + portalEntityBlockRadius
         );
-        PoseStack poseStack = createEntityPoseStack(frame);
+        PoseStack poseStack = createEntityPoseStack();
         MultiBufferSource.BufferSource bufferSource = minecraft.renderBuffers().bufferSource();
         EntityRenderDispatcher dispatcher = minecraft.getEntityRenderDispatcher();
         EntityRenderDispatcherAccessor dispatcherAccessor = (EntityRenderDispatcherAccessor) dispatcher;
@@ -371,11 +313,6 @@ public final class SecondaryEntityPass {
         Set<java.util.UUID> renderedParentUuids = new HashSet<>();
         Set<String> renderedParentSignatures = new HashSet<>();
         int framebufferBeforePass = GL30.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
-        Vec3 mainCameraPos = minecraft.gameRenderer == null || minecraft.gameRenderer.getMainCamera() == null
-                ? Vec3.ZERO
-                : minecraft.gameRenderer.getMainCamera().getPosition();
-        long multipartTraceFrameId = ++nextMultipartRenderTraceFrameId;
-        List<String> multipartTraceEntries = new ArrayList<>();
         List<PortalRenderableEntity> renderableList = materializeRenderables(renderableEntities);
         if (renderableList.isEmpty()) {
             return Result.skipped("source empty");
@@ -390,7 +327,6 @@ public final class SecondaryEntityPass {
             }
             if (expectedFramebufferId > 0
                     && GL30.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING) != expectedFramebufferId) {
-                logFramebufferMismatchIfDue(expectedFramebufferId, GL30.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING));
                 GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, expectedFramebufferId);
             }
 
@@ -398,11 +334,9 @@ public final class SecondaryEntityPass {
             modelViewStack.identity();
             modelViewStack.mul(frame.modelViewMatrix());
             RenderSystem.applyModelViewMatrix();
-            if (DEBUG_SECONDARY_ENTITY_DEPTH_TEST) {
-                RenderSystem.enableDepthTest();
-            } else {
-                RenderSystem.disableDepthTest();
-            }
+
+            RenderSystem.enableDepthTest();
+
             RenderSystem.depthMask(true);
             RenderSystem.disableBlend();
             RenderSystem.enableCull();
@@ -436,7 +370,6 @@ public final class SecondaryEntityPass {
                             renderableEntity,
                             frame,
                             cameraPosition,
-                            mainCameraPos,
                             renderBounds,
                             portalEntityBlockRadius,
                             partialTick
@@ -461,14 +394,9 @@ public final class SecondaryEntityPass {
                             poseStack,
                             bufferSource,
                             dispatcher,
-                            multipartTraceFrameId,
-                            renderableEntity.source(),
                             renderableEntity.standalonePart(),
                             renderableEntity.mainLevelBacked(),
-                            renderableEntity.parentEntityId(),
-                            cameraPosition,
-                            outcome.renderCoordinates(),
-                            multipartTraceEntries
+                            renderableEntity.parentEntityId()
                     );
                     renderableEntity.finishRender();
                     rendered++;
@@ -489,7 +417,6 @@ public final class SecondaryEntityPass {
                                     partRenderable,
                                     frame,
                                     cameraPosition,
-                                    mainCameraPos,
                                     renderBounds,
                                     portalEntityBlockRadius,
                                     partialTick
@@ -513,14 +440,9 @@ public final class SecondaryEntityPass {
                                     poseStack,
                                     bufferSource,
                                     dispatcher,
-                                    multipartTraceFrameId,
-                                    partRenderable.source(),
                                     true,
                                     partRenderable.mainLevelBacked(),
-                                    partRenderable.parentEntityId(),
-                                    cameraPosition,
-                                    partOutcome.renderCoordinates(),
-                                    multipartTraceEntries
+                                    partRenderable.parentEntityId()
                             );
                             partRenderable.finishRender();
                             rendered++;
@@ -530,11 +452,6 @@ public final class SecondaryEntityPass {
             }
 
             bufferSource.endBatch();
-            SkyesightMultipartEntityDebug.finishMultipartRenderTraceFrame(
-                    multipartTraceFrameId,
-                    frame.diagnostics().portalInstanceId(),
-                    multipartTraceEntries
-            );
             PortalProxyMarkerRenderer.renderMarkers(renderLevel, frame.camera(), poseStack, true);
             PortalLookMarkerRenderer.renderMarkers(renderLevel, frame.camera(), poseStack, true);
 
@@ -567,7 +484,7 @@ public final class SecondaryEntityPass {
                     dispatcher.overrideCameraOrientation(dispatcherOrientationBefore);
                 }
             } catch (RuntimeException ignored) {
-                // Diagnostic cleanup should not hide the original pass failure.
+
             }
             try {
                 modelViewStack.popMatrix();
@@ -616,21 +533,11 @@ public final class SecondaryEntityPass {
         );
     }
 
-    private static PoseStack createEntityPoseStack(SecondaryViewFrame frame) {
-        PoseStack poseStack = new PoseStack();
-
-        if (DEBUG_SECONDARY_ENTITY_POSE_MODE == SecondaryEntityPoseMode.FRAME_MODEL_VIEW_POSESTACK) {
-            poseStack.mulPose(frame.modelViewMatrix());
-        }
-
-        return poseStack;
+    private static PoseStack createEntityPoseStack() {
+        return new PoseStack();
     }
 
     private static Vec3 renderCoordinates(Vec3 worldPosition, Vec3 cameraPosition) {
-        if (DEBUG_SECONDARY_ENTITY_COORDINATE_MODE == SecondaryEntityCoordinateMode.WORLD_COORDINATES) {
-            return worldPosition;
-        }
-
         return worldPosition.subtract(cameraPosition);
     }
 
@@ -638,19 +545,6 @@ public final class SecondaryEntityPass {
         double dx = entityPosition.x() - cameraPosition.x();
         double dz = entityPosition.z() - cameraPosition.z();
         return dx * dx + dz * dz;
-    }
-
-    private static String formatVec(Vec3 position) {
-        if (position == null) {
-            return "null";
-        }
-        return String.format(
-                java.util.Locale.ROOT,
-                "%.1f,%.1f,%.1f",
-                position.x(),
-                position.y(),
-                position.z()
-        );
     }
 
     private static void restoreFramebuffer(Minecraft minecraft, int framebufferId) {
@@ -664,35 +558,12 @@ public final class SecondaryEntityPass {
         GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, framebufferId);
     }
 
-    private static List<PortalRenderableEntity> renderablesFromVisualEntities(
-            Iterable<SkyesightVisualEntity> visualEntities,
-            ClientLevel renderLevel
-    ) {
-        List<PortalRenderableEntity> renderables = new ArrayList<>();
-        if (visualEntities == null) {
-            return renderables;
-        }
 
-        ResourceKey<Level> dimension = renderLevel == null ? null : renderLevel.dimension();
-        for (SkyesightVisualEntity visualEntity : visualEntities) {
-            if (visualEntity == null || visualEntity.entity() == null) {
-                continue;
-            }
-            renderables.add(new PortalRenderableEntity(
-                    visualEntity.entity(),
-                    dimension,
-                    "visual_world",
-                    visualEntity::prepareForRender
-            ));
-        }
-        return renderables;
-    }
 
     private static EntityRenderOutcome renderPortalRenderableEntity(
             PortalRenderableEntity renderableEntity,
             SecondaryViewFrame frame,
             Vec3 cameraPosition,
-            Vec3 mainCameraPos,
             AABB renderBounds,
             double portalEntityBlockRadius,
             float partialTick
@@ -703,11 +574,6 @@ public final class SecondaryEntityPass {
 
         renderableEntity.prepareForRender();
         Entity entity = renderableEntity.entity();
-        SkyesightMultipartEntityDebug.logRenderTimeSample(
-                renderableEntity.source(),
-                entity,
-                partialTick
-        );
 
         if (entity.isRemoved()) {
             return EntityRenderOutcome.removedSkip();
@@ -731,7 +597,6 @@ public final class SecondaryEntityPass {
         if (renderPosition.distanceToSqr(cameraPosition) > portalEntityBlockRadius * portalEntityBlockRadius * 4.0D) {
             return EntityRenderOutcome.distanceSkip();
         }
-        tracePortalEntityDistanceCheck(frame, entity, renderPosition, cameraPosition, mainCameraPos);
         return EntityRenderOutcome.rendered(renderPosition, renderCoordinates(renderPosition, cameraPosition));
     }
 
@@ -742,30 +607,13 @@ public final class SecondaryEntityPass {
             PoseStack poseStack,
             MultiBufferSource.BufferSource bufferSource,
             EntityRenderDispatcher dispatcher,
-            long traceFrameId,
-            String source,
             boolean standalonePart,
             boolean mainLevelBacked,
-            int parentEntityId,
-            Vec3 cameraPosition,
-            Vec3 relativeRenderPosition,
-            List<String> multipartTraceEntries
+            int parentEntityId
     ) {
         if (standalonePart && !mainLevelBacked) {
             clampVisualPartOldPosition(entity, parentEntityId);
         }
-        traceMultipartRenderCall(
-                traceFrameId,
-                source,
-                entity,
-                dispatcher,
-                standalonePart,
-                mainLevelBacked,
-                parentEntityId,
-                cameraPosition,
-                relativeRenderPosition,
-                multipartTraceEntries
-        );
         dispatcher.render(
                 entity,
                 renderCoordinates.x(),
@@ -802,82 +650,6 @@ public final class SecondaryEntityPass {
         }
     }
 
-    private static void traceMultipartRenderCall(
-            long frameId,
-            String source,
-            Entity entity,
-            EntityRenderDispatcher dispatcher,
-            boolean standalonePart,
-            boolean mainLevelBacked,
-            int parentEntityId,
-            Vec3 cameraPosition,
-            Vec3 relativeRenderPosition,
-            List<String> multipartTraceEntries
-    ) {
-        if (!SkyesightMultipartEntityDebug.wantsMultipartRenderTrace(entity)) {
-            return;
-        }
-        Entity parent = com.skyeshade.skyesight.entity.PortalMultipartEntityUtil.parentOfPart(entity);
-        String renderer = rendererClass(entity, dispatcher);
-        String parentRenderer = parent == null ? "-" : rendererClass(parent, dispatcher);
-        AABB box = entity.getBoundingBoxForCulling();
-        String signature = entity.getClass().getSimpleName()
-                + ":"
-                + renderer
-                + ":"
-                + Math.round(entity.getX() * 8.0D)
-                + ","
-                + Math.round(entity.getY() * 8.0D)
-                + ","
-                + Math.round(entity.getZ() * 8.0D);
-        multipartTraceEntries.add(
-                "frame="
-                        + frameId
-                        + " source="
-                        + source
-                        + " entityId="
-                        + entity.getId()
-                        + " uuid="
-                        + entity.getUUID()
-                        + " type="
-                        + entity.getType()
-                        + " class="
-                        + entity.getClass().getName()
-                        + " renderer="
-                        + renderer
-                        + " standalonePart="
-                        + standalonePart
-                        + " mainLevelBacked="
-                        + mainLevelBacked
-                        + " parentEntityId="
-                        + parentEntityId
-                        + " identity="
-                        + System.identityHashCode(entity)
-                        + " pos="
-                        + formatVec(entity.position())
-                        + " old="
-                        + formatVec(new Vec3(entity.xo, entity.yo, entity.zo))
-                        + " rel="
-                        + formatVec(relativeRenderPosition)
-                        + " camera="
-                        + formatVec(cameraPosition)
-                        + " box="
-                        + String.format(java.util.Locale.ROOT, "%.2fx%.2fx%.2f", box.getXsize(), box.getYsize(), box.getZsize())
-                        + " rot="
-                        + String.format(java.util.Locale.ROOT, "%.1f/%.1f %.1f/%.1f", entity.getYRot(), entity.yRotO, entity.getXRot(), entity.xRotO)
-                        + " parent="
-                        + (parent == null ? "-" : parent.getClass().getName() + "#" + parent.getId())
-                        + " equalsParent="
-                        + (entity == parent)
-                        + " rendererEqualsParent="
-                        + renderer.equals(parentRenderer)
-                        + " classEqualsParent="
-                        + (parent != null && entity.getClass() == parent.getClass())
-                        + " signature="
-                        + signature
-        );
-    }
-
     private static String sourceSummary(Iterable<PortalRenderableEntity> renderableEntities) {
         if (renderableEntities == null) {
             return "unknown";
@@ -906,8 +678,6 @@ public final class SecondaryEntityPass {
         return list;
     }
 
-    private static final Set<String> DUPLICATE_VISUAL_PARENT_LOGGED = new HashSet<>();
-
     private static boolean suppressDuplicateVisualParent(
             PortalRenderableEntity renderableEntity,
             Set<Entity> renderedParentObjects,
@@ -926,11 +696,7 @@ public final class SecondaryEntityPass {
         boolean duplicateUuid = entity.getUUID() != null && !renderedParentUuids.add(entity.getUUID());
         String signature = visualParentSignature(entity, dispatcher);
         boolean duplicateSignature = !renderedParentSignatures.add(signature);
-        boolean duplicate = duplicateObject || duplicateId || duplicateUuid || duplicateSignature;
-        if (duplicate) {
-            logDuplicateVisualParent(renderableEntity, signature, duplicateObject, duplicateId, duplicateUuid, duplicateSignature);
-        }
-        return duplicate;
+        return duplicateObject || duplicateId || duplicateUuid || duplicateSignature;
     }
 
     private static String visualParentSignature(Entity entity, EntityRenderDispatcher dispatcher) {
@@ -953,41 +719,6 @@ public final class SecondaryEntityPass {
         } catch (RuntimeException exception) {
             return "unavailable";
         }
-    }
-
-    private static void logDuplicateVisualParent(
-            PortalRenderableEntity renderableEntity,
-            String signature,
-            boolean duplicateObject,
-            boolean duplicateId,
-            boolean duplicateUuid,
-            boolean duplicateSignature
-    ) {
-        if (!SkyesightMultipartEntityDebug.diagnosticsArmed()) {
-            return;
-        }
-        Entity entity = renderableEntity.entity();
-        String key = renderableEntity.source() + ":" + entity.getType() + ":" + signature;
-        if (!DUPLICATE_VISUAL_PARENT_LOGGED.add(key)) {
-            return;
-        }
-        Skyesight.LOGGER.warn(
-                "[Skyesight] DUPLICATE_VISUAL_PARENT_RENDER source={} entityId={} uuid={} type={} class={} pos={} mainLevelBacked={} standalonePart={} parentEntityId={} duplicateObject={} duplicateId={} duplicateUuid={} duplicateSignature={} signature={}",
-                renderableEntity.source(),
-                entity.getId(),
-                entity.getUUID(),
-                entity.getType(),
-                entity.getClass().getName(),
-                formatVec(entity.position()),
-                renderableEntity.mainLevelBacked(),
-                renderableEntity.standalonePart(),
-                renderableEntity.parentEntityId(),
-                duplicateObject,
-                duplicateId,
-                duplicateUuid,
-                duplicateSignature,
-                signature
-        );
     }
 
     private static PassLocalPartExpansion passLocalMultipartParts(
@@ -1121,55 +852,6 @@ public final class SecondaryEntityPass {
         return invalidBox || (nearOrigin && distanceFromParent > 32.0D);
     }
 
-    private static void logFramebufferMismatchIfDue(int expectedFramebufferId, int actualFramebufferId) {
-        long now = System.currentTimeMillis();
-
-        if (!DEBUG_VERBOSE_PORTAL_FRAMEBUFFER_DIAGNOSTICS && now - lastFramebufferMismatchLogMillis < 5_000L) {
-            return;
-        }
-
-        lastFramebufferMismatchLogMillis = now;
-        Skyesight.LOGGER.error(
-                "[Skyesight] Portal visual entity framebuffer mismatch expected={} actual={} rebinding visible portal framebuffer",
-                expectedFramebufferId,
-                actualFramebufferId
-        );
-    }
-
-    private static void tracePortalEntityDistanceCheck(
-            SecondaryViewFrame frame,
-            Entity entity,
-            Vec3 renderPosition,
-            Vec3 secondaryCameraPos,
-            Vec3 mainCameraPos
-    ) {
-        long now = System.currentTimeMillis();
-        if (now - lastPortalEntityDistanceCheckLogMillis < SkyesightDebugConfig.DEBUG_PORTAL_SUMMARY_INTERVAL_TICKS * 50L) {
-            return;
-        }
-        lastPortalEntityDistanceCheckLogMillis = now;
-        if (!SkyesightDebugConfig.DEBUG_PORTAL_ENTITY_RENDER_TRACE_VERBOSE) {
-            return;
-        }
-        double distanceToSecondary = renderPosition.distanceTo(secondaryCameraPos);
-        double distanceToMain = renderPosition.distanceTo(mainCameraPos);
-        Skyesight.LOGGER.info(
-                "[Skyesight] Portal entity distance check: entity={} viewId={} distanceToSecondaryCamera={} distanceToMainCamera={} vanillaWouldRender=not-used-cross-dim portalWouldRender=yes final=yes",
-                entitySummary(entity),
-                frame == null || frame.diagnostics() == null ? "-" : frame.diagnostics().entityWatchRegionId(),
-                Math.round(distanceToSecondary),
-                Math.round(distanceToMain)
-        );
-    }
-
-    private static String entitySummary(Entity entity) {
-        if (entity == null) {
-            return "null";
-        }
-
-        return entity.getId() + ":" + entity.getType().toShortString();
-    }
-
     private static AABB entityFrustumCullBox(Entity entity) {
         double padding = entity instanceof Player
                 ? PLAYER_ENTITY_FRUSTUM_CULL_PADDING_BLOCKS
@@ -1283,10 +965,6 @@ public final class SecondaryEntityPass {
             return skipped(0, 0, 0);
         }
 
-        private static EntityRenderOutcome duplicateSuppressedSkip() {
-            return skipped(0, 0, 1);
-        }
-
         private static EntityRenderOutcome skipped(
                 int skippedDistance,
                 int skippedFrustum,
@@ -1301,16 +979,6 @@ public final class SecondaryEntityPass {
                     duplicateSuppressed
             );
         }
-    }
-
-    private enum SecondaryEntityCoordinateMode {
-        CAMERA_RELATIVE,
-        WORLD_COORDINATES
-    }
-
-    private enum SecondaryEntityPoseMode {
-        VANILLA_EMPTY_POSESTACK,
-        FRAME_MODEL_VIEW_POSESTACK
     }
 
 }
