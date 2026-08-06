@@ -25,6 +25,7 @@ import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
 import net.minecraft.network.protocol.game.ClientboundSetEquipmentPacket;
 import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -318,7 +319,7 @@ public final class SkyesightPortalEntityPacketApplier {
                 entityId
         );
         if (entity != null) {
-            float yHeadRot = net.minecraft.util.Mth.wrapDegrees(packet.getYHeadRot());
+            float yHeadRot = Mth.wrapDegrees(packet.getYHeadRot());
             entity.lerpHeadTo(yHeadRot, 3);
             SkyesightPortalEntityPool.markPacket(payload.viewId(), payload.targetDimension(), entityId, payload.kind().name());
             SkyesightNativeVisualEntityRoutingDebug.clientApplied(payload.viewId(), payload.kind().name());
@@ -388,8 +389,8 @@ public final class SkyesightPortalEntityPacketApplier {
         double x = packet.getX();
         double y = packet.getY();
         double z = packet.getZ();
-        float yRot = net.minecraft.util.Mth.wrapDegrees((float) (packet.getyRot() * 360) / 256.0F);
-        float xRot = net.minecraft.util.Mth.wrapDegrees((float) (packet.getxRot() * 360) / 256.0F);
+        float yRot = Mth.wrapDegrees((float) (packet.getyRot() * 360) / 256.0F);
+        float xRot = Mth.wrapDegrees((float) (packet.getxRot() * 360) / 256.0F);
         double distanceSquared = entity.position().distanceToSqr(x, y, z);
 
         entity.syncPacketPositionCodec(x, y, z);

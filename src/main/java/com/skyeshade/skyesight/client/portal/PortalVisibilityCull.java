@@ -16,6 +16,8 @@ import org.joml.Quaternionf;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 
+import java.util.Locale;
+
 public final class PortalVisibilityCull {
     private PortalVisibilityCull() {}
 
@@ -697,14 +699,14 @@ public final class PortalVisibilityCull {
     }
 
     private static String format(Vector3f value) {
-        return String.format(java.util.Locale.ROOT, "%.3f,%.3f,%.3f", value.x(), value.y(), value.z());
+        return String.format(Locale.ROOT, "%.3f,%.3f,%.3f", value.x(), value.y(), value.z());
     }
 
     private static String formatVec(Vec3 point) {
         if (point == null) {
             return "-";
         }
-        return String.format(java.util.Locale.ROOT, "%.2f,%.2f,%.2f", point.x(), point.y(), point.z());
+        return String.format(Locale.ROOT, "%.2f,%.2f,%.2f", point.x(), point.y(), point.z());
     }
 
     private static String formatCornerDots(double[] dots) {
@@ -716,7 +718,7 @@ public final class PortalVisibilityCull {
             if (!builder.isEmpty()) {
                 builder.append(',');
             }
-            builder.append(String.format(java.util.Locale.ROOT, "%.3f", dots[i]));
+            builder.append(String.format(Locale.ROOT, "%.3f", dots[i]));
         }
         return builder.toString();
     }
@@ -733,7 +735,7 @@ public final class PortalVisibilityCull {
             Vec3 point = points[i];
             builder.append(point == null
                     ? "null"
-                    : String.format(java.util.Locale.ROOT, "%.2f,%.2f,%.2f", point.x(), point.y(), point.z()));
+                    : String.format(Locale.ROOT, "%.2f,%.2f,%.2f", point.x(), point.y(), point.z()));
         }
         return builder.toString();
     }
@@ -750,7 +752,7 @@ public final class PortalVisibilityCull {
             return "-";
         }
         return String.format(
-                java.util.Locale.ROOT,
+                Locale.ROOT,
                 "%.2f,%.2f,%.2f -> %.2f,%.2f,%.2f",
                 value.minX,
                 value.minY,
@@ -768,7 +770,7 @@ public final class PortalVisibilityCull {
                 builder.append(';');
             }
             Vector4f point = clip[i];
-            builder.append(String.format(java.util.Locale.ROOT, "%.2f,%.2f,%.2f,%.2f", point.x, point.y, point.z, point.w));
+            builder.append(String.format(Locale.ROOT, "%.2f,%.2f,%.2f,%.2f", point.x, point.y, point.z, point.w));
         }
         return builder.toString();
     }
@@ -778,7 +780,7 @@ public final class PortalVisibilityCull {
             return "-";
         }
         Vector4f point = clip[index];
-        return String.format(java.util.Locale.ROOT, "%.2f,%.2f,%.2f,%.2f", point.x, point.y, point.z, point.w);
+        return String.format(Locale.ROOT, "%.2f,%.2f,%.2f,%.2f", point.x, point.y, point.z, point.w);
     }
 
     private static String formatNdc(Vector4f[] clip) {
@@ -791,7 +793,7 @@ public final class PortalVisibilityCull {
             if (Math.abs(point.w) < 1.0E-5F || point.w <= 0.0F) {
                 builder.append("invalid");
             } else {
-                builder.append(String.format(java.util.Locale.ROOT, "%.2f,%.2f,%.2f", point.x / point.w, point.y / point.w, point.z / point.w));
+                builder.append(String.format(Locale.ROOT, "%.2f,%.2f,%.2f", point.x / point.w, point.y / point.w, point.z / point.w));
             }
         }
         return builder.toString();

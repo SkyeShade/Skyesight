@@ -8,6 +8,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 public final class PortalRenderDistanceGate {
@@ -85,8 +86,8 @@ public final class PortalRenderDistanceGate {
                 minecraft == null || minecraft.level == null ? "-" : minecraft.level.dimension().location(),
                 format(portalCenter),
                 format(cameraPos),
-                String.format(java.util.Locale.ROOT, "%.2f", distanceToPortalSource(camera, view)),
-                maxDistanceBlocks < 0.0D ? "unlimited" : String.format(java.util.Locale.ROOT, "%.2f", Math.max(0.0D, maxDistanceBlocks)),
+                String.format(Locale.ROOT, "%.2f", distanceToPortalSource(camera, view)),
+                maxDistanceBlocks < 0.0D ? "unlimited" : String.format(Locale.ROOT, "%.2f", Math.max(0.0D, maxDistanceBlocks)),
                 inside ? "yes" : "no",
                 stage == null || stage.isBlank() ? "unknown" : stage,
                 reason == null || reason.isBlank() ? "-" : reason
@@ -103,6 +104,6 @@ public final class PortalRenderDistanceGate {
         if (value == null) {
             return "-";
         }
-        return String.format(java.util.Locale.ROOT, "%.2f,%.2f,%.2f", value.x(), value.y(), value.z());
+        return String.format(Locale.ROOT, "%.2f,%.2f,%.2f", value.x(), value.y(), value.z());
     }
 }

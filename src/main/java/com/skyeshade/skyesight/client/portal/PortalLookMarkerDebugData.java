@@ -1,5 +1,6 @@
 package com.skyeshade.skyesight.client.portal;
 
+import net.minecraft.client.Camera;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
@@ -39,7 +40,7 @@ public final class PortalLookMarkerDebugData {
 
     public static List<PortalLookDebugMarker> buildMarkers(
             List<ViewConfig> viewConfigs,
-            net.minecraft.client.Camera camera
+            Camera camera
     ) {
         if (camera == null || viewConfigs == null || viewConfigs.isEmpty()) {
             return List.of();
@@ -55,7 +56,7 @@ public final class PortalLookMarkerDebugData {
     private static void addPortalLookDebugMarkers(
             List<PortalLookDebugMarker> markers,
             ViewConfig viewConfig,
-            net.minecraft.client.Camera camera
+            Camera camera
     ) {
         PortalRenderView renderView = viewConfig.renderView();
         if (renderView == null || !renderView.renderConfig().enabled() || !renderView.renderConfig().rendersView()) {

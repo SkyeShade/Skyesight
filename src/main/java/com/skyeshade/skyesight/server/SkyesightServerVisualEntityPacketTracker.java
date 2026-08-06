@@ -24,6 +24,7 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.neoforged.neoforge.network.PacketDistributor;
 
@@ -154,7 +155,7 @@ public final class SkyesightServerVisualEntityPacketTracker {
         private int skippedPartEntityCount;
         private int unsupportedEntityCount;
         private int viewGeneration;
-        private ResourceKey<net.minecraft.world.level.Level> targetDimension;
+        private ResourceKey<Level> targetDimension;
 
         private VisualWatchState(ResourceLocation viewId) {
             this.viewId = viewId;

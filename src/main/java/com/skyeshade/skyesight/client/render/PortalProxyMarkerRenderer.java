@@ -40,11 +40,11 @@ public final class PortalProxyMarkerRenderer {
         if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_ENTITIES || event.getPoseStack() == null) {
             return;
         }
-        if (net.minecraft.client.Minecraft.getInstance().level == null) {
+        if (Minecraft.getInstance().level == null) {
             return;
         }
         renderMarkers(
-                net.minecraft.client.Minecraft.getInstance().level,
+                Minecraft.getInstance().level,
                 event.getCamera(),
                 event.getPoseStack(),
                 true

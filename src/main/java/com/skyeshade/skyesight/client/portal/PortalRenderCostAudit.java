@@ -4,6 +4,7 @@ import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.SkyesightDebugConfig;
 import net.minecraft.resources.ResourceLocation;
 
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -403,18 +404,18 @@ public final class PortalRenderCostAudit {
     }
 
     private static String ms(long nanos, int frames) {
-        return String.format(java.util.Locale.ROOT, "%.3f", nanos / 1_000_000.0D / Math.max(1, frames));
+        return String.format(Locale.ROOT, "%.3f", nanos / 1_000_000.0D / Math.max(1, frames));
     }
 
     private static String msPerCount(long nanos, int count) {
         if (count <= 0) {
             return "0.000";
         }
-        return String.format(java.util.Locale.ROOT, "%.3f", nanos / 1_000_000.0D / count);
+        return String.format(Locale.ROOT, "%.3f", nanos / 1_000_000.0D / count);
     }
 
     private static String oneDecimal(double value) {
-        return String.format(java.util.Locale.ROOT, "%.1f", value);
+        return String.format(Locale.ROOT, "%.1f", value);
     }
 
     private static String shortViewId(ResourceLocation viewId) {

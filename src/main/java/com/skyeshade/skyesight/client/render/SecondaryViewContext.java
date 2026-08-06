@@ -12,7 +12,9 @@ import net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer;
 import net.caffeinemc.mods.sodium.client.render.chunk.map.ChunkTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
@@ -313,7 +315,7 @@ public final class SecondaryViewContext {
             this.lastPortalCameraYawDeltaDegrees = 0.0D;
             return 0.0D;
         }
-        float delta = Math.abs(net.minecraft.util.Mth.wrapDegrees(yaw - this.lastPortalCameraYaw));
+        float delta = Math.abs(Mth.wrapDegrees(yaw - this.lastPortalCameraYaw));
         this.lastPortalCameraYaw = yaw;
         this.lastPortalCameraYawDeltaDegrees = delta;
         return delta;
@@ -394,14 +396,14 @@ public final class SecondaryViewContext {
     public ChunkPos frozenRemoteChunkCenter() {
         return this.frozenRemoteCameraPosition == null
                 ? null
-                : new ChunkPos(net.minecraft.core.BlockPos.containing(this.frozenRemoteCameraPosition));
+                : new ChunkPos(BlockPos.containing(this.frozenRemoteCameraPosition));
     }
 
     public Vec3 getOrSetFrozenRemoteCameraPosition(ClientLevel level, Vec3 cameraPosition) {
         if (this.frozenRemoteCameraPosition == null || this.frozenRemoteLevel != level) {
             this.frozenRemoteLevel = level;
             this.frozenRemoteCameraPosition = cameraPosition;
-            this.remoteChunkCenter = new ChunkPos(net.minecraft.core.BlockPos.containing(cameraPosition));
+            this.remoteChunkCenter = new ChunkPos(BlockPos.containing(cameraPosition));
             this.sodiumRebuildCenter = null;
         }
 

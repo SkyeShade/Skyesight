@@ -9,11 +9,18 @@ import com.skyeshade.skyesight.client.world.SkyesightClientChunkRequester;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorld;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorldManager;
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
+
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Set;
 
 @OnlyIn(Dist.CLIENT)
 public final class SkyesightClientChunkHandler {
@@ -22,9 +29,9 @@ public final class SkyesightClientChunkHandler {
     private static int chunkRouteRouted;
     private static int chunkRouteCollisions;
     private static int chunkRouteMainClientCacheTouched;
-    private static final java.util.Map<ResourceLocation, Integer> chunkRouteByView = new java.util.LinkedHashMap<>();
-    private static final java.util.Map<String, Integer> chunkRouteByDimension = new java.util.LinkedHashMap<>();
-    private static final java.util.Set<String> staleChunkWarnings = new java.util.HashSet<>();
+    private static final Map<ResourceLocation, Integer> chunkRouteByView = new LinkedHashMap<>();
+    private static final Map<String, Integer> chunkRouteByDimension = new LinkedHashMap<>();
+    private static final Set<String> staleChunkWarnings = new HashSet<>();
     private static String chunkRouteSample = "-";
 
     private SkyesightClientChunkHandler() {}
@@ -93,7 +100,7 @@ public final class SkyesightClientChunkHandler {
             }
             SkyesightVisualWorld visualWorld = SkyesightVisualWorldManager.get(payload.viewId());
             if (SkyesightDebugConfig.WATCH_DEBUG && visualWorld != null && !visualWorld.isClosed()) {
-                net.minecraft.world.level.chunk.LevelChunk chunk = visualWorld.level().getChunkSource().getChunk(
+                LevelChunk chunk = visualWorld.level().getChunkSource().getChunk(
                         payload.chunkX(),
                         payload.chunkZ(),
                         false
@@ -325,7 +332,7 @@ public final class SkyesightClientChunkHandler {
                 inserted,
                 world.dimension().location().toString(),
                 world.level().getChunkSource().getLoadedChunksCount(),
-                world.level().getBlockState(new net.minecraft.core.BlockPos(payload.chunkX() << 4, world.level().getMinBuildHeight(), payload.chunkZ() << 4))
+                world.level().getBlockState(new BlockPos(payload.chunkX() << 4, world.level().getMinBuildHeight(), payload.chunkZ() << 4))
                         .getBlock()
                         .builtInRegistryHolder()
                         .key()

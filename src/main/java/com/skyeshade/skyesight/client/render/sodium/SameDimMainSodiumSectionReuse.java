@@ -16,6 +16,7 @@ import net.caffeinemc.mods.sodium.client.render.viewport.Viewport;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderType;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.ChunkPos;
@@ -99,7 +100,7 @@ public final class SameDimMainSodiumSectionReuse {
             return Audit.empty(viewId);
         }
 
-        ChunkPos centerChunk = new ChunkPos(net.minecraft.core.BlockPos.containing(portalCameraPos));
+        ChunkPos centerChunk = new ChunkPos(BlockPos.containing(portalCameraPos));
         int minSection = level.getMinSection();
         int maxSection = level.getMaxSection();
         int ownedRadius = Math.max(0, portalOwnedRadius);
@@ -391,7 +392,7 @@ public final class SameDimMainSodiumSectionReuse {
             int reuseRadius,
             Viewport viewport
     ) {
-        ChunkPos centerChunk = new ChunkPos(net.minecraft.core.BlockPos.containing(portalCameraPos));
+        ChunkPos centerChunk = new ChunkPos(BlockPos.containing(portalCameraPos));
         int minSection = level.getMinSection();
         int maxSection = level.getMaxSection();
         int ownedRadius = Math.max(0, portalOwnedRadius);

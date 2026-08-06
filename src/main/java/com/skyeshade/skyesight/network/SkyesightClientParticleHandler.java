@@ -37,7 +37,7 @@ public final class SkyesightClientParticleHandler {
 
         lastParticleLogMillis = now;
         Skyesight.LOGGER.info(
-                "[Skyesight] Cross-dim real particle mirror clientReceived=yes viewId={} targetDim={} eventParticleType={} visualWorldFound=yes appliedToVisualWorld=yes visualStoreSize={} proofSpawnEnabled=false store='{}'",
+                "[Skyesight] Cross-dim real particle mirror clientReceived=yes viewId={} targetDim={} eventParticleType={} visualWorldFound=yes appliedToVisualWorld=yes visualStoreSize={} diagnosticSpawnEnabled=false store='{}'",
                 payload.viewId(),
                 payload.dimension().location(),
                 BuiltInRegistries.PARTICLE_TYPE.getKey(payload.particle().getType()),

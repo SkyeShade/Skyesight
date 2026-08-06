@@ -4,6 +4,7 @@ import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.SkyesightDebugConfig;
 import com.skyeshade.skyesight.server.SkyesightServerChunkSender;
 import com.skyeshade.skyesight.server.portal.PortalProxyArmorStandDebugManager;
+import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
 
@@ -28,7 +29,7 @@ public final class SkyesightPayloads {
                 SkyesightProxyMarkerPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
                         () -> {
-                            if (context.player() instanceof net.minecraft.server.level.ServerPlayer player) {
+                            if (context.player() instanceof ServerPlayer player) {
                                 PortalProxyArmorStandDebugManager.handleMarker(payload, player);
                             }
                         }

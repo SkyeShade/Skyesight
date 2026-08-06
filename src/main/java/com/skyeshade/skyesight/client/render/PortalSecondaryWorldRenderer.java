@@ -5,6 +5,7 @@ import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexSorting;
+import com.skyeshade.skyesight.api.PortalRenderSettings;
 import com.skyeshade.skyesight.api.SkyesightClipPlane;
 import com.skyeshade.skyesight.api.RegisteredPortalView;
 import com.skyeshade.skyesight.api.SkyesightPortalApi;
@@ -20,6 +21,7 @@ import com.skyeshade.skyesight.client.portal.PortalRenderDebugStatus;
 import com.skyeshade.skyesight.client.portal.PortalFrame;
 import com.skyeshade.skyesight.client.portal.PortalFrameMath;
 
+import com.skyeshade.skyesight.client.view.SkyesightMutableCamera;
 import com.skyeshade.skyesight.client.render.config.PortalProjectionConfig;
 import com.skyeshade.skyesight.client.render.config.PortalRemoteChunkConfig;
 import com.skyeshade.skyesight.client.render.config.PortalSecondaryRenderConfig;
@@ -84,6 +86,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.ConcurrentModificationException;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
 
@@ -162,7 +165,7 @@ public final class PortalSecondaryWorldRenderer {
                 && previousWidth == targetSize.width()
                 && previousHeight == targetSize.height()) {
             Skyesight.LOGGER.error(
-                    "[Skyesight] PORTAL_TARGET_REDUNDANT_RESIZE_BUG view={} previous={}x{} requested={}x{} actualAfter={}x{} stage=getOrCreatePortalRenderTarget",
+                    "[Skyesight] PORTAL_TARGET_REDUNDANT_RESIZE_INVARIANT view={} previous={}x{} requested={}x{} actualAfter={}x{} stage=getOrCreatePortalRenderTarget",
                     viewId == null ? "-" : viewId,
                     previousWidth,
                     previousHeight,
@@ -818,7 +821,7 @@ public final class PortalSecondaryWorldRenderer {
 
         secondaryContextNonSecondaryTargetBindCount++;
         secondaryContextLastNonSecondaryBind = String.format(
-                java.util.Locale.ROOT,
+                Locale.ROOT,
                 "%s fb=%d %dx%d view=%dx%d id=%08x",
                 target == mainTarget ? "main" : "other",
                 target.frameBufferId,
@@ -1644,7 +1647,7 @@ public final class PortalSecondaryWorldRenderer {
 
     private static int configuredSameDimPlayerLoadedReuseRadiusChunks(SecondaryViewFrame frame) {
         return frame == null || frame.diagnostics().sameDimPlayerLoadedReuseRadiusChunks() <= 0
-                ? com.skyeshade.skyesight.api.PortalRenderSettings.DEFAULT_SAME_DIM_PLAYER_LOADED_REUSE_RADIUS_CHUNKS
+                ? PortalRenderSettings.DEFAULT_SAME_DIM_PLAYER_LOADED_REUSE_RADIUS_CHUNKS
                 : frame.diagnostics().sameDimPlayerLoadedReuseRadiusChunks();
     }
 
@@ -2432,7 +2435,7 @@ public final class PortalSecondaryWorldRenderer {
     private static void applySecondaryCameraRotation(
             Minecraft minecraft,
             LocalPlayer player,
-            com.skyeshade.skyesight.client.view.SkyesightMutableCamera camera,
+            SkyesightMutableCamera camera,
             Vec3 lookDirection,
             float partialTick
     ) {

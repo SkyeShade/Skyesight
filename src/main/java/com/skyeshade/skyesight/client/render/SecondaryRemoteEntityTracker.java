@@ -1,6 +1,7 @@
 package com.skyeshade.skyesight.client.render;
 
 import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.SkyesightNativeVisualEntityRoutingDebug;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.server.MinecraftServer;
@@ -356,7 +357,7 @@ public final class SecondaryRemoteEntityTracker {
     }
 
     private void send(ServerPlayer player, Packet<?> packet) {
-        if (com.skyeshade.skyesight.SkyesightNativeVisualEntityRoutingDebug.enabled()
+        if (SkyesightNativeVisualEntityRoutingDebug.enabled()
                 && !rawSecondaryRemoteEntityPacketSendLogged) {
             rawSecondaryRemoteEntityPacketSendLogged = true;
             Skyesight.LOGGER.warn(
@@ -369,7 +370,7 @@ public final class SecondaryRemoteEntityTracker {
     }
 
     private static void logRawEntityTracking(String operation, ServerPlayer player, Entity entity) {
-        if (!com.skyeshade.skyesight.SkyesightNativeVisualEntityRoutingDebug.enabled()
+        if (!SkyesightNativeVisualEntityRoutingDebug.enabled()
                 || rawSecondaryRemoteEntityTrackingLogged) {
             return;
         }

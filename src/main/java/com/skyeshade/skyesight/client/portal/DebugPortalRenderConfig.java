@@ -1,6 +1,7 @@
 package com.skyeshade.skyesight.client.portal;
 
 import com.skyeshade.skyesight.api.PortalStencilMask;
+import com.skyeshade.skyesight.api.PortalRenderSettings;
 
 /**
  * Per-portal render and loading configuration for the temporary direct-stencil
@@ -63,7 +64,7 @@ public record DebugPortalRenderConfig(
                 stencilRef,
                 terrainChunkRadius,
                 terrainChunkRadius,
-                com.skyeshade.skyesight.api.PortalRenderSettings.DEFAULT_SAME_DIM_PLAYER_LOADED_REUSE_RADIUS_CHUNKS,
+                PortalRenderSettings.DEFAULT_SAME_DIM_PLAYER_LOADED_REUSE_RADIUS_CHUNKS,
                 true,
                 entityChunkRadius,
                 blockEntityChunkRadius,

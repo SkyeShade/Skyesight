@@ -1,6 +1,7 @@
 package com.skyeshade.skyesight.client.world;
 
 import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.SkyesightNativeVisualEntityRoutingDebug;
 import com.skyeshade.skyesight.SkyesightPortalEntityPoolConfig;
 import com.skyeshade.skyesight.client.render.entity.PortalRenderableEntity;
 import com.skyeshade.skyesight.client.render.entity.PortalVisualEntityAnimationUpdater;
@@ -16,9 +17,11 @@ import net.minecraft.world.phys.AABB;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public final class SkyesightPortalEntityPool {
     /*
@@ -29,7 +32,7 @@ public final class SkyesightPortalEntityPool {
     private static final Map<PortalEntityKey, Entity> ENTITIES = new LinkedHashMap<>();
     private static final Map<PortalEntityKey, PoseState> POSE_STATES = new LinkedHashMap<>();
     private static boolean leakedMainLevelEntityWarningLogged;
-    private static final java.util.Set<String> POSE_WARNINGS = new java.util.HashSet<>();
+    private static final Set<String> POSE_WARNINGS = new HashSet<>();
 
     private SkyesightPortalEntityPool() {}
 
@@ -297,7 +300,7 @@ public final class SkyesightPortalEntityPool {
             PoseState poseState,
             String reason
     ) {
-        if (!com.skyeshade.skyesight.SkyesightNativeVisualEntityRoutingDebug.enabled()) {
+        if (!SkyesightNativeVisualEntityRoutingDebug.enabled()) {
             return;
         }
         String key = viewId + ":" + entity.getType() + ":" + reason;
