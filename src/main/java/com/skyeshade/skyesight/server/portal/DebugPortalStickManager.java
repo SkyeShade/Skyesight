@@ -3,6 +3,7 @@ package com.skyeshade.skyesight.server.portal;
 import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.SkyesightDebugConfig;
 import com.skyeshade.skyesight.PortalFirstUseTimeline;
+import com.skyeshade.skyesight.SkyesightItems;
 import com.skyeshade.skyesight.api.PortalEndpoint;
 import com.skyeshade.skyesight.api.PortalRegistrationResult;
 import com.skyeshade.skyesight.api.PortalRenderSettings;
@@ -19,6 +20,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -30,6 +32,7 @@ import org.joml.Vector3f;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -555,7 +558,7 @@ public final class DebugPortalStickManager {
     }
 
     private static String formatCompactVec(Vec3 vec) {
-        return String.format(java.util.Locale.ROOT, "(%.2f,%.2f,%.2f)", vec.x(), vec.y(), vec.z());
+        return String.format(Locale.ROOT, "(%.2f,%.2f,%.2f)", vec.x(), vec.y(), vec.z());
     }
 
     private static String formatSize(float width, float height) {
@@ -563,7 +566,7 @@ public final class DebugPortalStickManager {
     }
 
     private static String formatFloat(float value) {
-        return String.format(java.util.Locale.ROOT, "%.1f", value);
+        return String.format(Locale.ROOT, "%.1f", value);
     }
 
     private static Vec3 basis(PortalEndpoint endpoint, float x, float y, float z) {
@@ -584,7 +587,7 @@ public final class DebugPortalStickManager {
 
     private static String formatRotation(PortalEndpoint endpoint) {
         return String.format(
-                java.util.Locale.ROOT,
+                Locale.ROOT,
                 "%.4f,%.4f,%.4f,%.4f",
                 endpoint.rotation().x,
                 endpoint.rotation().y,
@@ -621,12 +624,12 @@ public final class DebugPortalStickManager {
         STATES.clear();
     }
 
-    private static boolean isDebugStick(net.minecraft.world.item.ItemStack stack) {
-        return stack.is(com.skyeshade.skyesight.SkyesightItems.DEBUG_PORTAL_STICK.get());
+    private static boolean isDebugStick(ItemStack stack) {
+        return stack.is(SkyesightItems.DEBUG_PORTAL_STICK.get());
     }
 
     private static String formatVec(Vec3 vec) {
-        return String.format(java.util.Locale.ROOT, "%.2f %.2f %.2f", vec.x(), vec.y(), vec.z());
+        return String.format(Locale.ROOT, "%.2f %.2f %.2f", vec.x(), vec.y(), vec.z());
     }
 
     private static final class StickState {

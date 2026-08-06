@@ -10,6 +10,7 @@ import com.mojang.blaze3d.vertex.VertexSorting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.phys.Vec3;
 import com.skyeshade.skyesight.api.PortalStencilMask;
 import org.joml.Matrix4f;
@@ -251,7 +252,7 @@ public final class SecondaryPortalCompositePass {
             boolean depthTest,
             boolean writePortalDepth,
             PortalStencilMask stencilMask,
-            net.minecraft.resources.ResourceLocation viewId
+            ResourceLocation viewId
     ) {
         if (stencilBits <= 0) {
             return new StencilResult(true, false, true, stencilBits, "stencil unavailable");
@@ -551,7 +552,7 @@ public final class SecondaryPortalCompositePass {
             Camera camera,
             PortalFrame portal,
             PortalStencilMask stencilMask,
-            net.minecraft.resources.ResourceLocation viewId
+            ResourceLocation viewId
     ) {
         Vec3 cameraPosition = camera.getPosition();
         Vec3 portalPosition = portal.position();

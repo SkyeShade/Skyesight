@@ -24,6 +24,7 @@ import net.minecraft.client.renderer.FogRenderer;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.util.Mth;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import org.joml.Matrix4f;
@@ -223,7 +224,7 @@ public final class PortalSkyCaptureManager {
             String dimension = String.valueOf(level.dimension().location());
             String skyType = level.effects().skyType().name();
             boolean normalSkyType = level.effects().skyType() == DimensionSpecialEffects.SkyType.NORMAL;
-            boolean portalENetherTarget = "E".equals(key) && level.dimension() == net.minecraft.world.level.Level.NETHER;
+            boolean portalENetherTarget = "E".equals(key) && level.dimension() == Level.NETHER;
             boolean disableTargetFogSetup = portalENetherTarget && USE_PORTAL_E_FIXED_NETHER_FOG_FALLBACK;
             String targetFogMode = "TARGET_LEVEL_FOG_SETUP";
             RgbaSample vanillaCallerClearColor;

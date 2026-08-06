@@ -2,6 +2,7 @@ package com.skyeshade.skyesight.client.render;
 
 import com.skyeshade.skyesight.api.RegisteredPortalView;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.phys.Vec3;
 
@@ -40,7 +41,7 @@ public final class SameDimPortalChunkRenderPolicy {
             return false;
         }
 
-        ChunkPos cameraChunk = new ChunkPos(net.minecraft.core.BlockPos.containing(portalCameraPos));
+        ChunkPos cameraChunk = new ChunkPos(BlockPos.containing(portalCameraPos));
         int distance = Math.max(Math.abs(chunk.x - cameraChunk.x), Math.abs(chunk.z - cameraChunk.z));
         int ownedRadius = Math.max(0, portalOwnedRenderRadiusChunks);
         if (distance <= ownedRadius) {

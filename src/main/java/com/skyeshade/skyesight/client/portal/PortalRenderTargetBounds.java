@@ -10,6 +10,7 @@ import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -22,7 +23,7 @@ public final class PortalRenderTargetBounds {
     private static final int BOUNDS_MIN_HEIGHT = 128;
     private static final int BOUNDS_SIZE_QUANTUM = 64;
     private static final int BOUNDS_SHRINK_STABLE_FRAMES = 30;
-    private static final boolean TEMPORARY_RESOLUTION_REPORT_ENABLED = false;
+    private static final boolean RESOLUTION_REPORT_DEBUG_ENABLED = false;
     private static final Map<ResourceLocation, StableSizeState> STABLE_SIZE_BY_VIEW = new ConcurrentHashMap<>();
     private static final Map<ResourceLocation, DiagnosticSize> DIAGNOSTIC_SIZE_BY_VIEW = new ConcurrentHashMap<>();
     private static final Map<ResourceLocation, TargetSize> RESOLVED_SIZE_BY_VIEW = new ConcurrentHashMap<>();
@@ -147,6 +148,23 @@ public final class PortalRenderTargetBounds {
         }
     }
 
+    static void clear(ResourceLocation viewId) {
+        if (viewId == null) {
+            return;
+        }
+        STABLE_SIZE_BY_VIEW.remove(viewId);
+        DIAGNOSTIC_SIZE_BY_VIEW.remove(viewId);
+        RESOLVED_SIZE_BY_VIEW.remove(viewId);
+        LAST_INVALID_PROOF_LOG_BY_VIEW.remove(viewId);
+    }
+
+    static void clearAll() {
+        STABLE_SIZE_BY_VIEW.clear();
+        DIAGNOSTIC_SIZE_BY_VIEW.clear();
+        LAST_INVALID_PROOF_LOG_BY_VIEW.clear();
+        resetFrameCounters();
+    }
+
     public static void resetFrameCounters() {
         fullscreenTargetsThisFrame = 0;
         boundsTargetsThisFrame = 0;
@@ -240,7 +258,7 @@ public final class PortalRenderTargetBounds {
         }
         StableSizeState state = STABLE_SIZE_BY_VIEW.computeIfAbsent(viewId, ignored -> new StableSizeState());
         state.recordRender(resized);
-        if (!TEMPORARY_RESOLUTION_REPORT_ENABLED && !SkyesightDebugConfig.shouldLogRenderTargetAudit()) {
+        if (!RESOLUTION_REPORT_DEBUG_ENABLED && !SkyesightDebugConfig.shouldLogRenderTargetAudit()) {
             return;
         }
         long now = System.currentTimeMillis();
@@ -707,18 +725,18 @@ public final class PortalRenderTargetBounds {
         if (point == null) {
             return "-";
         }
-        return String.format(java.util.Locale.ROOT, "%.2f,%.2f,%.2f", point.x(), point.y(), point.z());
+        return String.format(Locale.ROOT, "%.2f,%.2f,%.2f", point.x(), point.y(), point.z());
     }
 
     private static String formatClip(Vector4f point) {
         if (point == null) {
             return "-";
         }
-        return String.format(java.util.Locale.ROOT, "%.2f,%.2f,%.2f,%.2f", point.x, point.y, point.z, point.w);
+        return String.format(Locale.ROOT, "%.2f,%.2f,%.2f,%.2f", point.x, point.y, point.z, point.w);
     }
 
     private static String formatFloat(float value) {
-        return Float.isFinite(value) ? String.format(java.util.Locale.ROOT, "%.4f", value) : "nan";
+        return Float.isFinite(value) ? String.format(Locale.ROOT, "%.4f", value) : "nan";
     }
 
     private static TargetSize targetSizeFromDiagnostic(ResourceLocation viewId) {

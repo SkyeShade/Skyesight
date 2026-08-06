@@ -37,6 +37,7 @@ import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Queue;
 
@@ -702,7 +703,7 @@ public final class SecondaryParticlePass {
                 .append(accessor.skyesight$getLifetime())
                 .append(" quadSize=")
                 .append(renderParticle instanceof SingleQuadParticle singleQuadParticle
-                        ? String.format(java.util.Locale.ROOT, "%.3f", singleQuadParticle.getQuadSize(partialTick))
+                        ? String.format(Locale.ROOT, "%.3f", singleQuadParticle.getQuadSize(partialTick))
                         : "n/a")
                 .append(" sprite=provider-stable")
                 .append(" pos=")
@@ -824,7 +825,7 @@ public final class SecondaryParticlePass {
     }
 
     private static String formatVec(Vec3 value) {
-        return String.format(java.util.Locale.ROOT, "%.2f,%.2f,%.2f", value.x(), value.y(), value.z());
+        return String.format(Locale.ROOT, "%.2f,%.2f,%.2f", value.x(), value.y(), value.z());
     }
 
     private static boolean supportedRenderType(ParticleRenderType renderType) {
@@ -1060,7 +1061,7 @@ public final class SecondaryParticlePass {
                         .append(" local=")
                         .append(formatVec(local))
                         .append(" planeDist=")
-                        .append(String.format(java.util.Locale.ROOT, "%.3f", signedDistance))
+                        .append(String.format(Locale.ROOT, "%.3f", signedDistance))
                         .append(" inFrontOfPortalPlane=")
                         .append(insideAperture && inFront ? "yes" : "no")
                         .append(" insidePortalAperture=")
@@ -1085,11 +1086,11 @@ public final class SecondaryParticlePass {
         }
 
         private static String formatVec(Vec3 vec) {
-            return String.format(java.util.Locale.ROOT, "%.2f,%.2f,%.2f", vec.x(), vec.y(), vec.z());
+            return String.format(Locale.ROOT, "%.2f,%.2f,%.2f", vec.x(), vec.y(), vec.z());
         }
 
         private static String formatVec(Vector3f vec) {
-            return String.format(java.util.Locale.ROOT, "%.2f,%.2f,%.2f", vec.x(), vec.y(), vec.z());
+            return String.format(Locale.ROOT, "%.2f,%.2f,%.2f", vec.x(), vec.y(), vec.z());
         }
     }
 

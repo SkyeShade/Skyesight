@@ -16,6 +16,7 @@ import com.mojang.math.Axis;
 import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.SkyesightClientConfig;
 import com.skyeshade.skyesight.SkyesightDebugConfig;
+import com.skyeshade.skyesight.SkyesightPortalEntityPoolConfig;
 import com.skyeshade.skyesight.api.PortalEndpoint;
 import com.skyeshade.skyesight.api.PortalRenderSettings;
 import com.skyeshade.skyesight.api.RegisteredPortalView;
@@ -24,21 +25,20 @@ import com.skyeshade.skyesight.api.SkyesightPortalApi;
 import com.skyeshade.skyesight.client.chunk.SkyesightPortalChunkStorage;
 import com.skyeshade.skyesight.client.chunk.SkyesightPortalRenderLevelView;
 import com.skyeshade.skyesight.client.compat.iris.SkyesightIrisCompat;
-
+import com.skyeshade.skyesight.client.render.PortalSecondaryWorldRenderer;
 import com.skyeshade.skyesight.client.render.PortalVisualDisplayTickDriver;
 import com.skyeshade.skyesight.client.render.SecondaryEntityPass;
 import com.skyeshade.skyesight.client.render.SecondaryParticlePass;
 import com.skyeshade.skyesight.client.render.SecondaryViewContext;
 import com.skyeshade.skyesight.client.render.SecondaryViewFrame;
 import com.skyeshade.skyesight.client.render.SkyesightSecondaryRenderContext;
-import com.skyeshade.skyesight.client.render.PortalSecondaryWorldRenderer;
 import com.skyeshade.skyesight.client.render.entity.PortalDimensionEntitySources;
 import com.skyeshade.skyesight.client.render.entity.PortalRenderableEntity;
-import com.skyeshade.skyesight.client.render.sodium.SameDimMainSodiumSectionReuse;
 import com.skyeshade.skyesight.client.render.light.SkyesightLightTextureUpdater;
+import com.skyeshade.skyesight.client.render.sodium.SameDimMainSodiumSectionReuse;
+import com.skyeshade.skyesight.client.world.SkyesightPortalEntityPool;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorld;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorldManager;
-import com.skyeshade.skyesight.client.world.SkyesightPortalEntityPool;
 import com.skyeshade.skyesight.mixin.client.EntityRenderDispatcherAccessor;
 import com.skyeshade.skyesight.mixin.client.LevelRendererSkyBufferAccessor;
 import com.skyeshade.skyesight.server.SkyesightSecondaryChunkWatchRegion;
@@ -91,7 +91,40 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
-import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.*;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.CROSS_DIM_PORTAL_PARTICLES_ENABLED;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_DISABLE_ALL_PORTAL_SUBPASSES_AFTER_MASK;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_DISABLE_PORTAL_BLOCK_ENTITIES;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_DISABLE_PORTAL_DEPTH_CLEAR;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_DISABLE_PORTAL_ENTITIES;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_DISABLE_PORTAL_SKY_FILL;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_DISABLE_PORTAL_TERRAIN;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_DISABLE_PORTAL_TRANSPARENT;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_PORTAL_SKY_AT_AFTER_SKY;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_RENDER_ENTITIES;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_RENDER_ENTITIES_ONE_PORTAL_ONLY;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_RENDER_SIMPLE_SKY_FILL;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_RENDER_SKY_ONE_PORTAL_ONLY;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_RENDER_TERRAIN;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_SKY_CAPTURE_BYPASS_STENCIL;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_SKY_CAPTURE_COMPOSITE_ENABLED;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_SKY_CAPTURE_ENABLED;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_SKY_CAPTURE_FALLBACK_SIMPLE_COLOR;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_SKY_DISABLE_SIMPLE_PREFILL;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_SKY_DRAW_MOON;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_SKY_DRAW_SUN;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_SKY_MASK_ONLY;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_STENCIL_DRAW_PROOF_COLOR;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_STENCIL_RENDER_TERRAIN;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.ENABLE_PORTAL_ENTITY_POOL_RENDERING;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.FAR_PORTAL_RENDER_BLOCK_ENTITIES;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.FLUSH_MAIN_BUFFERS_BEFORE_PORTAL_MASK;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.PORTAL_CAMERA_EXIT_PUSH_EPSILON_BLOCKS;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.PORTAL_MAIN_PARTICLE_OCCLUSION_FIX;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.PORTAL_SKY_COMPOSITE_OPAQUE;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.RENDER_SECONDARY_PORTAL_COMPOSITE;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.STENCIL_MASK_AT_WORLD_STAGE;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.TEST_SECONDARY_ENTITIES_ONLY_ONE_PORTAL;
+import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.USE_STABLE_TERRAIN_INVOCATION_PATH;
 
 public final class PortalDirectStencilRenderer {
     private static final ResourceLocation DIRECT_SKY_SUN_LOCATION =
@@ -144,6 +177,8 @@ public final class PortalDirectStencilRenderer {
         portalRenderedThisFrameByView.remove(viewId);
         invalidPortalStencilRefWarnings.remove(viewId);
         PortalStickSkyWarmup.clear(viewId);
+        PortalRenderTargetBounds.clear(viewId);
+        clearCrossDimEntitySourceLog(viewId);
     }
 
     public static int invalidateLevelBoundCaches(String reason) {
@@ -159,6 +194,8 @@ public final class PortalDirectStencilRenderer {
         portalRenderedThisFrameByView.clear();
         invalidPortalStencilRefWarnings.clear();
         PortalStickSkyWarmup.clearAll();
+        PortalRenderTargetBounds.clearAll();
+        CROSS_DIM_ENTITY_SOURCE_LOGGED.clear();
         PORTAL_SKY_CAPTURE_MANAGER.close();
         portalSkyCaptureTarget = null;
         return contextCount;
@@ -174,6 +211,8 @@ public final class PortalDirectStencilRenderer {
         portalFrameVisibilityStateByView.remove(viewId);
         portalRenderedThisFrameByView.remove(viewId);
         invalidPortalStencilRefWarnings.remove(viewId);
+        PortalRenderTargetBounds.clear(viewId);
+        clearCrossDimEntitySourceLog(viewId);
     }
 
     private static List<RegisteredRenderView> activeRenderViews(ResourceKey<Level> displayDimension, Camera camera, String stage) {
@@ -1705,7 +1744,15 @@ public final class PortalDirectStencilRenderer {
         );
     }
 
-    private static final java.util.Set<String> CROSS_DIM_ENTITY_SOURCE_LOGGED = new java.util.HashSet<>();
+    private static final Set<String> CROSS_DIM_ENTITY_SOURCE_LOGGED = new HashSet<>();
+
+    private static void clearCrossDimEntitySourceLog(ResourceLocation viewId) {
+        if (viewId == null) {
+            return;
+        }
+        String prefix = viewId + ":";
+        CROSS_DIM_ENTITY_SOURCE_LOGGED.removeIf(key -> key.startsWith(prefix));
+    }
 
     private static void logCrossDimEntityRenderSource(
             ResourceLocation regionId,
@@ -1722,12 +1769,12 @@ public final class PortalDirectStencilRenderer {
         if (!CROSS_DIM_ENTITY_SOURCE_LOGGED.add(key)) {
             return;
         }
-        com.skyeshade.skyesight.Skyesight.LOGGER.info(
+        Skyesight.LOGGER.info(
                 "[Skyesight] CROSS_DIM_ENTITY_RENDER_SOURCE view={} renderSource={} reason={} populationEnabled={} poolRenderingEnabled={} poolEntityCount={} snapshotEntityCount={} snapshotSuppressed={}",
                 regionId,
                 renderSource,
                 reason,
-                com.skyeshade.skyesight.SkyesightPortalEntityPoolConfig.portalEntityPoolPopulationEnabled(),
+                SkyesightPortalEntityPoolConfig.portalEntityPoolPopulationEnabled(),
                 ENABLE_PORTAL_ENTITY_POOL_RENDERING,
                 poolEntityCount,
                 snapshotEntityCount,
@@ -2343,7 +2390,7 @@ public final class PortalDirectStencilRenderer {
     }
 
     private static String formatScreenPosition(ScreenSkyPosition position) {
-        return String.format(java.util.Locale.ROOT, "%.1f,%.1f", position.x(), position.y());
+        return String.format(Locale.ROOT, "%.1f,%.1f", position.x(), position.y());
     }
 
 
@@ -2837,7 +2884,7 @@ public final class PortalDirectStencilRenderer {
         float maxY = Math.max(Math.max(bottomLeft.y, bottomRight.y), Math.max(topRight.y, topLeft.y));
 
         portalCornerNdc = String.format(
-                java.util.Locale.ROOT,
+                Locale.ROOT,
                 "bl %.2f,%.2f br %.2f,%.2f tr %.2f,%.2f tl %.2f,%.2f",
                 bottomLeft.x,
                 bottomLeft.y,
@@ -2946,7 +2993,7 @@ public final class PortalDirectStencilRenderer {
             }
         }
 
-        return String.format(java.util.Locale.ROOT, "%08x", hash);
+        return String.format(Locale.ROOT, "%08x", hash);
     }
 
     private static String yesNo(boolean value) {
@@ -2983,7 +3030,7 @@ public final class PortalDirectStencilRenderer {
 
     private static String formatVec3(Vec3 position) {
         return String.format(
-                java.util.Locale.ROOT,
+                Locale.ROOT,
                 "%.2f,%.2f,%.2f",
                 position.x(),
                 position.y(),
@@ -3180,7 +3227,7 @@ public final class PortalDirectStencilRenderer {
         Vec3 pos = view.source().center();
 
         return String.format(
-                java.util.Locale.ROOT,
+                Locale.ROOT,
                 "%s: %.2f, %.2f, %.2f",
                 view.id(),
                 pos.x(),

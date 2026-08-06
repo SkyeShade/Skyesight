@@ -11,13 +11,10 @@ final class DirectStencilPortalRenderConfig {
     static final boolean CROSS_DIM_PORTAL_E_RENDER_TERRAIN = true;
     static final boolean CROSS_DIM_PORTAL_E_RENDER_TRANSLUCENT = true;
     static final boolean CROSS_DIM_PORTAL_E_RENDER_ENTITIES = true;
-    static final boolean CROSS_DIM_PORTAL_E_FORCE_ENTITY_PASS_CALL = true;
     static final boolean CROSS_DIM_PORTAL_E_RENDER_BLOCK_ENTITIES = true;
     static final int CROSS_DIM_PORTAL_E_ENTITY_RADIUS_CHUNKS = 4;
     static final boolean PORTAL_E_USE_A_ENTITY_DEPTH_SETUP = true;
     static final boolean PORTAL_E_DISABLE_ENTITY_FRUSTUM_CULLING = true;
-    static final boolean CROSS_DIM_PORTAL_E_ENTITY_MARKER_DEPTH_TEST = true;
-    static final boolean CROSS_DIM_PORTAL_E_FORCE_NETHER_AMBIENT_LIGHT = true;
     static final boolean CROSS_DIM_PORTAL_E_SOFTWARE_FALLBACK_ON_ERROR = true;
 
     static final boolean CROSS_DIM_PORTAL_G_RENDER_TERRAIN = true;
@@ -64,7 +61,6 @@ final class DirectStencilPortalRenderConfig {
     static final boolean DIRECT_SKY_DRAW_SUNRISE = true;
     static final boolean DIRECT_SKY_CAPTURE_ENABLED = true;
     static final boolean DIRECT_SKY_CAPTURE_COMPOSITE_ENABLED = true;
-    static final boolean DIRECT_SKY_CAPTURE_DEBUG_FULLSCREEN = false;
     static final boolean DIRECT_SKY_CAPTURE_BYPASS_STENCIL = false;
     static final boolean DIRECT_SKY_CAPTURE_FALLBACK_SIMPLE_COLOR = true;
     static final boolean PORTAL_SKY_COMPOSITE_OPAQUE = true;
@@ -74,8 +70,6 @@ final class DirectStencilPortalRenderConfig {
     static final boolean DIRECT_RENDER_ENTITIES = true;
     static final boolean DIRECT_RENDER_ENTITIES_ONE_PORTAL_ONLY = false;
     static final boolean FLUSH_MAIN_BUFFERS_BEFORE_PORTAL_MASK = true;
-
-    static final boolean VERBOSE_CROSS_DIM_PORTAL_STORAGE_DIAGNOSTICS = false;
 
     private DirectStencilPortalRenderConfig() {}
 }

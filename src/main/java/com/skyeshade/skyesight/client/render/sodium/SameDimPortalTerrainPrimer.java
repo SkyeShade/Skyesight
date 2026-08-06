@@ -7,6 +7,7 @@ import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.ChunkPos;
@@ -52,7 +53,7 @@ public final class SameDimPortalTerrainPrimer {
             return Result.empty(context.primedSections());
         }
 
-        ChunkPos centerChunk = new ChunkPos(net.minecraft.core.BlockPos.containing(portalCameraPos));
+        ChunkPos centerChunk = new ChunkPos(BlockPos.containing(portalCameraPos));
         int minSection = level.getMinSection();
         int maxSection = level.getMaxSection();
         int sectionCount = Math.max(1, maxSection - minSection);

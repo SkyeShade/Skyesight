@@ -12,6 +12,8 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.level.ChunkPos;
 import net.neoforged.neoforge.network.PacketDistributor;
 
+import java.util.Locale;
+
 public final class SkyesightServerParticleBroadcaster {
     private static long lastMirrorLogMillis;
     private SkyesightServerParticleBroadcaster() {}
@@ -99,7 +101,7 @@ public final class SkyesightServerParticleBroadcaster {
 
         lastMirrorLogMillis = now;
         Skyesight.LOGGER.info(
-                "[Skyesight] Cross-dim real particle mirror dimension={} eventParticleType={} pos={},{},{} matchedRegions={} matchedViews={} payloadSent={} clientReceived=see-client-handler visualStoreSize=see-client-handler proofSpawnEnabled=false",
+                "[Skyesight] Cross-dim real particle mirror dimension={} eventParticleType={} pos={},{},{} matchedRegions={} matchedViews={} payloadSent={} clientReceived=see-client-handler visualStoreSize=see-client-handler diagnosticSpawnEnabled=false",
                 level.dimension().location(),
                 BuiltInRegistries.PARTICLE_TYPE.getKey(particle.getType()),
                 format(x),
@@ -112,6 +114,6 @@ public final class SkyesightServerParticleBroadcaster {
     }
 
     private static String format(double value) {
-        return String.format(java.util.Locale.ROOT, "%.2f", value);
+        return String.format(Locale.ROOT, "%.2f", value);
     }
 }

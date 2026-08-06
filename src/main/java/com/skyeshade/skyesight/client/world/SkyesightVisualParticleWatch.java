@@ -1,5 +1,6 @@
 package com.skyeshade.skyesight.client.world;
 
+import com.skyeshade.skyesight.Skyesight;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
@@ -8,6 +9,7 @@ import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 
 public final class SkyesightVisualParticleWatch {
@@ -224,7 +226,7 @@ public final class SkyesightVisualParticleWatch {
         }
 
         lastFullPipelineLogMillis = now;
-        com.skyeshade.skyesight.Skyesight.LOGGER.info(
+        Skyesight.LOGGER.info(
                 "[Skyesight] PORTAL_PARTICLE_WATCH_FULL_PIPELINE: viewId={} targetDim={} watchedPos={} visualOrMainLevelClass={} chunkLoaded={} block={} fluid={} insideRenderedViewRadius={} insideDisplayTickSampleRegion={} displayTickDriverRan={} displayTickCenter={} distanceToTickCenter={} positionsSampledThisSecond={} watchedBlockSampledThisSecond={} watchedBlockAnimateTickCalled={} watchedFluidAnimateTickCalled={} addParticleCapturedNearWatchedBlock={} capturedTypesNearWatchedBlock={} visualParticlesStoredNearWatchedBlock={} particleInstancesCreatedNearWatchedBlock={} particleInstancesRenderedNearWatchedBlock={} reasonIfFailed={}",
                 viewId,
                 targetDim,
@@ -237,7 +239,7 @@ public final class SkyesightVisualParticleWatch {
                 yesNo(insideDisplayTickSampleRegion),
                 yesNo(displayTickDriverRan),
                 displayTickCenter,
-                Double.isNaN(distanceToTickCenter) ? "unknown" : String.format(java.util.Locale.ROOT, "%.2f", distanceToTickCenter),
+                Double.isNaN(distanceToTickCenter) ? "unknown" : String.format(Locale.ROOT, "%.2f", distanceToTickCenter),
                 positionsSampledThisSecond,
                 yesNo(watchedBlockSampledThisSecond),
                 yesNo(watchedBlockAnimateTickCalled),
@@ -358,7 +360,7 @@ public final class SkyesightVisualParticleWatch {
     }
 
     private static String formatVec(Vec3 vec) {
-        return String.format(java.util.Locale.ROOT, "%.2f,%.2f,%.2f", vec.x(), vec.y(), vec.z());
+        return String.format(Locale.ROOT, "%.2f,%.2f,%.2f", vec.x(), vec.y(), vec.z());
     }
 
     private static String yesNo(boolean value) {

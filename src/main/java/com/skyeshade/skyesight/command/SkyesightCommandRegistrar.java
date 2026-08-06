@@ -1,22 +1,27 @@
 package com.skyeshade.skyesight.command;
 
-import com.skyeshade.skyesight.*;
+import com.mojang.brigadier.arguments.BoolArgumentType;
+import com.mojang.brigadier.arguments.FloatArgumentType;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.SkyesightDebugConfig;
+import com.skyeshade.skyesight.SkyesightDebugPortalRegistrations;
+import com.skyeshade.skyesight.SkyesightItems;
+import com.skyeshade.skyesight.SkyesightNativeVisualEntityRoutingDebug;
 import com.skyeshade.skyesight.api.PortalEndpoint;
 import com.skyeshade.skyesight.api.PortalRegistrationResult;
 import com.skyeshade.skyesight.api.RegisteredPortalView;
 import com.skyeshade.skyesight.api.SkyesightPortalApi;
 import com.skyeshade.skyesight.client.world.SkyesightMultipartEntityDebug;
 import com.skyeshade.skyesight.client.world.SkyesightVisualParticleWatch;
+import com.skyeshade.skyesight.server.PortalSimulationCoordinator;
 import com.skyeshade.skyesight.server.portal.DebugPortalStickManager;
 import com.skyeshade.skyesight.server.portal.MaskedPortalDebugStickManager;
 import com.skyeshade.skyesight.server.portal.PortalPlayerQueryMixinTargetAudit;
 import com.skyeshade.skyesight.server.portal.PortalProxyArmorStandDebugManager;
-import com.skyeshade.skyesight.server.PortalSimulationCoordinator;
-import com.mojang.brigadier.arguments.BoolArgumentType;
-import com.mojang.brigadier.arguments.FloatArgumentType;
-import com.mojang.brigadier.arguments.IntegerArgumentType;
-import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.commands.Commands;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
@@ -29,6 +34,10 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import org.slf4j.Logger;
+
+import java.util.List;
+import java.util.Locale;
+import java.util.function.Supplier;
 
 public final class SkyesightCommandRegistrar {
     private static final Logger LOGGER = Skyesight.LOGGER;
@@ -123,7 +132,7 @@ public final class SkyesightCommandRegistrar {
                                                                             int x = IntegerArgumentType.getInteger(context, "x");
                                                                             int y = IntegerArgumentType.getInteger(context, "y");
                                                                             int z = IntegerArgumentType.getInteger(context, "z");
-                                                                            String status = SkyesightVisualParticleWatch.set(viewId, new net.minecraft.core.BlockPos(x, y, z));
+                                                                            String status = SkyesightVisualParticleWatch.set(viewId, new BlockPos(x, y, z));
                                                                             context.getSource().sendSuccess(() -> Component.literal("[Skyesight] Debug particle-watch-block: " + status), true);
                                                                             LOGGER.info("[Skyesight] Debug particle-watch-block: {}", status);
                                                                             return 1;
@@ -550,7 +559,7 @@ public final class SkyesightCommandRegistrar {
     }
 
     private interface CommandSuccessSender {
-        void send(java.util.function.Supplier<Component> component, boolean broadcast);
+        void send(Supplier<Component> component, boolean broadcast);
     }
 
     private static int portalApiAddOneWaySpec(CommandSuccessSender sender, String spec) {
@@ -819,7 +828,7 @@ public final class SkyesightCommandRegistrar {
     }
 
     private static String portalApiList() {
-        java.util.List<RegisteredPortalView> portals = SkyesightPortalApi.getAllPortals();
+        List<RegisteredPortalView> portals = SkyesightPortalApi.getAllPortals();
         if (portals.isEmpty()) {
             return "no portals registered";
         }
@@ -860,11 +869,11 @@ public final class SkyesightCommandRegistrar {
     }
 
     private static String formatVec(Vec3 vec) {
-        return String.format(java.util.Locale.ROOT, "%.2f,%.2f,%.2f", vec.x(), vec.y(), vec.z());
+        return String.format(Locale.ROOT, "%.2f,%.2f,%.2f", vec.x(), vec.y(), vec.z());
     }
 
     private static String formatSize(float width, float height) {
-        return String.format(java.util.Locale.ROOT, "%.1fx%.1f", width, height);
+        return String.format(Locale.ROOT, "%.1fx%.1f", width, height);
     }
 }
 

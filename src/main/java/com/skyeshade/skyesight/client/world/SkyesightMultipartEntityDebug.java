@@ -1,5 +1,6 @@
 package com.skyeshade.skyesight.client.world;
 
+import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.api.RegisteredPortalView;
 import com.skyeshade.skyesight.api.SkyesightPortalApi;
 import com.skyeshade.skyesight.client.render.entity.PortalMultipartPartEligibility;
@@ -129,7 +130,7 @@ public final class SkyesightMultipartEntityDebug {
             return;
         }
         PartEntity<?>[] parts = PortalMultipartEntityUtil.parts(entity);
-        com.skyeshade.skyesight.Skyesight.LOGGER.info(
+        Skyesight.LOGGER.info(
                 "[Skyesight] MULTIPART_RENDER_SAMPLE: source={} partialTick={} type={} class={} tick={} pos={} oldPos={} rot={} parts={} sample=[{}]",
                 source,
                 partialTick,
@@ -183,7 +184,7 @@ public final class SkyesightMultipartEntityDebug {
                 duplicateSignatures.add(entry.getKey() + "x" + entry.getValue());
             }
         }
-        com.skyeshade.skyesight.Skyesight.LOGGER.info(
+        Skyesight.LOGGER.info(
                 "[Skyesight] MULTIPART_RENDER_TRACE frame={} view={} parentsRendered={} partsRendered={} rendererCounts={} duplicateSignatures={} entries=[{}]",
                 frameId,
                 viewId,

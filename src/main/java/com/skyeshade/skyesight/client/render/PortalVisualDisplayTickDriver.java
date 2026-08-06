@@ -18,6 +18,7 @@ import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.Locale;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.HashMap;
@@ -293,7 +294,7 @@ public final class PortalVisualDisplayTickDriver {
                 targetLevel.dimension().location(),
                 targetLevel.getClass().getName(),
                 formatVec(cameraPos),
-                Double.isNaN(result.realCameraDistance()) ? "unknown" : String.format(java.util.Locale.ROOT, "%.2f", result.realCameraDistance()),
+                Double.isNaN(result.realCameraDistance()) ? "unknown" : String.format(Locale.ROOT, "%.2f", result.realCameraDistance()),
                 yesNo(result.skippedNearMainCamera()),
                 result.positionsSampled(),
                 result.blockAnimateTickCalls(),
@@ -343,7 +344,7 @@ public final class PortalVisualDisplayTickDriver {
     }
 
     private static String formatVec(Vec3 vec) {
-        return String.format(java.util.Locale.ROOT, "%.2f,%.2f,%.2f", vec.x(), vec.y(), vec.z());
+        return String.format(Locale.ROOT, "%.2f,%.2f,%.2f", vec.x(), vec.y(), vec.z());
     }
 
     private static String yesNo(boolean value) {

@@ -9,6 +9,7 @@ import net.caffeinemc.mods.sodium.client.render.chunk.map.ChunkTracker;
 import net.minecraft.client.multiplayer.ClientChunkCache;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkPacketData;
 import net.minecraft.network.protocol.game.ClientboundLightUpdatePacketData;
@@ -616,12 +617,12 @@ public final class SkyesightRemoteChunkReceiver {
     }
 
     private static String blockId(BlockState state) {
-        ResourceLocation blockId = net.minecraft.core.registries.BuiltInRegistries.BLOCK.getKey(state.getBlock());
+        ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(state.getBlock());
         return blockId == null ? "unknown" : blockId.toString();
     }
 
     private static String fluidId(FluidState state) {
-        ResourceLocation fluidId = net.minecraft.core.registries.BuiltInRegistries.FLUID.getKey(state.getType());
+        ResourceLocation fluidId = BuiltInRegistries.FLUID.getKey(state.getType());
         return fluidId == null ? "unknown" : fluidId.toString();
     }
 

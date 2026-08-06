@@ -142,6 +142,12 @@ dependencies {
     // http://www.gradle.org/docs/current/userguide/dependency_management.html
     implementation "curse.maven:sodium-394468:6382651"
     implementation "curse.maven:irisshaders-455508:6661598"
+    //implementation "curse.maven:stellarview-865273:7177905"
+    implementation "curse.maven:curios-309927:6529130"
+    runtimeOnly "curse.maven:lionfish-api-1001614:6168249"
+    runtimeOnly "curse.maven:lendercataclysm-551586:6906997"
+    runtimeOnly "curse.maven:the-twilight-forest-227639:7797302"
+
 }
 
 // This block of code expands all declared replace properties in the specified resource targets.

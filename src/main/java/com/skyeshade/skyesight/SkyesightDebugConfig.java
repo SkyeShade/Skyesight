@@ -1,7 +1,6 @@
 package com.skyeshade.skyesight;
 
 public final class SkyesightDebugConfig {
-    public static final boolean DEBUG_PORTAL_ENTITY_RENDER_TRACE_VERBOSE = false;
     public static volatile boolean CORE = true;
     public static volatile boolean SPAWN_SUMMARY = false;
     public static volatile boolean LIFECYCLE_SUMMARY = false;
@@ -22,7 +21,6 @@ public final class SkyesightDebugConfig {
     public static volatile boolean PORTAL_API_AUDIT = false;
     public static volatile boolean LIFECYCLE_DEBUG = false;
     public static volatile boolean ENTITY_DIMENSION_CONTEXT = false;
-    public static volatile boolean COMPACT_STATUS = false;
     public static volatile boolean PORTAL_AWARE_PLAYER_QUERIES = true;
     public static volatile boolean PORTAL_AWARE_PLAYER_COORDINATES_FOR_QUERIES = true;
     public static volatile boolean PORTAL_AWARE_MOB_TARGETING = false;
@@ -67,7 +65,6 @@ public final class SkyesightDebugConfig {
                 + " PORTAL_API_AUDIT=" + PORTAL_API_AUDIT
                 + " LIFECYCLE_DEBUG=" + LIFECYCLE_DEBUG
                 + " ENTITY_DIMENSION_CONTEXT=" + ENTITY_DIMENSION_CONTEXT
-                + " COMPACT_STATUS=" + COMPACT_STATUS
                 + " PORTAL_AWARE_PLAYER_QUERIES=" + PORTAL_AWARE_PLAYER_QUERIES
                 + " PORTAL_AWARE_PLAYER_COORDINATES_FOR_QUERIES=" + PORTAL_AWARE_PLAYER_COORDINATES_FOR_QUERIES
                 + " PORTAL_AWARE_MOB_TARGETING=" + PORTAL_AWARE_MOB_TARGETING
@@ -197,7 +194,6 @@ public final class SkyesightDebugConfig {
         PORTAL_API_AUDIT = false;
         LIFECYCLE_DEBUG = false;
         ENTITY_DIMENSION_CONTEXT = false;
-        COMPACT_STATUS = false;
         SHOW_PROXY_MARKERS = false;
         SHOW_PROXY_ARMOR_STANDS = false;
         SHOW_PORTAL_LOOK_MARKERS = false;

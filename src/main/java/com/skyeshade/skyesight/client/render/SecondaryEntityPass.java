@@ -4,11 +4,13 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexSorting;
 import com.skyeshade.skyesight.SkyesightClientConfig;
+import com.skyeshade.skyesight.entity.PortalMultipartEntityUtil;
 import com.skyeshade.skyesight.client.render.entity.PortalEntityRenderContextScope;
 import com.skyeshade.skyesight.client.render.entity.PortalMultipartPartEligibility;
 import com.skyeshade.skyesight.client.render.entity.PortalRenderableEntity;
 import com.skyeshade.skyesight.mixin.client.EntityRenderDispatcherAccessor;
 import com.skyeshade.skyesight.client.world.SkyesightVisualEntity;
+import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -32,9 +34,12 @@ import org.lwjgl.opengl.GL30;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 public final class SecondaryEntityPass {
     private static final double ENTITY_FRUSTUM_CULL_PADDING_BLOCKS = 0.75D;
@@ -91,7 +96,7 @@ public final class SecondaryEntityPass {
         int texture0Before = RenderSystem.getShaderTexture(0);
         float[] shaderColorBefore = RenderSystem.getShaderColor().clone();
         Level dispatcherLevelBefore = dispatcherAccessor.skyesight$getLevel();
-        net.minecraft.client.Camera dispatcherCameraBefore = dispatcher.camera;
+        Camera dispatcherCameraBefore = dispatcher.camera;
         Entity dispatcherCrosshairBefore = dispatcher.crosshairPickEntity;
         Quaternionf dispatcherOrientationBefore = dispatcherAccessor.skyesight$getCameraOrientation() == null
                 ? null
@@ -298,7 +303,7 @@ public final class SecondaryEntityPass {
         float[] shaderColorBefore = RenderSystem.getShaderColor().clone();
         ClientLevel minecraftLevelBefore = minecraft.level;
         Level dispatcherLevelBefore = dispatcherAccessor.skyesight$getLevel();
-        net.minecraft.client.Camera dispatcherCameraBefore = dispatcher.camera;
+        Camera dispatcherCameraBefore = dispatcher.camera;
         Entity dispatcherCrosshairBefore = dispatcher.crosshairPickEntity;
         Quaternionf dispatcherOrientationBefore = dispatcherAccessor.skyesight$getCameraOrientation() == null
                 ? null
@@ -308,9 +313,9 @@ public final class SecondaryEntityPass {
         int skippedDistance = 0;
         int skippedFrustum = 0;
         int duplicateSuppressed = 0;
-        Set<Entity> renderedParentObjects = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        Set<Entity> renderedParentObjects = Collections.newSetFromMap(new IdentityHashMap<>());
         Set<Integer> renderedParentIds = new HashSet<>();
-        Set<java.util.UUID> renderedParentUuids = new HashSet<>();
+        Set<UUID> renderedParentUuids = new HashSet<>();
         Set<String> renderedParentSignatures = new HashSet<>();
         int framebufferBeforePass = GL30.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
         List<PortalRenderableEntity> renderableList = materializeRenderables(renderableEntities);
@@ -403,7 +408,7 @@ public final class SecondaryEntityPass {
 
                     if (!renderableEntity.mainLevelBacked()
                             && !renderableEntity.standalonePart()
-                            && com.skyeshade.skyesight.entity.PortalMultipartEntityUtil.isMultipartParent(entity)) {
+                            && PortalMultipartEntityUtil.isMultipartParent(entity)) {
                         PassLocalPartExpansion expansion = passLocalMultipartParts(
                                 renderableEntity,
                                 renderBounds,
@@ -682,7 +687,7 @@ public final class SecondaryEntityPass {
             PortalRenderableEntity renderableEntity,
             Set<Entity> renderedParentObjects,
             Set<Integer> renderedParentIds,
-            Set<java.util.UUID> renderedParentUuids,
+            Set<UUID> renderedParentUuids,
             Set<String> renderedParentSignatures,
             EntityRenderDispatcher dispatcher
     ) {
@@ -728,14 +733,14 @@ public final class SecondaryEntityPass {
     ) {
         List<PortalRenderableEntity> parts = new ArrayList<>();
         Entity parent = parentRenderable.entity();
-        PartEntity<?>[] parentParts = com.skyeshade.skyesight.entity.PortalMultipartEntityUtil.parts(parent);
+        PartEntity<?>[] parentParts = PortalMultipartEntityUtil.parts(parent);
         if (parentParts == null || parentParts.length == 0) {
             return new PassLocalPartExpansion(parts, 0, 0);
         }
 
         int skippedDormant = 0;
         int duplicateSuppressed = 0;
-        Set<PartEntity<?>> seenObjects = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        Set<PartEntity<?>> seenObjects = Collections.newSetFromMap(new IdentityHashMap<>());
         Set<Integer> seenIds = new HashSet<>();
         Set<String> seenSignatures = new HashSet<>();
         for (PartEntity<?> part : parentParts) {
@@ -839,7 +844,7 @@ public final class SecondaryEntityPass {
         if (part == null) {
             return true;
         }
-        Entity parent = com.skyeshade.skyesight.entity.PortalMultipartEntityUtil.parentOfPart(part);
+        Entity parent = PortalMultipartEntityUtil.parentOfPart(part);
         if (parent != null && parentEntityId >= 0 && parent.getId() != parentEntityId) {
             return true;
         }

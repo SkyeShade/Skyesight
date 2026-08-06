@@ -1,6 +1,7 @@
 package com.skyeshade.skyesight.server.portal;
 
 import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.SkyesightItems;
 import com.skyeshade.skyesight.api.PortalEndpoint;
 import com.skyeshade.skyesight.api.PortalRegistrationResult;
 import com.skyeshade.skyesight.api.PortalRenderSettings;
@@ -18,6 +19,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -258,8 +260,8 @@ public final class MaskedPortalDebugStickManager {
         STATES.clear();
     }
 
-    private static boolean isMaskedStick(net.minecraft.world.item.ItemStack stack) {
-        return stack.is(com.skyeshade.skyesight.SkyesightItems.MASKED_PORTAL_DEBUG_STICK.get());
+    private static boolean isMaskedStick(ItemStack stack) {
+        return stack.is(SkyesightItems.MASKED_PORTAL_DEBUG_STICK.get());
     }
 
     private static String formatVec(Vec3 vec) {
