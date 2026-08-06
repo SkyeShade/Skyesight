@@ -1329,7 +1329,7 @@ public final class PortalSecondaryWorldRenderer {
         }
 
         try {
-            int stencilRef = directPortalStencilRef(frame);
+            int stencilRef = fallbackStencilRefForLegacyDebugFrame(frame);
             int stencilBits = PortalRenderDebugStatus.stencilBits();
             SecondaryPortalCompositePass.StencilResult stencil =
                     SecondaryPortalCompositePass.beginExistingStencilApertureRead(stencilBits, stencilRef);
@@ -1362,14 +1362,14 @@ public final class PortalSecondaryWorldRenderer {
         }
     }
 
-    private static int directPortalStencilRef(SecondaryViewFrame frame) {
+    private static int fallbackStencilRefForLegacyDebugFrame(SecondaryViewFrame frame) {
         String portalId = frame == null ? "" : frame.diagnostics().portalInstanceId();
         int explicitRef = frame == null ? 0 : frame.diagnostics().portalStencilRef();
         if (explicitRef > 0) {
             return explicitRef;
         }
 
-        // Btw this here is legacy fallback for older/manual debug frames that do not carry an explicit registered view stencil ref yet.
+        // Legacy manual/debug frames may only carry direct-render labels, so keep their historical stencil mapping.
         int fallbackRef;
         if (portalId.contains("direct:D")) {
             fallbackRef = 4;
@@ -1983,18 +1983,6 @@ public final class PortalSecondaryWorldRenderer {
         RegisteredPortalView view = SkyesightPortalApi.getPortal(viewId.toString());
         if (view == null || !"debug-stick".equals(view.sourceTag())) {
             return "normal";
-        }
-        if (SkyesightDebugConfig.DEBUG_DISABLE_NEW_STICK_PORTAL_RENDER_FOR_FLASH_TEST) {
-            return "hard_block";
-        }
-        if (SkyesightDebugConfig.DEBUG_STICK_RENDER_MASK_ONLY_FOR_FLASH_TEST) {
-            return "mask_only";
-        }
-        if (SkyesightDebugConfig.DEBUG_STICK_RENDER_MASK_AND_SKY_ONLY_FOR_FLASH_TEST) {
-            return "mask_sky_only";
-        }
-        if (SkyesightDebugConfig.DEBUG_STICK_RENDER_NO_TERRAIN_FOR_FLASH_TEST) {
-            return "no_terrain";
         }
         if (SkyesightDebugConfig.DEBUG_STICK_RENDER_NO_SODIUM_RENDERER_FOR_FLASH_TEST) {
             return "no_sodium";

@@ -333,7 +333,8 @@ public final class PortalPathProximity {
         if (visualContext != null) {
             Player visualPlayer = visualContext.playerSupplier().get();
             if (visualPlayer != null) {
-                if (isDirectPlayerCandidate(level, visualPlayer) && passes(predicate, visualPlayer)) {
+                boolean visualPlayerDirectCandidate = isDirectPlayerCandidate(level, visualPlayer);
+                if (visualPlayerDirectCandidate && passes(predicate, visualPlayer)) {
                     double distanceSq = directDistanceSqr(queryPos, visualPlayer);
                     boolean inRange = distanceSq <= maxDistanceSq;
                     traceVisualPlayerCandidate(
@@ -356,7 +357,7 @@ public final class PortalPathProximity {
                         bestDirect = new PortalPathCandidate(null, visualPlayer, visualPlayer.position(), distanceSq, distanceSq, false, "direct-same-dimension");
                     }
                 } else {
-                    if (!isDirectPlayerCandidate(level, visualPlayer)) {
+                    if (!visualPlayerDirectCandidate) {
                         directWrongDimRejected++;
                     }
                     traceVisualPlayerCandidate(
@@ -370,7 +371,7 @@ public final class PortalPathProximity {
                             directDistanceSqr(queryPos, visualPlayer),
                             false,
                             false,
-                            isDirectPlayerCandidate(level, visualPlayer) ? "predicate-failed" : "direct-player-wrong-dimension"
+                            visualPlayerDirectCandidate ? "predicate-failed" : "direct-player-wrong-dimension"
                     );
                 }
                 for (PortalBridge bridge : allDirectionalBridges()) {
