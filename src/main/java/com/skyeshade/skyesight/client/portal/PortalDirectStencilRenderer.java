@@ -1,16 +1,7 @@
 package com.skyeshade.skyesight.client.portal;
 
-import com.mojang.blaze3d.pipeline.TextureTarget;
-import com.mojang.blaze3d.platform.GlStateManager.DestFactor;
-import com.mojang.blaze3d.platform.GlStateManager.SourceFactor;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.BufferBuilder;
-import com.mojang.blaze3d.vertex.BufferUploader;
-import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.Tesselator;
-import com.mojang.blaze3d.vertex.VertexBuffer;
-import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.VertexSorting;
 import com.mojang.math.Axis;
 import com.skyeshade.skyesight.Skyesight;
@@ -24,7 +15,6 @@ import com.skyeshade.skyesight.api.SkyesightClipPlane;
 import com.skyeshade.skyesight.api.SkyesightPortalApi;
 import com.skyeshade.skyesight.client.chunk.SkyesightPortalChunkStorage;
 import com.skyeshade.skyesight.client.chunk.SkyesightPortalRenderLevelView;
-import com.skyeshade.skyesight.client.compat.iris.SkyesightIrisCompat;
 import com.skyeshade.skyesight.client.render.PortalSecondaryWorldRenderer;
 import com.skyeshade.skyesight.client.render.PortalVisualDisplayTickDriver;
 import com.skyeshade.skyesight.client.render.SecondaryEntityPass;
@@ -110,8 +100,6 @@ import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderCon
 import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_SKY_CAPTURE_ENABLED;
 import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_SKY_CAPTURE_FALLBACK_SIMPLE_COLOR;
 import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_SKY_DISABLE_SIMPLE_PREFILL;
-import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_SKY_DRAW_MOON;
-import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_SKY_DRAW_SUN;
 import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_SKY_MASK_ONLY;
 import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_STENCIL_DRAW_PROOF_COLOR;
 import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_STENCIL_RENDER_TERRAIN;
@@ -123,17 +111,9 @@ import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderCon
 import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.PORTAL_SKY_COMPOSITE_OPAQUE;
 import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.RENDER_SECONDARY_PORTAL_COMPOSITE;
 import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.STENCIL_MASK_AT_WORLD_STAGE;
-import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.TEST_SECONDARY_ENTITIES_ONLY_ONE_PORTAL;
 import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.USE_STABLE_TERRAIN_INVOCATION_PATH;
 
 public final class PortalDirectStencilRenderer {
-    private static final ResourceLocation DIRECT_SKY_SUN_LOCATION =
-            ResourceLocation.withDefaultNamespace("textures/environment/sun.png");
-    private static final ResourceLocation DIRECT_SKY_MOON_LOCATION =
-            ResourceLocation.withDefaultNamespace("textures/environment/moon_phases.png");
-    private static final String DISPLAY_MODE = "DIRECT_STENCIL_EXPERIMENTAL";
-    private static final PortalCompositeMode PORTAL_COMPOSITE_MODE =
-            PortalCompositeMode.STENCIL_DIRECT_RENDER_LATE;
     private static final DirectSkyMode DIRECT_SKY_MODE = DirectSkyMode.CLONED_VANILLA_CELESTIAL;
     private static final PortalSkyCaptureManager.Mode DIRECT_SKY_CAPTURE_MODE =
             PortalSkyCaptureManager.Mode.PORTAL_CAMERA_RENDER;
@@ -145,8 +125,6 @@ public final class PortalDirectStencilRenderer {
             DirectPortalRenderDebugMode.TERRAIN_NORMAL_PERSPECTIVE;
     private static final DirectPortalDepthMode DIRECT_PORTAL_DEPTH_MODE =
             DirectPortalDepthMode.CLEAR_PORTAL_DEPTH_THEN_LEQUAL;
-    private static final DirectPortalApertureClearMode DIRECT_PORTAL_APERTURE_CLEAR_MODE =
-            DirectPortalApertureClearMode.SOLID_COLOR;
     private static final PortalMaskDepthMode PORTAL_MASK_DEPTH_MODE =
             PortalMaskDepthMode.DEPTH_TEST_NO_DEPTH_WRITE;
     private static final DirectPortalCameraMode DIRECT_PORTAL_CAMERA_MODE =
@@ -197,7 +175,6 @@ public final class PortalDirectStencilRenderer {
         PortalRenderTargetBounds.clearAll();
         CROSS_DIM_ENTITY_SOURCE_LOGGED.clear();
         PORTAL_SKY_CAPTURE_MANAGER.close();
-        portalSkyCaptureTarget = null;
         return contextCount;
     }
 
@@ -543,14 +520,6 @@ public final class PortalDirectStencilRenderer {
         return matrix == null ? fallback : new Matrix4f(matrix);
     }
 
-    private static boolean publishEntityWatchRegion(RegisteredRenderView view) {
-        if (view == null || view.renderView() == null || !view.renderView().renderConfig().renderEntities()) {
-            return false;
-        }
-        return !TEST_SECONDARY_ENTITIES_ONLY_ONE_PORTAL;
-    }
-
-
     private static PortalVisibilityCull.PortalVisibilityResult evaluatePortalVisibility(
             Minecraft minecraft,
             RegisteredPortalView view,
@@ -629,7 +598,7 @@ public final class PortalDirectStencilRenderer {
             restorePortalStencilFrameState();
             return true;
         } catch (RuntimeException exception) {
-            lastStencilException = "stencil clear " + exception.getClass().getSimpleName() + ": " + exception.getMessage();
+            DIAGNOSTICS.lastStencilException = "stencil clear " + exception.getClass().getSimpleName() + ": " + exception.getMessage();
             SecondaryPortalCompositePass.restoreStencilState();
             activePortalStencilRef = 0;
             return false;
@@ -658,6 +627,8 @@ public final class PortalDirectStencilRenderer {
     ) {
     }
 
+    private static final DirectStencilFrameDiagnostics DIAGNOSTICS = new DirectStencilFrameDiagnostics();
+
     public static List<PortalLookMarkerDebugData.PortalLookDebugMarker> portalLookDebugMarkers(Minecraft minecraft, Camera camera) {
         if (minecraft == null || camera == null) {
             return List.of();
@@ -676,71 +647,13 @@ public final class PortalDirectStencilRenderer {
         return PortalLookMarkerDebugData.buildMarkers(viewConfigs, camera);
     }
 
-    private static volatile int instancesRendered;
     private static volatile int compositeFrameId = -1;
-    private static volatile int secondaryUpdateFrameId = -1;
     private static volatile int stencilBits;
-    private static volatile boolean stencilAttempted;
-    private static volatile boolean stencilSucceeded;
-    private static volatile boolean stencilFallbackUsed;
-    private static volatile String lastStencilException = "";
-    private static volatile boolean directRenderAttempted;
-    private static volatile boolean directRenderSucceeded;
-    private static volatile boolean directRenderFallbackUsed;
-    private static volatile boolean anySecondaryTextureTargetBindDuringDirect;
-    private static volatile boolean directRenderFailed;
     private static volatile String directPortalDepthMode = DIRECT_PORTAL_DEPTH_MODE.name();
-    private static volatile String portalMaskDepthMode = PORTAL_MASK_DEPTH_MODE.name();
-    private static volatile boolean portalMaskDepthWrites;
-    private static volatile boolean portalMaskDepthTest;
-    private static volatile boolean portalMaskBufferFlushAttempted;
-    private static volatile String portalMaskBufferFlushException = "";
-    private static volatile int framebufferBeforeDirect = -1;
-    private static volatile int framebufferAfterDirect = -1;
-    private static volatile String directRenderUnexpectedBind = "n/a";
-    private static volatile String lastDirectRenderException = "";
-    private static volatile boolean directRenderUsedPortalContext;
-    private static volatile boolean afterDirectStencilEnabled;
-    private static volatile boolean afterDirectColorMaskRestored;
-    private static volatile int afterDirectDepthFunc;
-    private static volatile boolean afterDirectDepthMask;
-    private static volatile int beforeDirectDepthFunc = -1;
-    private static volatile boolean beforeDirectDepthMask;
-    private static volatile boolean directPortalDepthClearRan;
-    private static volatile String directMaskStage = "n/a";
-    private static volatile String directStage = "n/a";
-    private static volatile boolean portalMaskWroteThisFrame;
     private static volatile int activePortalStencilRef;
-    private static volatile String portalScreenRect = "n/a";
-    private static volatile String portalCornerNdc = "n/a";
-    private static volatile String portalSecondaryRotationMode = PORTAL_SECONDARY_ROTATION_MODE.name();
-    private static volatile boolean farPortalServerSurfaceUsed;
-    private static volatile boolean farPortalClientSurfaceIgnoredBecauseUnloaded;
-    private static volatile String farPortalHeightSource = "n/a";
-    private static volatile long lastDirectSkyToggleWarnMillis;
-    private static TextureTarget portalSkyCaptureTarget;
     private static final PortalSkyCaptureManager PORTAL_SKY_CAPTURE_MANAGER = new PortalSkyCaptureManager();
-    private static volatile boolean portalViewportApplied;
-    private static volatile boolean portalScissorApplied;
-    private static volatile boolean portalViewportRestored = true;
-    private static volatile boolean directRenderUsedExistingStencil;
-    private static volatile boolean apertureDrawUsedEventPoseStack;
-    private static volatile boolean apertureDrawUsedManualCameraMatrix;
-    private static volatile boolean stencilSurvivedToLateStage;
     private static volatile int portalMaskFrameId = -1;
-    private static volatile String apertureClearMode = DIRECT_PORTAL_APERTURE_CLEAR_MODE.name();
-    private static volatile boolean apertureClearRan;
-    private static volatile boolean apertureClearStencilActive;
-    private static volatile String apertureClearException = "";
-    private static volatile boolean directTerrainRan;
-    private static volatile boolean afterDirectProjectionRestored;
-    private static volatile boolean afterDirectModelViewRestored;
-    private static volatile boolean afterDirectFramebufferRestored;
-    private static volatile boolean afterDirectViewportRestored;
-    private static volatile String lastStateRestoreException = "";
-    private static volatile String lastException = "";
-    private static String lastLoggedException = "";
-    private static boolean loggedStencilUnavailable;
+    private static volatile boolean stencilSurvivedToLateStage;
 
     private PortalDirectStencilRenderer() {}
 
@@ -951,26 +864,13 @@ public final class PortalDirectStencilRenderer {
     private static void onPortalStencilMaskWorldStage(RenderLevelStageEvent event) {
         Minecraft minecraft = Minecraft.getInstance();
         Camera camera = event.getCamera();
-        portalMaskWroteThisFrame = false;
-        activePortalStencilRef = 0;
-        stencilBits = 0;
-        stencilAttempted = false;
-        stencilSucceeded = false;
-        stencilFallbackUsed = false;
-        lastStencilException = "";
+        resetStencilMaskFrameDiagnosticFields(event.getRenderTick());
         portalMainViewProjectionByView.clear();
         portalMaskWroteThisFrameByView.clear();
         portalVisibilityThisFrameByView.clear();
         portalFrameVisibilityStateByView.clear();
         portalRenderedThisFrameByView.clear();
         PortalRenderTargetBounds.beginFrame(event.getRenderTick());
-        directMaskStage = "AFTER_BLOCK_ENTITIES";
-        apertureDrawUsedEventPoseStack = true;
-        apertureDrawUsedManualCameraMatrix = false;
-        portalMaskFrameId = event.getRenderTick();
-        portalMaskDepthMode = PORTAL_MASK_DEPTH_MODE.name();
-        portalMaskDepthWrites = maskPassWritesPortalDepth();
-        portalMaskDepthTest = maskPassUsesDepthTest();
         flushMainBuffersBeforeMaskIfEnabled(minecraft);
 
         if (minecraft.level == null
@@ -981,17 +881,14 @@ public final class PortalDirectStencilRenderer {
         }
 
         int maskStencilBits = ensureMainTargetStencilBits();
-        boolean stencilCleared = clearPortalStencilForFrame(minecraft, maskStencilBits);
+        clearPortalStencilForFrame(minecraft, maskStencilBits);
         Matrix4f mainViewProjection = new Matrix4f(RenderSystem.getProjectionMatrix())
                 .mul(event.getPoseStack().last().pose());
 
         List<RegisteredRenderView> views = activeRenderViews(minecraft.level.dimension(), camera, "mask", event.getFrustum(), true);
-        List<Integer> stencilRefs = new ArrayList<>();
-        int masksWritten = 0;
         var mainTarget = minecraft.getMainRenderTarget();
         for (RegisteredRenderView view : views) {
             int stencilRef = view.renderView().renderConfig().stencilRef();
-            stencilRefs.add(stencilRef);
             portalMainViewProjectionByView.put(view.definition().id(), new Matrix4f(mainViewProjection));
             PortalRenderTargetBounds.captureDiagnosticBounds(
                     view.definition().id(),
@@ -1013,66 +910,17 @@ public final class PortalDirectStencilRenderer {
                     view.renderView().renderConfig().stencilMask(),
                     view.definition().id()
             );
-            stencilAttempted |= result.attempted();
-            stencilSucceeded |= result.succeeded();
-            stencilFallbackUsed |= result.fallbackUsed();
-            if (result.succeeded()) {
-                masksWritten++;
-            }
-            if (!result.exception().isBlank() && lastStencilException.isBlank()) {
-                lastStencilException = result.exception();
-            }
+            DIAGNOSTICS.accumulateStencilResult(result);
             portalMaskWroteThisFrameByView.put(view.definition().id(), result.succeeded());
             restorePortalStencilFrameState();
         }
         restorePortalStencilFrameState();
         stencilBits = maskStencilBits;
-        portalMaskWroteThisFrame = stencilSucceeded;
+        DIAGNOSTICS.portalMaskWroteThisFrame = DIAGNOSTICS.stencilSucceeded;
     }
 
     private static void onPortalDirectLateStage(RenderLevelStageEvent event) {
-        instancesRendered = 0;
-        stencilBits = 0;
-        stencilAttempted = false;
-        stencilSucceeded = false;
-        stencilFallbackUsed = false;
-        lastStencilException = "";
-        directRenderAttempted = false;
-        directRenderSucceeded = false;
-        directRenderFallbackUsed = false;
-        anySecondaryTextureTargetBindDuringDirect = false;
-        directRenderFailed = false;
-        directPortalDepthMode = DIRECT_PORTAL_DEPTH_MODE.name();
-        portalSecondaryRotationMode = PORTAL_SECONDARY_ROTATION_MODE.name();
-        apertureClearMode = DIRECT_PORTAL_APERTURE_CLEAR_MODE.name();
-        apertureClearRan = false;
-        apertureClearStencilActive = false;
-        apertureClearException = "";
-        directTerrainRan = false;
-        directStage = "AFTER_LEVEL";
-        framebufferBeforeDirect = -1;
-        framebufferAfterDirect = -1;
-        directRenderUnexpectedBind = "n/a";
-        lastDirectRenderException = "";
-        directRenderUsedPortalContext = false;
-        directRenderUsedExistingStencil = false;
-        stencilSurvivedToLateStage = false;
-        if (!STENCIL_MASK_AT_WORLD_STAGE) {
-            directMaskStage = "AFTER_LEVEL";
-            apertureDrawUsedEventPoseStack = true;
-            apertureDrawUsedManualCameraMatrix = false;
-        }
-        afterDirectStencilEnabled = false;
-        afterDirectColorMaskRestored = false;
-        afterDirectDepthFunc = -1;
-        afterDirectDepthMask = false;
-        afterDirectProjectionRestored = false;
-        afterDirectModelViewRestored = false;
-        afterDirectFramebufferRestored = false;
-        afterDirectViewportRestored = false;
-        lastStateRestoreException = "";
-        compositeFrameId = event.getRenderTick();
-        secondaryUpdateFrameId = event.getRenderTick();
+        resetDirectFrameDiagnosticFields(event.getRenderTick());
 
         Minecraft minecraft = Minecraft.getInstance();
         Camera camera = event.getCamera();
@@ -1113,15 +961,14 @@ public final class PortalDirectStencilRenderer {
                         SameDimMainSodiumSectionReuse.captureMainTerrainState(minecraft);
                 if (mainTerrainAfterView.mainRenderListsIdentity() != mainTerrainBeforePortalStage.mainRenderListsIdentity()
                         || mainTerrainAfterView.mainRenderListsSize() != mainTerrainBeforePortalStage.mainRenderListsSize()) {
-                    lastDirectRenderException = "main terrain render lists changed during portal stage";
+                    DIAGNOSTICS.lastDirectRenderException = "main terrain render lists changed during portal stage";
                     break;
                 }
             }
         } catch (Exception exception) {
-            lastException = "late direct " + exception.getClass().getSimpleName() + ": " + exception.getMessage();
+            String exceptionSummary = "late direct " + exception.getClass().getSimpleName() + ": " + exception.getMessage();
 
-            if (!lastException.equals(lastLoggedException)) {
-                lastLoggedException = lastException;
+            if (DIAGNOSTICS.recordLateDirectException(exceptionSummary)) {
                 Skyesight.LOGGER.warn("[Skyesight] Late direct portal render failed", exception);
             }
         } finally {
@@ -1129,39 +976,22 @@ public final class PortalDirectStencilRenderer {
         }
     }
 
-    private static void updatePortalInstance(
-            Minecraft minecraft,
-            RenderLevelStageEvent event,
-            Camera mainCamera,
-            PortalRenderView instance,
-            ResourceLocation regionId,
-            String sourceTag,
-            boolean publishEntityWatchRegion
-    ) {
-        PortalViewPlacement placement = PortalFrameMath.placeCamera(
-                mainCamera.getPosition(),
-                new Quaternionf(mainCamera.rotation()),
-                instance.entrancePortal(),
-                instance.exitPortal()
-        );
+    private static void resetStencilMaskFrameDiagnosticFields(int renderTick) {
+        activePortalStencilRef = 0;
+        stencilBits = 0;
+        portalMaskFrameId = renderTick;
+        DIAGNOSTICS.resetStencilMaskFrame(PORTAL_MASK_DEPTH_MODE.name());
+    }
 
-        TextureTarget target = PortalSecondaryWorldRenderer.renderRegisteredSecondaryViewFromPose(
-                instance.viewContext(),
-                minecraft,
-                event,
-                placement.cameraPosition(),
-                placement.cameraRotation(),
-                publishEntityWatchRegion,
-                regionId,
-                PortalSecondaryWorldRenderer.secondaryEntitiesEnabledForPostUpdate(),
-                instance.entrancePortal(),
-                instance.exitPortal(),
-                regionId.toString(),
-                regionId,
-                sourceTag
+    private static void resetDirectFrameDiagnosticFields(int renderTick) {
+        stencilBits = 0;
+        directPortalDepthMode = DIRECT_PORTAL_DEPTH_MODE.name();
+        compositeFrameId = renderTick;
+        stencilSurvivedToLateStage = false;
+        DIAGNOSTICS.resetDirectFrame(
+                PORTAL_SECONDARY_ROTATION_MODE.name(),
+                STENCIL_MASK_AT_WORLD_STAGE
         );
-
-        PortalSecondaryWorldRenderer.secondaryEntityPassAttempted();
     }
 
 
@@ -1197,8 +1027,6 @@ public final class PortalDirectStencilRenderer {
             Quaternionf selectedRotation,
             SkyesightClipPlane directClipPlane,
             Matrix4f mainViewProjection,
-            String beforeDepthClearState,
-            String afterDepthClearState,
             String beforeTerrainState,
             int directStencilBits,
             int stencilRef
@@ -1310,27 +1138,26 @@ public final class PortalDirectStencilRenderer {
         ResourceKey<Level> targetDimension = registeredView == null ? null : registeredView.target().dimension();
         Minecraft minecraft = Minecraft.getInstance();
         DirectMainState state = DirectMainState.capture(minecraft);
-        directRenderAttempted = true;
+        DIAGNOSTICS.directRenderAttempted = true;
         if (stencilRef <= 0) {
             logInvalidPortalStencilRef(behaviorViewId, stencilRef);
-            directRenderSucceeded = false;
-            lastDirectRenderException = "invalid stencilRef " + stencilRef;
+            DIAGNOSTICS.directRenderSucceeded = false;
+            DIAGNOSTICS.lastDirectRenderException = "invalid stencilRef " + stencilRef;
             return;
         }
         activePortalStencilRef = stencilRef;
         int maskWriteRef = instance.renderConfig().stencilRef();
-        framebufferBeforeDirect = GL30.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
+        DIAGNOSTICS.framebufferBeforeDirect = GL30.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
 
         int directStencilBits = ensureMainTargetStencilBits();
-        boolean useExistingStencil = PORTAL_COMPOSITE_MODE == PortalCompositeMode.STENCIL_DIRECT_RENDER_LATE
-                && STENCIL_MASK_AT_WORLD_STAGE;
+        boolean useExistingStencil = STENCIL_MASK_AT_WORLD_STAGE;
         if (!instance.renderConfig().enabled() || !instance.renderConfig().rendersView()) {
             return;
         }
 
         if (!viewHasRenderableContent(instance.renderConfig())) {
-            directRenderSucceeded = true;
-            lastDirectRenderException = "";
+            DIAGNOSTICS.directRenderSucceeded = true;
+            DIAGNOSTICS.lastDirectRenderException = "";
             return;
         }
 
@@ -1350,15 +1177,15 @@ public final class PortalDirectStencilRenderer {
         SecondaryPortalCompositePass.StencilResult stencil;
 
         if (useExistingStencil) {
-            directRenderUsedExistingStencil = true;
+            DIAGNOSTICS.directRenderUsedExistingStencil = true;
             stencil = stencilSurvivedToLateStage
                     ? SecondaryPortalCompositePass.beginExistingStencilApertureRead(directStencilBits, stencilRef)
                     : new SecondaryPortalCompositePass.StencilResult(true, false, true, directStencilBits, "world-stage stencil mask missing");
         } else {
-            directRenderUsedExistingStencil = false;
-            directMaskStage = "AFTER_LEVEL";
-            apertureDrawUsedEventPoseStack = true;
-            apertureDrawUsedManualCameraMatrix = false;
+            DIAGNOSTICS.directRenderUsedExistingStencil = false;
+            DIAGNOSTICS.directMaskStage = "AFTER_LEVEL";
+            DIAGNOSTICS.apertureDrawUsedEventPoseStack = true;
+            DIAGNOSTICS.apertureDrawUsedManualCameraMatrix = false;
             stencil = SecondaryPortalCompositePass.beginStencilAperture(
                     event.getPoseStack(),
                     mainCamera,
@@ -1367,16 +1194,12 @@ public final class PortalDirectStencilRenderer {
             );
         }
 
-        stencilAttempted = stencil.attempted();
-        stencilSucceeded = stencil.succeeded();
-        stencilFallbackUsed = stencil.fallbackUsed();
         stencilBits = stencil.stencilBits();
-        lastStencilException = stencil.exception();
+        DIAGNOSTICS.recordStencilResult(stencil);
 
         if (!stencil.succeeded() || stencil.fallbackUsed()) {
-            directRenderFallbackUsed = true;
-            if (stencilBits <= 0 && !loggedStencilUnavailable) {
-                loggedStencilUnavailable = true;
+            DIAGNOSTICS.directRenderFallbackUsed = true;
+            if (stencilBits <= 0 && DIAGNOSTICS.shouldLogStencilUnavailable()) {
                 Skyesight.LOGGER.warn("[Skyesight] Portal direct stencil render unavailable; stencilBits=0");
             }
             return;
@@ -1385,8 +1208,8 @@ public final class PortalDirectStencilRenderer {
         try {
             beginPortalStencilReadOrThrow(directStencilBits, stencilRef);
             if (DIRECT_DISABLE_ALL_PORTAL_SUBPASSES_AFTER_MASK) {
-                directRenderSucceeded = true;
-                lastDirectRenderException = "";
+                DIAGNOSTICS.directRenderSucceeded = true;
+                DIAGNOSTICS.lastDirectRenderException = "";
                 SecondaryPortalCompositePass.restoreStencilState();
                 restoreMainStateAfterDirect(minecraft, state);
                 restorePortalViewportState(state);
@@ -1412,7 +1235,7 @@ public final class PortalDirectStencilRenderer {
                     exitRenderRotation,
                     projectionBasis
             );
-            boolean skySucceeded = renderDirectSkyIfEnabled(
+            renderDirectSkyIfEnabled(
                     event,
                     minecraft,
                     instance,
@@ -1426,9 +1249,9 @@ public final class PortalDirectStencilRenderer {
             );
             boolean renderSkyInCurrentTarget = directSkyEnabledForTerrainFrame(behaviorViewId, instance);
             if (!viewNeedsDirectPostSkyPass(instance.renderConfig())) {
-                directRenderSucceeded = true;
-                lastDirectRenderException = "";
-                instancesRendered++;
+                DIAGNOSTICS.directRenderSucceeded = true;
+                DIAGNOSTICS.lastDirectRenderException = "";
+                DIAGNOSTICS.instancesRendered++;
                 SecondaryPortalCompositePass.restoreStencilState();
                 restoreMainStateAfterDirect(minecraft, state);
                 restorePortalViewportState(state);
@@ -1438,12 +1261,12 @@ public final class PortalDirectStencilRenderer {
             if (!DIRECT_DISABLE_PORTAL_DEPTH_CLEAR) {
                 clearDirectPortalDepthIfEnabled();
             } else {
-                directPortalDepthClearRan = false;
+                DIAGNOSTICS.directPortalDepthClearRan = false;
             }
             if (DIRECT_SKY_MASK_ONLY) {
-                directRenderSucceeded = true;
-                lastDirectRenderException = "";
-                instancesRendered++;
+                DIAGNOSTICS.directRenderSucceeded = true;
+                DIAGNOSTICS.lastDirectRenderException = "";
+                DIAGNOSTICS.instancesRendered++;
                 return;
             }
 
@@ -1460,9 +1283,9 @@ public final class PortalDirectStencilRenderer {
                     || !DIRECT_STENCIL_RENDER_TERRAIN
                     || !DIRECT_RENDER_TERRAIN
                     || DIRECT_DISABLE_PORTAL_TERRAIN) {
-                directRenderSucceeded = true;
-                lastDirectRenderException = "";
-                instancesRendered++;
+                DIAGNOSTICS.directRenderSucceeded = true;
+                DIAGNOSTICS.lastDirectRenderException = "";
+                DIAGNOSTICS.instancesRendered++;
                 SecondaryPortalCompositePass.restoreStencilState();
                 restoreMainStateAfterDirect(minecraft, state);
                 restorePortalViewportState(state);
@@ -1470,8 +1293,8 @@ public final class PortalDirectStencilRenderer {
             }
 
             if (DIRECT_STENCIL_RENDER_TERRAIN) {
-                directTerrainRan = true;
-                directRenderUsedPortalContext = true;
+                DIAGNOSTICS.directTerrainRan = true;
+                DIAGNOSTICS.directRenderUsedPortalContext = true;
                 applyDirectDepthMode();
                 PortalScreenRect screenRect = computePortalScreenRect(
                         mainViewProjection,
@@ -1479,10 +1302,8 @@ public final class PortalDirectStencilRenderer {
                         minecraft.getWindow().getWidth(),
                         minecraft.getWindow().getHeight()
                 );
-                portalScreenRect = screenRect.toString();
-                portalViewportApplied = false;
-                portalScissorApplied = false;
-                portalViewportRestored = true;
+                DIAGNOSTICS.portalScreenRect = screenRect.toString();
+                DIAGNOSTICS.portalViewportRestored = true;
                 if (crossDimView && targetDimension != null) {
                     renderCrossDimPortalSlotsInSharedCompositor(
                             event,
@@ -1495,8 +1316,6 @@ public final class PortalDirectStencilRenderer {
                             selectedRotation,
                             directClipPlane,
                             mainViewProjection,
-                            "-",
-                            "-",
                             "-",
                             directStencilBits,
                             stencilRef
@@ -1543,32 +1362,24 @@ public final class PortalDirectStencilRenderer {
                     );
                 }
             }
-            directRenderSucceeded = true;
-            lastDirectRenderException = "";
-            anySecondaryTextureTargetBindDuringDirect =
-                    PortalSecondaryWorldRenderer.secondaryContextNonSecondaryTargetBindCount() > 0;
-            directRenderUnexpectedBind = PortalSecondaryWorldRenderer.secondaryContextLastNonSecondaryBind();
-            if (anySecondaryTextureTargetBindDuringDirect) {
-                directRenderSucceeded = false;
-                directRenderFailed = true;
-                lastDirectRenderException = "unexpected target bind " + directRenderUnexpectedBind;
-            }
-            instancesRendered++;
+            DIAGNOSTICS.directRenderSucceeded = true;
+            DIAGNOSTICS.lastDirectRenderException = "";
+            DIAGNOSTICS.recordSecondaryTargetBindObservation(
+                    PortalSecondaryWorldRenderer.secondaryContextNonSecondaryTargetBindCount(),
+                    PortalSecondaryWorldRenderer.secondaryContextLastNonSecondaryBind()
+            );
+            DIAGNOSTICS.instancesRendered++;
         } catch (RuntimeException exception) {
-            directRenderSucceeded = false;
-            directRenderFailed = true;
-            directRenderFallbackUsed = true;
-            lastDirectRenderException = exception.getClass().getSimpleName() + ": " + exception.getMessage();
+            DIAGNOSTICS.directRenderSucceeded = false;
+            DIAGNOSTICS.directRenderFailed = true;
+            DIAGNOSTICS.directRenderFallbackUsed = true;
+            DIAGNOSTICS.lastDirectRenderException = exception.getClass().getSimpleName() + ": " + exception.getMessage();
         } finally {
-            anySecondaryTextureTargetBindDuringDirect |=
-                    PortalSecondaryWorldRenderer.secondaryContextNonSecondaryTargetBindCount() > 0;
-            directRenderUnexpectedBind = PortalSecondaryWorldRenderer.secondaryContextLastNonSecondaryBind();
-            if (anySecondaryTextureTargetBindDuringDirect && directRenderSucceeded) {
-                directRenderSucceeded = false;
-                directRenderFailed = true;
-                lastDirectRenderException = "unexpected target bind " + directRenderUnexpectedBind;
-            }
-            framebufferAfterDirect = GL30.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
+            DIAGNOSTICS.accumulateSecondaryTargetBindObservation(
+                    PortalSecondaryWorldRenderer.secondaryContextNonSecondaryTargetBindCount(),
+                    PortalSecondaryWorldRenderer.secondaryContextLastNonSecondaryBind()
+            );
+            DIAGNOSTICS.framebufferAfterDirect = GL30.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
             restoreDirectDepthMode();
             SecondaryPortalCompositePass.restoreStencilState();
             restoreMainStateAfterDirect(minecraft, state);
@@ -1888,12 +1699,6 @@ public final class PortalDirectStencilRenderer {
         }
 
     }
-    private static boolean portalStencilReadActive(int stencilRef) {
-        return GL11.glIsEnabled(GL11.GL_STENCIL_TEST)
-                && GL11.glGetInteger(GL11.GL_STENCIL_FUNC) == GL11.GL_EQUAL
-                && GL11.glGetInteger(GL11.GL_STENCIL_REF) == stencilRef;
-    }
-
     private static boolean directEntityRegionEnabled(ResourceLocation viewId, PortalRenderView instance) {
         if (!DIRECT_RENDER_ENTITIES) {
             return false;
@@ -1969,30 +1774,20 @@ public final class PortalDirectStencilRenderer {
         }
 
         DirectSkyFillStateScope state = DirectSkyFillStateScope.capture();
-        String glError = "none";
         boolean drawn = false;
-        String skippedReason = "-";
-        DirectSkyCelestialResult celestial = DirectSkyCelestialResult.skipped();
         try {
             beginPortalStencilReadOrThrow(stencilBits, stencilRef);
             if (DIRECT_SKY_MODE == DirectSkyMode.CLONED_VANILLA_CELESTIAL) {
                 if (shouldSkipStickSkyComposite(viewId)) {
-                    skippedReason = "stick sky composite skipped for flash test/warmup";
                     return false;
                 }
-                celestial = renderDirectCapturedSkyComposite(
+                drawn = renderDirectCapturedSkyComposite(
                         event,
                         minecraft,
-                        instance,
                         viewId,
-                        portalName,
                         stencilRef,
                         directPose
                 );
-                drawn = celestial.drawn();
-                if (!drawn) {
-                    skippedReason = celestial.skippedReason();
-                }
             } else {
                 Vec3 color = directPortalSkyColor(event, minecraft, directPose);
                 SecondaryPortalCompositePass.fillStencilApertureColor(
@@ -2001,13 +1796,11 @@ public final class PortalDirectStencilRenderer {
                         (float) color.z(),
                         1.0F
                 );
-                celestial = DirectSkyCelestialResult.simpleFill(true);
                 drawn = true;
             }
-            glError = drainGlErrors();
+            drainGlErrors();
         } catch (RuntimeException exception) {
-            glError = drainGlErrors();
-            skippedReason = exception.getClass().getSimpleName() + ": " + exception.getMessage();
+            drainGlErrors();
         } finally {
             boolean stateRestored = state.restore();
             if (!stateRestored) {
@@ -2038,23 +1831,13 @@ public final class PortalDirectStencilRenderer {
         );
     }
 
-    private static DirectSkyCelestialResult renderDirectCapturedSkyComposite(
+    private static boolean renderDirectCapturedSkyComposite(
             RenderLevelStageEvent event,
             Minecraft minecraft,
-            PortalRenderView instance,
             ResourceLocation viewId,
-            String portalName,
             int stencilRef,
             DirectStencilPortalMath.PortalCameraPose directPose
     ) {
-        float partialTick = event.getPartialTick().getGameTimeDeltaPartialTick(true);
-        ClientLevel level = minecraft.level;
-        int moonPhase = level == null ? -1 : level.getMoonPhase();
-        float rainLevel = level == null ? 0.0F : level.getRainLevel(partialTick);
-        float thunderLevel = level == null ? 0.0F : level.getThunderLevel(partialTick);
-        float starBrightness = level == null ? 0.0F : level.getStarBrightness(partialTick) * (1.0F - rainLevel);
-        String dimension = level == null ? "-" : String.valueOf(level.dimension().location());
-        String effects = level == null ? "-" : level.effects().skyType().name();
         String captureKey = skyCaptureKey(viewId);
         PortalSkyCaptureManager.Capture capture = PORTAL_SKY_CAPTURE_MANAGER.capture(captureKey);
         if (capture == null || !capture.validForFrame(event.getRenderTick())) {
@@ -2062,23 +1845,12 @@ public final class PortalDirectStencilRenderer {
         }
         boolean frameMatches = capture != null && capture.validForFrame(event.getRenderTick());
         int captureTextureId = capture == null ? -1 : capture.textureId();
-        String captureSummary = capture == null ? "missing capture key=" + captureKey : capture.summary();
         boolean textureReady = captureTextureId > 0;
-        boolean stencilOk = false;
         boolean drawn = false;
-        boolean fallbackDrawn = false;
-        String glAfterComposite = "n/a";
-        String skippedReason = "-";
 
-        if (!DIRECT_SKY_CAPTURE_COMPOSITE_ENABLED) {
-            skippedReason = "capture composite disabled";
-        } else if (!frameMatches || !textureReady) {
-            skippedReason = "capture unavailable capture='"
-                    + captureSummary
-                    + "' frame="
-                    + event.getRenderTick();
-        } else {
+        if (DIRECT_SKY_CAPTURE_COMPOSITE_ENABLED && frameMatches && textureReady) {
             try {
+                boolean stencilOk;
                 if (DIRECT_SKY_CAPTURE_BYPASS_STENCIL) {
                     GL11.glDisable(GL11.GL_STENCIL_TEST);
                     stencilOk = true;
@@ -2086,9 +1858,7 @@ public final class PortalDirectStencilRenderer {
                     stencilOk = directStencilReadOk(stencilRef);
                 }
 
-                if (!stencilOk) {
-                    skippedReason = "stencil read failed for captured sky";
-                } else {
+                if (stencilOk) {
                     RenderSystem.colorMask(true, true, true, true);
                     RenderSystem.disableDepthTest();
                     RenderSystem.depthMask(false);
@@ -2103,13 +1873,11 @@ public final class PortalDirectStencilRenderer {
                     RenderSystem.setShaderTexture(0, captureTextureId);
                     RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
                     SecondaryPortalCompositePass.drawFullscreenTexture(captureTextureId);
-                    glAfterComposite = drainGlErrors();
+                    drainGlErrors();
                     drawn = true;
-                    skippedReason = "-";
                 }
             } catch (RuntimeException exception) {
-                glAfterComposite = drainGlErrors();
-                skippedReason = exception.getClass().getSimpleName() + ": " + exception.getMessage();
+                drainGlErrors();
             }
         }
 
@@ -2123,66 +1891,13 @@ public final class PortalDirectStencilRenderer {
                         (float) color.z(),
                         1.0F
                 );
-                glAfterComposite = drainGlErrors();
+                drainGlErrors();
                 drawn = true;
-                fallbackDrawn = true;
             } catch (RuntimeException exception) {
-                glAfterComposite = drainGlErrors();
-                skippedReason = "fallback failed " + exception.getClass().getSimpleName() + ": " + exception.getMessage();
+                drainGlErrors();
             }
         }
-        return new DirectSkyCelestialResult(
-                drawn,
-                drawn,
-                false,
-                false,
-                false,
-                false,
-                moonPhase,
-                starBrightness,
-                rainLevel,
-                thunderLevel,
-                dimension,
-                effects,
-                skippedReason,
-                fallbackDrawn ? "captureFallbackSimpleColor" : "capturedSkyTextureComposite",
-                currentViewportString(),
-                stencilOk,
-                false,
-                false,
-                false,
-                glAfterComposite,
-                "n/a",
-                "n/a",
-                "n/a",
-                false,
-                false,
-                0,
-                0,
-                false,
-                textureReady,
-                drawn,
-                "fullscreen",
-                skippedReason,
-                false,
-                false,
-                false,
-                "n/a",
-                0,
-                false,
-                "captured sky texture",
-                SkyesightIrisCompat.isIrisLoaded(),
-                SkyesightIrisCompat.isShaderPackInUse(),
-                false,
-                0,
-                false,
-                stencilOk,
-                "n/a",
-                true,
-                true,
-                glAfterComposite,
-                false
-        );
+        return drawn;
     }
 
 
@@ -2195,205 +1910,6 @@ public final class PortalDirectStencilRenderer {
                 && !stencil.fallbackUsed()
                 && currentStencilRef() == stencilRef;
     }
-
-    private static String currentViewportString() {
-        int[] viewport = currentViewport();
-        return viewport[0] + "," + viewport[1] + "," + viewport[2] + "x" + viewport[3];
-    }
-
-
-    private static DirectSkyScreenCelestialResult renderDirectSkyScreenCelestials(
-            ClientLevel level,
-            Quaternionf selectedRotation,
-            float partialTick,
-            int moonPhase,
-            float rainFade,
-            int stencilRef
-    ) {
-        boolean sunDrawn = false;
-        boolean moonDrawn = false;
-        boolean sunTextureBound = false;
-        boolean moonTextureBound = false;
-        int sunVertices = 0;
-        int moonVertices = 0;
-        String sunScreen = "n/a";
-        String moonScreen = "n/a";
-        String sunSkippedReason = "-";
-        String glAfterSun = "n/a";
-        String glAfterMoon = "n/a";
-        boolean sunStencilOk = false;
-        boolean moonStencilOk = false;
-
-        if (!DIRECT_SKY_DRAW_SUN && !DIRECT_SKY_DRAW_MOON) {
-            return new DirectSkyScreenCelestialResult(
-                    false,
-                    false,
-                    false,
-                    false,
-                    0,
-                    0,
-                    sunScreen,
-                    moonScreen,
-                    "sun/moon disabled",
-                    glAfterSun,
-                    glAfterMoon,
-                    false,
-                    false,
-                    "screen position_tex"
-            );
-        }
-
-        Minecraft minecraft = Minecraft.getInstance();
-        int width = minecraft.getWindow().getWidth();
-        int height = minecraft.getWindow().getHeight();
-        Matrix4f previousProjection = new Matrix4f(RenderSystem.getProjectionMatrix());
-        VertexSorting previousVertexSorting = RenderSystem.getVertexSorting();
-        var modelViewStack = RenderSystem.getModelViewStack();
-        modelViewStack.pushMatrix();
-
-        try {
-            Matrix4f overlayProjection = new Matrix4f().setOrtho(
-                    0.0F,
-                    width,
-                    height,
-                    0.0F,
-                    -1.0F,
-                    1.0F
-            );
-            RenderSystem.setProjectionMatrix(overlayProjection, VertexSorting.ORTHOGRAPHIC_Z);
-            modelViewStack.identity();
-            RenderSystem.applyModelViewMatrix();
-            RenderSystem.colorMask(true, true, true, true);
-            RenderSystem.disableDepthTest();
-            RenderSystem.depthMask(false);
-            RenderSystem.enableBlend();
-            RenderSystem.disableCull();
-            RenderSystem.blendFuncSeparate(
-                    SourceFactor.SRC_ALPHA,
-                    DestFactor.ONE,
-                    SourceFactor.ONE,
-                    DestFactor.ZERO
-            );
-            RenderSystem.setShader(GameRenderer::getPositionTexShader);
-            RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, rainFade);
-
-            ScreenSkyPosition sunPosition = projectSkyDirectionToScreen(sunDirection(level, partialTick), selectedRotation, width, height);
-            ScreenSkyPosition moonPosition = projectSkyDirectionToScreen(sunDirection(level, partialTick).scale(-1.0D), selectedRotation, width, height);
-
-            if (DIRECT_SKY_DRAW_SUN) {
-                sunScreen = formatScreenPosition(sunPosition);
-                if (sunPosition.visible()) {
-                    sunStencilOk = directStencilReadOk(stencilRef);
-                    RenderSystem.setShader(GameRenderer::getPositionTexShader);
-                    RenderSystem.setShaderTexture(0, DIRECT_SKY_SUN_LOCATION);
-                    sunTextureBound = true;
-                    sunVertices = drawScreenTexturedQuad(sunPosition.x(), sunPosition.y(), 96.0F, 96.0F, 0.0F, 0.0F, 1.0F, 1.0F);
-                    sunDrawn = sunVertices == 4;
-                } else {
-                    sunSkippedReason = sunPosition.reason();
-                }
-                glAfterSun = drainGlErrors();
-            }
-
-            if (DIRECT_SKY_DRAW_MOON) {
-                moonScreen = formatScreenPosition(moonPosition);
-                if (moonPosition.visible()) {
-                    moonStencilOk = directStencilReadOk(stencilRef);
-                    RenderSystem.setShader(GameRenderer::getPositionTexShader);
-                    RenderSystem.setShaderTexture(0, DIRECT_SKY_MOON_LOCATION);
-                    moonTextureBound = true;
-                    int phaseX = moonPhase % 4;
-                    int phaseY = moonPhase / 4 % 2;
-                    float u0 = (float) phaseX / 4.0F;
-                    float v0 = (float) phaseY / 2.0F;
-                    float u1 = (float) (phaseX + 1) / 4.0F;
-                    float v1 = (float) (phaseY + 1) / 2.0F;
-                    moonVertices = drawScreenTexturedQuad(moonPosition.x(), moonPosition.y(), 80.0F, 80.0F, u1, v1, u0, v0);
-                    moonDrawn = moonVertices == 4;
-                }
-                glAfterMoon = drainGlErrors();
-            }
-        } finally {
-            modelViewStack.popMatrix();
-            RenderSystem.applyModelViewMatrix();
-            RenderSystem.setProjectionMatrix(previousProjection, previousVertexSorting);
-            RenderSystem.defaultBlendFunc();
-            RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-        }
-
-        return new DirectSkyScreenCelestialResult(
-                sunDrawn,
-                moonDrawn,
-                sunTextureBound,
-                moonTextureBound,
-                sunVertices,
-                moonVertices,
-                sunScreen,
-                moonScreen,
-                sunSkippedReason,
-                glAfterSun,
-                glAfterMoon,
-                sunStencilOk,
-                moonStencilOk,
-                "screen position_tex"
-        );
-    }
-
-    private static int drawScreenTexturedQuad(
-            float centerX,
-            float centerY,
-            float width,
-            float height,
-            float u0,
-            float v0,
-            float u1,
-            float v1
-    ) {
-        float halfWidth = width * 0.5F;
-        float halfHeight = height * 0.5F;
-        Matrix4f matrix = new Matrix4f();
-        BufferBuilder buffer = Tesselator.getInstance().begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
-        buffer.addVertex(matrix, centerX - halfWidth, centerY + halfHeight, 0.0F).setUv(u0, v0);
-        buffer.addVertex(matrix, centerX + halfWidth, centerY + halfHeight, 0.0F).setUv(u1, v0);
-        buffer.addVertex(matrix, centerX + halfWidth, centerY - halfHeight, 0.0F).setUv(u1, v1);
-        buffer.addVertex(matrix, centerX - halfWidth, centerY - halfHeight, 0.0F).setUv(u0, v1);
-        BufferUploader.drawWithShader(buffer.buildOrThrow());
-        return 4;
-    }
-
-    private static Vec3 sunDirection(ClientLevel level, float partialTick) {
-        float angle = level.getTimeOfDay(partialTick) * ((float) Math.PI * 2.0F);
-        return new Vec3(0.0D, Math.sin(angle), Math.cos(angle)).normalize();
-    }
-
-    private static ScreenSkyPosition projectSkyDirectionToScreen(
-            Vec3 worldDirection,
-            Quaternionf selectedRotation,
-            int width,
-            int height
-    ) {
-        Vector3f local = new Vector3f((float) worldDirection.x(), (float) worldDirection.y(), (float) worldDirection.z());
-        local.rotate(new Quaternionf(selectedRotation).conjugate());
-        float z = Math.max(local.z(), 0.05F);
-        if (local.z() <= 0.02F) {
-            return new ScreenSkyPosition(0.0F, 0.0F, false, "behind camera");
-        }
-
-        float scale = Math.min(width, height) * 0.45F;
-        float x = width * 0.5F + (local.x() / z) * scale;
-        float y = height * 0.5F - (local.y() / z) * scale;
-        if (x < -width || x > width * 2.0F || y < -height || y > height * 2.0F) {
-            return new ScreenSkyPosition(x, y, false, "outside screen");
-        }
-
-        return new ScreenSkyPosition(x, y, true, "-");
-    }
-
-    private static String formatScreenPosition(ScreenSkyPosition position) {
-        return String.format(Locale.ROOT, "%.1f,%.1f", position.x(), position.y());
-    }
-
-
 
     private static void beginPortalStencilReadOrThrow(int stencilBits, int stencilRef) {
         SecondaryPortalCompositePass.StencilResult stencil =
@@ -2432,192 +1948,6 @@ public final class PortalDirectStencilRenderer {
     }
 
 
-
-    private record DirectSkyScreenCelestialResult(
-            boolean sunDrawn,
-            boolean moonDrawn,
-            boolean sunTextureBound,
-            boolean moonTextureBound,
-            int sunVertices,
-            int moonVertices,
-            String sunScreen,
-            String moonScreen,
-            String sunSkippedReason,
-            String glAfterSun,
-            String glAfterMoon,
-            boolean sunStencilOk,
-            boolean moonStencilOk,
-            String shaderPath
-    ) {}
-
-    private record ScreenSkyPosition(float x, float y, boolean visible, String reason) {}
-
-    private record DirectSkyCelestialResult(
-            boolean drawn,
-            boolean backgroundDrawn,
-            boolean sunDrawn,
-            boolean moonDrawn,
-            boolean starsDrawn,
-            boolean sunriseDrawn,
-            int moonPhase,
-            float starBrightness,
-            float rainLevel,
-            float thunderLevel,
-            String targetDimension,
-            String effects,
-            String skippedReason,
-            String projectionSource,
-            String viewport,
-            boolean beforeSunStencilOk,
-            boolean beforeMoonStencilOk,
-            boolean beforeStarsStencilOk,
-            boolean proofQuadDrawn,
-            String glAfterBackground,
-            String glAfterSun,
-            String glAfterMoon,
-            String glAfterStars,
-            boolean screenProofSunDrawn,
-            boolean vanillaStyleProofSunDrawn,
-            int sunVertexCount,
-            int moonVertexCount,
-            boolean sunAttempted,
-            boolean sunTextureBound,
-            boolean sunDrawCalled,
-            String sunScreen,
-            String sunSkippedReason,
-            boolean moonAttempted,
-            boolean moonTextureBound,
-            boolean moonDrawCalled,
-            String moonScreen,
-            int starDrawCalls,
-            boolean starBufferNonNull,
-            String shaderPath,
-            boolean irisLoaded,
-            boolean shaderPackActive,
-            boolean proofPathEntered,
-            int proofVertices,
-            boolean proofDrawWithShaderCalled,
-            boolean proofStencilBeforeDrawOk,
-            String proofColorMask,
-            boolean proofDepthTestDisabled,
-            boolean proofBlendDisabled,
-            String proofGlAfterDraw,
-            boolean proofReturnedBeforeBackground
-    ) {
-        private static DirectSkyCelestialResult skipped() {
-            return skip("-");
-        }
-
-        private static DirectSkyCelestialResult skip(String reason) {
-            return new DirectSkyCelestialResult(
-                    false,
-                    false,
-                    false,
-                    false,
-                    false,
-                    false,
-                    -1,
-                    0.0F,
-                    0.0F,
-                    0.0F,
-                    "-",
-                    "-",
-                    reason,
-                    "n/a",
-                    "n/a",
-                    false,
-                    false,
-                    false,
-                    false,
-                    "n/a",
-                    "n/a",
-                    "n/a",
-                    "n/a",
-                    false,
-                    false,
-                    0,
-                    0,
-                    false,
-                    false,
-                    false,
-                    "n/a",
-                    "-",
-                    false,
-                    false,
-                    false,
-                    "n/a",
-                    0,
-                    false,
-                    "n/a",
-                    false,
-                    false,
-                    false,
-                    0,
-                    false,
-                    false,
-                    "n/a",
-                    false,
-                    false,
-                    "n/a",
-                    false
-            );
-        }
-
-        private static DirectSkyCelestialResult simpleFill(boolean drawn) {
-            return new DirectSkyCelestialResult(
-                    drawn,
-                    drawn,
-                    false,
-                    false,
-                    false,
-                    false,
-                    -1,
-                    0.0F,
-                    0.0F,
-                    0.0F,
-                    "-",
-                    "-",
-                    drawn ? "-" : "simple fill skipped",
-                    "screenStencilFill",
-                    "n/a",
-                    false,
-                    false,
-                    false,
-                    false,
-                    "n/a",
-                    "n/a",
-                    "n/a",
-                    "n/a",
-                    false,
-                    false,
-                    0,
-                    0,
-                    false,
-                    false,
-                    false,
-                    "n/a",
-                    "-",
-                    false,
-                    false,
-                    false,
-                    "n/a",
-                    0,
-                    false,
-                    "screen position_color",
-                    SkyesightIrisCompat.isIrisLoaded(),
-                    SkyesightIrisCompat.isShaderPackInUse(),
-                    false,
-                    0,
-                    false,
-                    false,
-                    "n/a",
-                    false,
-                    false,
-                    "n/a",
-                    false
-            );
-        }
-    }
 
     private static final class DirectSkyFillStateScope {
         private final int framebuffer;
@@ -2799,19 +2129,19 @@ public final class PortalDirectStencilRenderer {
     }
 
     private static void flushMainBuffersBeforeMaskIfEnabled(Minecraft minecraft) {
-        portalMaskBufferFlushAttempted = false;
-        portalMaskBufferFlushException = "";
+        DIAGNOSTICS.portalMaskBufferFlushAttempted = false;
+        DIAGNOSTICS.portalMaskBufferFlushException = "";
 
         if (!FLUSH_MAIN_BUFFERS_BEFORE_PORTAL_MASK) {
             return;
         }
 
-        portalMaskBufferFlushAttempted = true;
+        DIAGNOSTICS.portalMaskBufferFlushAttempted = true;
 
         try {
             minecraft.renderBuffers().bufferSource().endBatch();
         } catch (RuntimeException exception) {
-            portalMaskBufferFlushException = exception.getClass().getSimpleName() + ": " + exception.getMessage();
+            DIAGNOSTICS.portalMaskBufferFlushException = exception.getClass().getSimpleName() + ": " + exception.getMessage();
         }
     }
 
@@ -2832,14 +2162,14 @@ public final class PortalDirectStencilRenderer {
 
 
     private static void clearDirectPortalDepthIfEnabled() {
-        directPortalDepthClearRan = false;
+        DIAGNOSTICS.directPortalDepthClearRan = false;
 
         if (DIRECT_PORTAL_DEPTH_MODE != DirectPortalDepthMode.CLEAR_PORTAL_DEPTH_THEN_LEQUAL) {
             return;
         }
 
         SecondaryPortalCompositePass.clearStencilApertureDepthToFar();
-        directPortalDepthClearRan = true;
+        DIAGNOSTICS.directPortalDepthClearRan = true;
     }
 
     private static PortalScreenRect computePortalScreenRect(
@@ -2874,7 +2204,7 @@ public final class PortalDirectStencilRenderer {
                 topLeftWorld
         );
         if (bottomLeft == null || bottomRight == null || topRight == null || topLeft == null) {
-            portalCornerNdc = "invalid";
+            DIAGNOSTICS.portalCornerNdc = "invalid";
             return PortalScreenRect.invalid();
         }
 
@@ -2883,7 +2213,7 @@ public final class PortalDirectStencilRenderer {
         float minY = Math.min(Math.min(bottomLeft.y, bottomRight.y), Math.min(topRight.y, topLeft.y));
         float maxY = Math.max(Math.max(bottomLeft.y, bottomRight.y), Math.max(topRight.y, topLeft.y));
 
-        portalCornerNdc = String.format(
+        DIAGNOSTICS.portalCornerNdc = String.format(
                 Locale.ROOT,
                 "bl %.2f,%.2f br %.2f,%.2f tr %.2f,%.2f tl %.2f,%.2f",
                 bottomLeft.x,
@@ -2984,24 +2314,6 @@ public final class PortalDirectStencilRenderer {
 
 
 
-    private static String summarizeMatrix(Matrix4f matrix) {
-        int hash = 1;
-
-        for (int column = 0; column < 4; column++) {
-            for (int row = 0; row < 4; row++) {
-                hash = 31 * hash + Float.floatToIntBits(matrix.get(column, row));
-            }
-        }
-
-        return String.format(Locale.ROOT, "%08x", hash);
-    }
-
-    private static String yesNo(boolean value) {
-        return value ? "yes" : "no";
-    }
-
-
-
     private static ProjectionBasis projectionBasis(PortalFrame exitPortal) {
         Vec3 projectionRight = PortalSecondaryWorldRenderer.directPortalProjectionHandedness()
                 .equals("UNFLIPPED_RIGHT")
@@ -3028,22 +2340,6 @@ public final class PortalDirectStencilRenderer {
         return rotation.getNormalizedRotation(new Quaternionf()).normalize();
     }
 
-    private static String formatVec3(Vec3 position) {
-        return String.format(
-                Locale.ROOT,
-                "%.2f,%.2f,%.2f",
-                position.x(),
-                position.y(),
-                position.z()
-        );
-    }
-
-    private static String shortId(ResourceLocation id) {
-        return id == null ? "-" : id.getPath();
-    }
-
-
-
     private static void restorePortalViewportState(DirectMainState state) {
         RenderSystem.disableScissor();
         RenderSystem.viewport(
@@ -3052,13 +2348,13 @@ public final class PortalDirectStencilRenderer {
                 state.viewport()[2],
                 state.viewport()[3]
         );
-        portalViewportRestored = true;
+        DIAGNOSTICS.portalViewportRestored = true;
     }
 
     private static void applyDirectDepthMode() {
-        beforeDirectDepthFunc = GL11.glGetInteger(GL11.GL_DEPTH_FUNC);
-        beforeDirectDepthMask = GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK);
-        directPortalDepthClearRan = false;
+        DIAGNOSTICS.beforeDirectDepthFunc = GL11.glGetInteger(GL11.GL_DEPTH_FUNC);
+        DIAGNOSTICS.beforeDirectDepthMask = GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK);
+        DIAGNOSTICS.directPortalDepthClearRan = false;
 
         switch (DIRECT_PORTAL_DEPTH_MODE) {
             case DISABLE_DEPTH_TEST -> {
@@ -3071,7 +2367,7 @@ public final class PortalDirectStencilRenderer {
                 RenderSystem.depthMask(false);
             }
             case CLEAR_PORTAL_DEPTH_THEN_LEQUAL -> {
-                directPortalDepthClearRan = false;
+                DIAGNOSTICS.directPortalDepthClearRan = false;
                 RenderSystem.enableDepthTest();
                 RenderSystem.depthFunc(GL11.GL_LEQUAL);
                 RenderSystem.depthMask(true);
@@ -3118,25 +2414,25 @@ public final class PortalDirectStencilRenderer {
                     state.viewport()[3]
             );
 
-            afterDirectStencilEnabled = GL11.glIsEnabled(GL11.GL_STENCIL_TEST);
-            afterDirectColorMaskRestored = true;
-            afterDirectDepthFunc = GL11.glGetInteger(GL11.GL_DEPTH_FUNC);
-            afterDirectDepthMask = GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK);
-            afterDirectProjectionRestored = matricesMatch(RenderSystem.getProjectionMatrix(), state.projection());
-            afterDirectModelViewRestored = true;
-            afterDirectFramebufferRestored = GL30.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING) == minecraft.getMainRenderTarget().frameBufferId;
+            DIAGNOSTICS.afterDirectStencilEnabled = GL11.glIsEnabled(GL11.GL_STENCIL_TEST);
+            DIAGNOSTICS.afterDirectColorMaskRestored = true;
+            DIAGNOSTICS.afterDirectDepthFunc = GL11.glGetInteger(GL11.GL_DEPTH_FUNC);
+            DIAGNOSTICS.afterDirectDepthMask = GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK);
+            DIAGNOSTICS.afterDirectProjectionRestored = matricesMatch(RenderSystem.getProjectionMatrix(), state.projection());
+            DIAGNOSTICS.afterDirectModelViewRestored = true;
+            DIAGNOSTICS.afterDirectFramebufferRestored = GL30.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING) == minecraft.getMainRenderTarget().frameBufferId;
             int[] viewport = currentViewport();
-            afterDirectViewportRestored = viewport[0] == state.viewport()[0]
+            DIAGNOSTICS.afterDirectViewportRestored = viewport[0] == state.viewport()[0]
                     && viewport[1] == state.viewport()[1]
                     && viewport[2] == state.viewport()[2]
                     && viewport[3] == state.viewport()[3];
-            lastStateRestoreException = "";
+            DIAGNOSTICS.lastStateRestoreException = "";
         } catch (RuntimeException exception) {
-            afterDirectProjectionRestored = false;
-            afterDirectModelViewRestored = false;
-            afterDirectFramebufferRestored = false;
-            afterDirectViewportRestored = false;
-            lastStateRestoreException = exception.getClass().getSimpleName() + ": " + exception.getMessage();
+            DIAGNOSTICS.afterDirectProjectionRestored = false;
+            DIAGNOSTICS.afterDirectModelViewRestored = false;
+            DIAGNOSTICS.afterDirectFramebufferRestored = false;
+            DIAGNOSTICS.afterDirectViewportRestored = false;
+            DIAGNOSTICS.lastStateRestoreException = exception.getClass().getSimpleName() + ": " + exception.getMessage();
         }
     }
 
@@ -3144,15 +2440,6 @@ public final class PortalDirectStencilRenderer {
         int[] viewport = new int[4];
         GL11.glGetIntegerv(GL11.GL_VIEWPORT, viewport);
         return viewport;
-    }
-
-    private static String currentColorMaskString() {
-        ByteBuffer buffer = ByteBuffer.allocateDirect(4);
-        GL11.glGetBooleanv(GL11.GL_COLOR_WRITEMASK, buffer);
-        return (buffer.get(0) != 0 ? "1" : "0")
-                + (buffer.get(1) != 0 ? "1" : "0")
-                + (buffer.get(2) != 0 ? "1" : "0")
-                + (buffer.get(3) != 0 ? "1" : "0");
     }
 
     private static boolean matricesMatch(Matrix4f left, Matrix4f right) {
@@ -3211,33 +2498,8 @@ public final class PortalDirectStencilRenderer {
 
     private record ProjectionBasis(Vec3 right, Vec3 up, Vec3 forward) {}
 
-    private static Quaternionf rotationFromYawPitchRoll(float yawDegrees, float pitchDegrees, float rollDegrees) {
-        return new Quaternionf()
-                .rotateY((float) Math.toRadians(yawDegrees))
-                .rotateX((float) Math.toRadians(pitchDegrees))
-                .rotateZ((float) Math.toRadians(rollDegrees));
-    }
-
-    private static String portalCoordinateLabel(int index) {
-        List<RegisteredPortalView> portals = SkyesightPortalApi.getAllPortals();
-        if (index < 0 || index >= portals.size()) {
-            return "n/a";
-        }
-        RegisteredPortalView view = portals.get(index);
-        Vec3 pos = view.source().center();
-
-        return String.format(
-                Locale.ROOT,
-                "%s: %.2f, %.2f, %.2f",
-                view.id(),
-                pos.x(),
-                pos.y(),
-                pos.z()
-        );
-    }
-
     public static int instancesRendered() {
-        return instancesRendered;
+        return DIAGNOSTICS.instancesRendered;
     }
 
     public static boolean scheduleDirectPortalSodiumBlockUpdate(BlockPos pos) {
@@ -3476,34 +2738,21 @@ public final class PortalDirectStencilRenderer {
     }
 
     public static String lastDirectRenderException() {
-        return lastDirectRenderException;
+        return DIAGNOSTICS.lastDirectRenderException;
     }
 
     public static boolean farPortalRenderBlockEntities() {
         return FAR_PORTAL_RENDER_BLOCK_ENTITIES;
     }
 
-    private enum PortalCompositeMode {
-        WORLD_TEXTURED_QUAD,
-        STENCIL_SCREEN_TEXTURE,
-        STENCIL_DIRECT_RENDER,
-        STENCIL_DIRECT_RENDER_LATE
-    }
-
     private enum DirectSkyMode {
         SIMPLE_FILL,
-        CLONED_VANILLA_CELESTIAL,
-        CLONED_SKY,
-        VANILLA_SKY_NO_CLEAR,
-        VANILLA_OR_HOOKED_SKY,
-        VANILLA_COMPONENTS_NO_CLEAR,
-        REAL_LEVEL_RENDERER_SKY_NO_CLEAR
+        CLONED_VANILLA_CELESTIAL
     }
 
     private enum DirectPortalRenderDebugMode {
         SOLID_COLOR_ONLY,
-        TERRAIN_NORMAL_PERSPECTIVE,
-        TERRAIN_PLUS_SKY_NORMAL_PERSPECTIVE
+        TERRAIN_NORMAL_PERSPECTIVE
     }
 
     private enum DirectPortalDepthMode {
@@ -3511,12 +2760,6 @@ public final class PortalDirectStencilRenderer {
         ALWAYS_NO_WRITE,
         CLEAR_PORTAL_DEPTH_THEN_LEQUAL,
         RESPECT_MAIN_DEPTH
-    }
-
-    private enum DirectPortalApertureClearMode {
-        NONE,
-        SOLID_COLOR,
-        SKY_PASS
     }
 
     private enum PortalMaskDepthMode {

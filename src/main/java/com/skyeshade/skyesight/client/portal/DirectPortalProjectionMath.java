@@ -5,8 +5,6 @@ import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 
-import java.util.Locale;
-
 /**
  * Direct-stencil portal projection diagnostics.
  *
@@ -29,11 +27,7 @@ public final class DirectPortalProjectionMath {
         ProjectedQuad entrance = projectWorldPortal(mainViewProjection, entrancePortal);
 
         if (!entrance.valid()) {
-            return Result.invalid(
-                    "entrance projection invalid",
-                    entrance,
-                    ProjectedQuad.invalid()
-            );
+            return Result.invalid();
         }
 
         double[] squareToEntranceHomography = homography(
@@ -57,18 +51,7 @@ public final class DirectPortalProjectionMath {
 
         return new Result(
                 best.valid(),
-                best.reason(),
-                best.correctionMatrix(),
-                best.correctedProjection(),
-                entrance,
-                best.correctedExitNdc(),
-                best.cornerError(),
-                best.baseExitNdc(),
-                best.direction(),
-                best.multiplicationOrder(),
-                best.determinant(),
-                best.inverseDeterminant(),
-                best.correctedArea()
+                best.correctedProjection()
         );
     }
 
@@ -80,66 +63,38 @@ public final class DirectPortalProjectionMath {
             double[] squareToEntranceHomography,
             double[] entranceToSquareHomography
     ) {
-        ProjectedQuad baseExitNdc = projectExitPortal(
-                baseProjection,
-                secondaryCameraPosition,
-                PortalFrameMath.portalRenderRotation(exitPortal),
-                exitPortal
-        );
-        Candidate best = Candidate.invalid("no candidate", baseProjection, baseExitNdc);
-        double squareToEntranceDet = determinant(squareToEntranceHomography);
-        double entranceToSquareDet = determinant(entranceToSquareHomography);
+        Candidate best = Candidate.invalid(baseProjection);
         Candidate[] candidates = new Candidate[] {
                 evaluateCandidate(
-                        "FULL_TO_ENTRANCE",
-                        "H * P",
                         squareToEntranceHomography,
-                        squareToEntranceDet,
-                        entranceToSquareDet,
                         baseProjection,
                         secondaryCameraPosition,
                         exitPortal,
                         entrance,
-                        baseExitNdc,
                         true
                 ),
                 evaluateCandidate(
-                        "FULL_TO_ENTRANCE",
-                        "P * H",
                         squareToEntranceHomography,
-                        squareToEntranceDet,
-                        entranceToSquareDet,
                         baseProjection,
                         secondaryCameraPosition,
                         exitPortal,
                         entrance,
-                        baseExitNdc,
                         false
                 ),
                 evaluateCandidate(
-                        "ENTRANCE_TO_FULL",
-                        "Hinv * P",
                         entranceToSquareHomography,
-                        entranceToSquareDet,
-                        squareToEntranceDet,
                         baseProjection,
                         secondaryCameraPosition,
                         exitPortal,
                         entrance,
-                        baseExitNdc,
                         true
                 ),
                 evaluateCandidate(
-                        "ENTRANCE_TO_FULL",
-                        "P * Hinv",
                         entranceToSquareHomography,
-                        entranceToSquareDet,
-                        squareToEntranceDet,
                         baseProjection,
                         secondaryCameraPosition,
                         exitPortal,
                         entrance,
-                        baseExitNdc,
                         false
                 )
         };
@@ -160,20 +115,15 @@ public final class DirectPortalProjectionMath {
                 lowestError = candidate;
             }
         }
-        return lowestError.withInvalidReason("no valid correction; best failed " + lowestError.reason());
+        return lowestError;
     }
 
     private static Candidate evaluateCandidate(
-            String direction,
-            String multiplicationOrder,
             double[] homography,
-            double determinant,
-            double inverseDeterminant,
             Matrix4f baseProjection,
             Vec3 secondaryCameraPosition,
             PortalFrame exitPortal,
             ProjectedQuad entrance,
-            ProjectedQuad baseExitNdc,
             boolean preMultiply
     ) {
         Matrix4f correction = homographyToClipMatrix(homography);
@@ -190,34 +140,16 @@ public final class DirectPortalProjectionMath {
         float error = correctedExitNdc.valid()
                 ? entrance.maxXyError(correctedExitNdc)
                 : Float.POSITIVE_INFINITY;
-        String reason = "ok";
         boolean valid = correctedExitNdc.valid()
                 && Float.isFinite(area)
                 && area > MIN_NDC_AREA
                 && Float.isFinite(error)
                 && error <= MAX_CORNER_ERROR;
 
-        if (!correctedExitNdc.valid()) {
-            reason = "non-finite or invalid corrected corners";
-        } else if (!Float.isFinite(area) || area <= MIN_NDC_AREA) {
-            reason = "collapsed area " + String.format(Locale.ROOT, "%.6f", area);
-        } else if (!Float.isFinite(error) || error > MAX_CORNER_ERROR) {
-            reason = "corner error " + String.format(Locale.ROOT, "%.4f", error);
-        }
-
         return new Candidate(
                 valid,
-                reason,
-                direction,
-                multiplicationOrder,
-                correction,
                 correctedProjection,
-                baseExitNdc,
-                correctedExitNdc,
-                error,
-                area,
-                determinant,
-                inverseDeterminant
+                error
         );
     }
 
@@ -416,52 +348,14 @@ public final class DirectPortalProjectionMath {
 
     public record Result(
             boolean valid,
-            String reason,
-            Matrix4f correctionMatrix,
-            Matrix4f correctedProjection,
-            ProjectedQuad entranceNdc,
-            ProjectedQuad correctedExitNdc,
-            float cornerError,
-            ProjectedQuad baseExitNdc,
-            String direction,
-            String multiplicationOrder,
-            double determinant,
-            double inverseDeterminant,
-            float correctedArea
+            Matrix4f correctedProjection
     ) {
-        private static Result invalid(String reason, ProjectedQuad entrance, ProjectedQuad exit) {
-            return new Result(false, reason, new Matrix4f(), new Matrix4f(), entrance, exit, Float.POSITIVE_INFINITY, exit, "n/a", "n/a", Double.NaN, Double.NaN, 0.0F);
-        }
-
-        public String correctionSummary() {
-            return summarizeMatrix(this.correctionMatrix);
-        }
-
-        public String correctedProjectionSummary() {
-            return summarizeMatrix(this.correctedProjection);
-        }
-
-        public String errorSummary() {
-            if (!Float.isFinite(this.cornerError)) {
-                return "invalid";
-            }
-            return String.format(Locale.ROOT, "%.4f", this.cornerError);
-        }
-
-        public String correctedAreaSummary() {
-            return String.format(Locale.ROOT, "%.6f", this.correctedArea);
-        }
-
-        public String determinantSummary() {
-            return String.format(Locale.ROOT, "%.6f/%.6f", this.determinant, this.inverseDeterminant);
+        private static Result invalid() {
+            return new Result(false, new Matrix4f());
         }
     }
 
     public record ProjectedQuad(Corner bottomLeft, Corner bottomRight, Corner topRight, Corner topLeft) {
-        private static ProjectedQuad invalid() {
-            return new ProjectedQuad(Corner.invalid(new Vector4f()), Corner.invalid(new Vector4f()), Corner.invalid(new Vector4f()), Corner.invalid(new Vector4f()));
-        }
-
         public boolean valid() {
             return this.bottomLeft.valid()
                     && this.bottomRight.valid()
@@ -491,32 +385,6 @@ public final class DirectPortalProjectionMath {
             return Math.abs(area) * 0.5F;
         }
 
-        public String ndcSummary() {
-            if (!this.valid()) {
-                return "invalid";
-            }
-
-            return String.format(
-                    Locale.ROOT,
-                    "BL %.2f,%.2f BR %.2f,%.2f TR %.2f,%.2f TL %.2f,%.2f",
-                    this.bottomLeft.ndc().x,
-                    this.bottomLeft.ndc().y,
-                    this.bottomRight.ndc().x,
-                    this.bottomRight.ndc().y,
-                    this.topRight.ndc().x,
-                    this.topRight.ndc().y,
-                    this.topLeft.ndc().x,
-                    this.topLeft.ndc().y
-            );
-        }
-
-        public String clipSummary() {
-            return "BL " + this.bottomLeft.clipSummary()
-                    + " BR " + this.bottomRight.clipSummary()
-                    + " TR " + this.topRight.clipSummary()
-                    + " TL " + this.topLeft.clipSummary();
-        }
-
         private static float error(Corner a, Corner b) {
             if (!a.valid() || !b.valid()) {
                 return Float.POSITIVE_INFINITY;
@@ -532,44 +400,15 @@ public final class DirectPortalProjectionMath {
         private static Corner invalid(Vector4f clip) {
             return new Corner(new Vector4f(clip), new Vector3f(), false);
         }
-
-        private String clipSummary() {
-            return String.format(Locale.ROOT, "%.2f,%.2f,%.2f,%.2f", this.clip.x, this.clip.y, this.clip.z, this.clip.w);
-        }
-    }
-
-    private static String summarizeMatrix(Matrix4f matrix) {
-        int hash = 1;
-
-        for (int column = 0; column < 4; column++) {
-            for (int row = 0; row < 4; row++) {
-                hash = 31 * hash + Float.floatToIntBits(matrix.get(column, row));
-            }
-        }
-
-        return String.format(Locale.ROOT, "%08x", hash);
     }
 
     private record Candidate(
             boolean valid,
-            String reason,
-            String direction,
-            String multiplicationOrder,
-            Matrix4f correctionMatrix,
             Matrix4f correctedProjection,
-            ProjectedQuad baseExitNdc,
-            ProjectedQuad correctedExitNdc,
-            float cornerError,
-            float correctedArea,
-            double determinant,
-            double inverseDeterminant
+            float cornerError
     ) {
-        private static Candidate invalid(String reason, Matrix4f baseProjection, ProjectedQuad baseExitNdc) {
-            return new Candidate(false, reason, "n/a", "n/a", new Matrix4f(), new Matrix4f(baseProjection), baseExitNdc, ProjectedQuad.invalid(), Float.POSITIVE_INFINITY, 0.0F, Double.NaN, Double.NaN);
-        }
-
-        private Candidate withInvalidReason(String reason) {
-            return new Candidate(false, reason, this.direction, this.multiplicationOrder, this.correctionMatrix, this.correctedProjection, this.baseExitNdc, this.correctedExitNdc, this.cornerError, this.correctedArea, this.determinant, this.inverseDeterminant);
+        private static Candidate invalid(Matrix4f baseProjection) {
+            return new Candidate(false, new Matrix4f(baseProjection), Float.POSITIVE_INFINITY);
         }
     }
 }

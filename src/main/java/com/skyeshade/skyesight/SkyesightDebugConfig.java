@@ -29,15 +29,8 @@ public final class SkyesightDebugConfig {
     public static volatile boolean SHOW_PORTAL_LOOK_MARKERS = false;
     public static final boolean ENABLE_SAME_DIM_MAIN_SECTION_BORROWED_DRAWING_SOLID_CUTOUT = false;
     public static final boolean DEBUG_DISABLE_SAME_DIM_PORTAL_TERRAIN_FOR_FLASH_TEST = false;
-    public static final boolean DEBUG_DISABLE_NEW_STICK_PORTAL_RENDER_FOR_FLASH_TEST = false;
-    public static final boolean DEBUG_STICK_RENDER_MASK_ONLY_FOR_FLASH_TEST = false;
-    public static final boolean DEBUG_STICK_RENDER_MASK_AND_SKY_ONLY_FOR_FLASH_TEST = false;
-    public static final boolean DEBUG_STICK_RENDER_NO_TERRAIN_FOR_FLASH_TEST = false;
     public static final boolean DEBUG_STICK_RENDER_NO_SODIUM_RENDERER_FOR_FLASH_TEST = false;
     public static final boolean DEBUG_STICK_RENDER_NO_CHUNK_TRACKER_UPDATE_FOR_FLASH_TEST = false;
-    public static final boolean DEBUG_STICK_RENDER_MASK_AND_SKY_NO_CAPTURE_FOR_FLASH_TEST = false;
-    public static final boolean DEBUG_STICK_RENDER_MASK_AND_SKY_CAPTURE_NO_COMPOSITE_FOR_FLASH_TEST = false;
-    public static final boolean DEBUG_STICK_RENDER_MASK_AND_SKY_COMPOSITE_ONLY_FOR_FLASH_TEST = false;
     public static final int DEBUG_FORCE_SAME_DIM_REUSE_RADIUS_ON_FIRST_ACTIVATION = -1;
 
 

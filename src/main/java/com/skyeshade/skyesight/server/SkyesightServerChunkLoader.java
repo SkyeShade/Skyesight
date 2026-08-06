@@ -1,7 +1,7 @@
 package com.skyeshade.skyesight.server;
 
 import com.skyeshade.skyesight.Skyesight;
-import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
+import com.skyeshade.skyesight.server.portal.PortalRegionTracker;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -32,7 +32,7 @@ public final class SkyesightServerChunkLoader {
         ViewKey key = new ViewKey(player.getUUID(), viewId);
 
         LoadedView previous = LOADED_VIEWS.get(key);
-        LongSet nextChunks = buildChunkSet(centerChunkX, centerChunkZ, radius);
+        LongSet nextChunks = PortalRegionTracker.buildChunkSet(centerChunkX, centerChunkZ, radius);
 
         if (previous != null) {
             unloadRemovedChunks(level, previous.chunks(), nextChunks);
@@ -107,18 +107,6 @@ public final class SkyesightServerChunkLoader {
 
             return true;
         });
-    }
-
-    private static LongSet buildChunkSet(int centerChunkX, int centerChunkZ, int radius) {
-        LongSet chunks = new LongOpenHashSet();
-
-        for (int dz = -radius; dz <= radius; dz++) {
-            for (int dx = -radius; dx <= radius; dx++) {
-                chunks.add(ChunkPos.asLong(centerChunkX + dx, centerChunkZ + dz));
-            }
-        }
-
-        return chunks;
     }
 
     private static void loadNewChunks(ServerLevel level, LongSet previous, LongSet next) {
