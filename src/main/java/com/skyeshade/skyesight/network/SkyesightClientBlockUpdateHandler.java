@@ -30,11 +30,11 @@ public final class SkyesightClientBlockUpdateHandler {
                     );
 
             if (applied) {
-                world.renderer().scheduleBlockUpdate(update.pos());
+                world.scheduleBlockUpdate(update.pos());
             }
 
             if (blockEntityApplied) {
-                world.renderer().scheduleBlockUpdate(update.pos());
+                world.scheduleBlockUpdate(update.pos());
             }
 
             if (SkyesightDebugConfig.WATCH_DEBUG && isCrossDimension(payload, world)) {

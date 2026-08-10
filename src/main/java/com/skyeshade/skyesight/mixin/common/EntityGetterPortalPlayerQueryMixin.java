@@ -1,5 +1,6 @@
 package com.skyeshade.skyesight.mixin.common;
 
+import com.skyeshade.skyesight.server.portal.PortalApparentQueryPlayer;
 import com.skyeshade.skyesight.server.portal.PortalPathProximity;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntitySelector;
@@ -282,9 +283,9 @@ public interface EntityGetterPortalPlayerQueryMixin {
                 null,
                 pathResult,
                 pathResult != null && !pathResult.throughPortal() && PortalPathProximity.isDirectPlayerCandidateForQuery(level, returned),
-                returned instanceof com.skyeshade.skyesight.server.portal.PortalApparentQueryPlayer,
+                returned instanceof PortalApparentQueryPlayer,
                 false,
-                returned instanceof com.skyeshade.skyesight.server.portal.PortalApparentQueryPlayer
+                returned instanceof PortalApparentQueryPlayer
                         ? (pathResult != null && pathResult.throughPortal() ? "proxy-portal" : "proxy-direct")
                         : "real-direct",
                 returned.position(),
@@ -306,7 +307,7 @@ public interface EntityGetterPortalPlayerQueryMixin {
         }
         if (pathResult.throughPortal()) {
             if (level.isClientSide()
-                    && !(player instanceof com.skyeshade.skyesight.server.portal.PortalApparentQueryPlayer)) {
+                    && !(player instanceof PortalApparentQueryPlayer)) {
                 return null;
             }
             return player;

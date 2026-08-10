@@ -95,10 +95,12 @@ public final class SecondaryViewFrame {
         private int entityChunkRadius;
         private int blockEntityChunkRadius;
         private int blockUpdateChunkRadius;
+        private boolean renderSky = true;
         private boolean renderTerrain = true;
         private boolean renderTranslucent = true;
         private boolean renderEntities = true;
         private boolean renderBlockEntities = true;
+        private boolean renderParticles = true;
         private boolean renderBackface;
         private String viewPhysicalSide = "unknown";
 
@@ -270,6 +272,14 @@ public final class SecondaryViewFrame {
             this.blockUpdateChunkRadius = blockUpdateChunkRadius;
         }
 
+        public boolean renderSky() {
+            return this.renderSky;
+        }
+
+        public void setRenderSky(boolean renderSky) {
+            this.renderSky = renderSky;
+        }
+
         public boolean renderTerrain() {
             return this.renderTerrain;
         }
@@ -300,6 +310,14 @@ public final class SecondaryViewFrame {
 
         public void setRenderBlockEntities(boolean renderBlockEntities) {
             this.renderBlockEntities = renderBlockEntities;
+        }
+
+        public boolean renderParticles() {
+            return this.renderParticles;
+        }
+
+        public void setRenderParticles(boolean renderParticles) {
+            this.renderParticles = renderParticles;
         }
 
         public boolean renderBackface() {

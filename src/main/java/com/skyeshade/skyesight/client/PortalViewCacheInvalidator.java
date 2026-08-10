@@ -7,6 +7,7 @@ import com.skyeshade.skyesight.api.RegisteredPortalView;
 import com.skyeshade.skyesight.api.SkyesightPortalRegistry;
 import com.skyeshade.skyesight.client.chunk.SkyesightPortalChunkStorage;
 import com.skyeshade.skyesight.client.portal.CrossDimPortalViewUpdater;
+import com.skyeshade.skyesight.client.portal.CrossDimPortalTerrainWarmup;
 import com.skyeshade.skyesight.client.portal.PortalDirectStencilRenderer;
 import com.skyeshade.skyesight.client.render.PortalSecondaryWorldRenderer;
 import com.skyeshade.skyesight.client.world.SkyesightClientChunkRequester;
@@ -60,6 +61,7 @@ public final class PortalViewCacheInvalidator {
             return;
         }
         ResourceLocation viewId = view.id();
+        CrossDimPortalTerrainWarmup.onPortalViewChanged(oldView, newView, cachePolicy);
         if (cachePolicy == PortalCachePolicy.SOFT_REPLACE) {
             PortalDirectStencilRenderer.softReplaceViewCaches(viewId);
             if (SkyesightDebugConfig.shouldLogRenderTargetAudit()) {

@@ -2,8 +2,7 @@ package com.skyeshade.skyesight.client.world;
 
 import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.SkyesightDebugConfig;
-import com.skyeshade.skyesight.api.RegisteredPortalView;
-import com.skyeshade.skyesight.api.SkyesightPortalApi;
+import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry;
 import com.skyeshade.skyesight.server.portal.PortalPathProximity;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceKey;
@@ -101,8 +100,7 @@ public final class SkyesightVisualWorldManager {
         if (viewId == null || dimension == null) {
             return false;
         }
-        RegisteredPortalView view = SkyesightPortalApi.getPortal(viewId.toString());
-        return view != null && view.target().dimension().equals(dimension);
+        return SkyesightRemoteViewRegistry.isCurrent(viewId, dimension);
     }
 
     public static SkyesightVisualWorld getOrCreate(

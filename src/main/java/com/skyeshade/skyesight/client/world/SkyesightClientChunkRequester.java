@@ -1,8 +1,8 @@
 package com.skyeshade.skyesight.client.world;
 
-import com.skyeshade.skyesight.api.RegisteredPortalView;
-import com.skyeshade.skyesight.api.SkyesightPortalApi;
 import com.skyeshade.skyesight.network.SkyesightChunkRequestPayload;
+import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistration;
+import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry;
 import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
@@ -35,8 +35,9 @@ public final class SkyesightClientChunkRequester {
             return;
         }
 
-        RegisteredPortalView currentView = SkyesightPortalApi.getPortal(viewId.toString());
-        if (currentView == null || !currentView.target().dimension().equals(dimension)) {
+        SkyesightRemoteViewRegistration registration =
+                SkyesightRemoteViewRegistry.get(viewId).orElse(null);
+        if (registration == null || !registration.targets(dimension)) {
             reset(viewId);
             return;
         }
@@ -95,7 +96,7 @@ public final class SkyesightClientChunkRequester {
         PacketDistributor.sendToServer(
                 new SkyesightChunkRequestPayload(
                         viewId,
-                        currentView.generation(),
+                        registration.generation(),
                         dimension,
                         centerChunkX,
                         centerChunkZ,

@@ -2,12 +2,12 @@ package com.skyeshade.skyesight.client.render.remote;
 
 import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.SkyesightDebugConfig;
-import com.skyeshade.skyesight.api.RegisteredPortalView;
-import com.skyeshade.skyesight.api.SkyesightPortalApi;
 import com.skyeshade.skyesight.client.render.config.PortalRemoteChunkConfig;
 import com.skyeshade.skyesight.client.render.state.PortalRemoteChunkRuntimeState;
 import com.skyeshade.skyesight.client.render.state.PortalSecondaryRenderState;
 import com.skyeshade.skyesight.network.SkyesightChunkDataPayload;
+import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistration;
+import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry;
 import com.skyeshade.skyesight.server.SkyesightSecondaryChunkWatchRegion;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
@@ -123,8 +123,9 @@ public final class PortalRemoteChunkController {
         int payloadsSent = 0;
         StringBuilder firstChunks = new StringBuilder();
         String exception = "-";
-        RegisteredPortalView currentView = SkyesightPortalApi.getPortal(regionId.toString());
-        long viewGeneration = currentView == null ? -1L : currentView.generation();
+        SkyesightRemoteViewRegistration registration =
+                SkyesightRemoteViewRegistry.get(regionId).orElse(null);
+        long viewGeneration = registration == null ? -1L : registration.generation();
 
         try {
             for (int dz = -radius; dz <= radius; dz++) {

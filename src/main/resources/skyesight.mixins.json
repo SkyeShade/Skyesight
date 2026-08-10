@@ -1,6 +1,7 @@
 {
   "required": true,
   "package": "com.skyeshade.skyesight.mixin",
+  "plugin": "com.skyeshade.skyesight.mixin.SkyesightMixinPlugin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "common.EntityApparentPlayerPositionMixin",
@@ -42,6 +43,7 @@
     "client.LevelRendererAccessor",
     "client.LevelRendererCloudInvoker",
     "client.LevelRendererEndSkyInvoker",
+    "client.LevelRendererSecondaryTerrainMixin",
     "client.LevelRendererSkyBufferAccessor",
     "client.LevelRendererSkyDebugMixin",
     "client.LevelRendererSkyInvoker",

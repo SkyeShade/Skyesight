@@ -2,10 +2,10 @@ package com.skyeshade.skyesight.server;
 
 import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.SkyesightDebugConfig;
-import com.skyeshade.skyesight.api.RegisteredPortalView;
-import com.skyeshade.skyesight.api.SkyesightPortalApi;
 import com.skyeshade.skyesight.network.SkyesightChunkDataPayload;
 import com.skyeshade.skyesight.network.SkyesightChunkRequestPayload;
+import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistration;
+import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkPacketData;
 import net.minecraft.network.protocol.game.ClientboundLightUpdatePacketData;
 import net.minecraft.server.level.ServerLevel;
@@ -32,10 +32,11 @@ public final class SkyesightServerChunkSender {
                 return;
             }
 
-            RegisteredPortalView currentView = SkyesightPortalApi.getPortal(payload.viewId().toString());
-            if (currentView == null
-                    || currentView.generation() != payload.viewGeneration()
-                    || !currentView.target().dimension().equals(payload.dimension())) {
+            SkyesightRemoteViewRegistration registration =
+                    SkyesightRemoteViewRegistry.get(payload.viewId()).orElse(null);
+            if (registration == null
+                    || registration.generation() != payload.viewGeneration()
+                    || !registration.targetDimension().equals(payload.dimension())) {
                 return;
             }
 
