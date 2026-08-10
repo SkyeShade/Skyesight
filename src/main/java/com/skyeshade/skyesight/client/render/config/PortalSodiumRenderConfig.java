@@ -1,10 +1,6 @@
 package com.skyeshade.skyesight.client.render.config;
 
-import com.skyeshade.skyesight.client.render.PortalSecondaryWorldRenderer;
-
 public final class PortalSodiumRenderConfig {
-    public static final PortalSecondaryWorldRenderer.Backend RENDERER_BACKEND =
-            PortalSecondaryWorldRenderer.Backend.SODIUM_TERRAIN_ONLY;
     public static final boolean SODIUM_BUILD_IMMEDIATELY = true;
     public static final boolean SODIUM_SCHEDULE_REMOTE_REBUILDS = true;
     public static final boolean SODIUM_DISABLE_OCCLUSION_CULLING_FOR_SECONDARY = true;

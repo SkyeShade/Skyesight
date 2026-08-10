@@ -10,11 +10,11 @@ public final class DirectStencilPortalRenderPipeline {
         PortalDirectStencilRenderer.onRenderLevelStage(event);
     }
 
-    public static boolean scheduleSodiumBlockUpdate(BlockPos pos) {
-        return PortalDirectStencilRenderer.scheduleDirectPortalSodiumBlockUpdate(pos);
+    public static boolean scheduleSecondaryBlockUpdate(BlockPos pos) {
+        return PortalDirectStencilRenderer.scheduleDirectPortalSecondaryBlockUpdate(pos);
     }
 
-    public static boolean scheduleSodiumTerrainUpdate() {
-        return PortalDirectStencilRenderer.scheduleDirectPortalSodiumTerrainUpdate();
+    public static boolean scheduleSecondaryTerrainUpdate() {
+        return PortalDirectStencilRenderer.scheduleDirectPortalSecondaryTerrainUpdate();
     }
 }

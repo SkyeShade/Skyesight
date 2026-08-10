@@ -5,11 +5,8 @@ import com.skyeshade.skyesight.PortalFirstUseTimeline;
 import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.SkyesightDebugConfig;
 import com.skyeshade.skyesight.client.view.SkyesightMutableCamera;
-import com.skyeshade.skyesight.client.world.SameLevelSkyesightChunkSource;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
-import net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer;
-import net.caffeinemc.mods.sodium.client.render.chunk.map.ChunkTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
@@ -27,13 +24,11 @@ import java.util.Queue;
 
 public final class SecondaryViewContext {
     private final SkyesightMutableCamera camera = new SkyesightMutableCamera();
-    private final ChunkTracker sodiumChunkTracker = new ChunkTracker();
-    private final SameLevelSkyesightChunkSource sodiumChunkSource = new SameLevelSkyesightChunkSource();
     private final SecondaryRemoteEntityTracker remoteEntityTracker = new SecondaryRemoteEntityTracker();
 
     private TextureTarget renderTarget;
-    private SodiumWorldRenderer sodiumRenderer;
-    private ClientLevel sodiumRendererLevel;
+    private Object sodiumState;
+    private Object vanillaState;
     private ChunkPos remoteChunkCenter;
     private ChunkPos sodiumRebuildCenter;
     private ClientLevel frozenRemoteLevel;
@@ -67,14 +62,6 @@ public final class SecondaryViewContext {
 
     public SkyesightMutableCamera camera() {
         return this.camera;
-    }
-
-    public ChunkTracker sodiumChunkTracker() {
-        return this.sodiumChunkTracker;
-    }
-
-    public SameLevelSkyesightChunkSource sodiumChunkSource() {
-        return this.sodiumChunkSource;
     }
 
     public SecondaryRemoteEntityTracker remoteEntityTracker() {
@@ -148,22 +135,20 @@ public final class SecondaryViewContext {
         return this.renderTarget;
     }
 
-    public SodiumWorldRenderer sodiumRenderer() {
-        return this.sodiumRenderer;
+    public Object sodiumState() {
+        return this.sodiumState;
     }
 
-    public void setSodiumRenderer(SodiumWorldRenderer sodiumRenderer) {
-        this.sodiumRenderer = sodiumRenderer;
-        this.sodiumRendererReadyAgeFrames = 0;
-        this.setupTerrainCalled = false;
+    public void setSodiumState(Object sodiumState) {
+        this.sodiumState = sodiumState;
     }
 
-    public ClientLevel sodiumRendererLevel() {
-        return this.sodiumRendererLevel;
+    public Object vanillaState() {
+        return this.vanillaState;
     }
 
-    public void setSodiumRendererLevel(ClientLevel sodiumRendererLevel) {
-        this.sodiumRendererLevel = sodiumRendererLevel;
+    public void setVanillaState(Object vanillaState) {
+        this.vanillaState = vanillaState;
     }
 
     public ResourceLocation viewId() {
@@ -454,15 +439,7 @@ public final class SecondaryViewContext {
             this.renderTarget.destroyBuffers();
             this.renderTarget = null;
         }
-        if (this.sodiumRenderer != null) {
-            try {
-                this.sodiumRenderer.setLevel(null);
-            } catch (RuntimeException exception) {
-                Skyesight.LOGGER.warn("[Skyesight] Failed to release secondary Sodium renderer during context close", exception);
-            }
-            this.sodiumRenderer = null;
-            this.sodiumRendererLevel = null;
-        }
+        SecondarySodiumTerrainPass.close(this);
 
         this.resetFrozenRemoteCenter();
         this.pendingSodiumRebuildChunks.clear();

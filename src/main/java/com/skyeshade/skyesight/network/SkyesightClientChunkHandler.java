@@ -2,12 +2,12 @@ package com.skyeshade.skyesight.network;
 
 import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.SkyesightDebugConfig;
-import com.skyeshade.skyesight.api.RegisteredPortalView;
-import com.skyeshade.skyesight.api.SkyesightPortalApi;
 import com.skyeshade.skyesight.client.chunk.SkyesightPortalChunkStorage;
 import com.skyeshade.skyesight.client.world.SkyesightClientChunkRequester;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorld;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorldManager;
+import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistration;
+import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
@@ -49,8 +49,8 @@ public final class SkyesightClientChunkHandler {
 
     public static void handleChunkDataOnClient(SkyesightChunkDataPayload payload) {
         Minecraft minecraft = Minecraft.getInstance();
-        RegisteredPortalView currentView = currentViewForPayload(payload);
-        if (currentView == null) {
+        SkyesightRemoteViewRegistration registration = currentViewForPayload(payload);
+        if (registration == null) {
             return;
         }
         boolean sameAsClientDimension = minecraft.level != null
@@ -168,7 +168,7 @@ public final class SkyesightClientChunkHandler {
                 payload.chunkZ(),
                 payload.chunkData(),
                 payload.lightData(),
-                world.renderer()::scheduleTerrainUpdate
+                world::scheduleTerrainUpdate
         );
 
         if (inserted) {
@@ -200,27 +200,28 @@ public final class SkyesightClientChunkHandler {
         }
     }
 
-    private static RegisteredPortalView currentViewForPayload(SkyesightChunkDataPayload payload) {
-        RegisteredPortalView current = SkyesightPortalApi.getPortal(payload.viewId().toString());
+    private static SkyesightRemoteViewRegistration currentViewForPayload(SkyesightChunkDataPayload payload) {
+        SkyesightRemoteViewRegistration current =
+                SkyesightRemoteViewRegistry.get(payload.viewId()).orElse(null);
         if (current == null) {
             warnDroppedStalePayload(payload, -1L, null, "missing-current-view");
             SkyesightClientChunkRequester.reset(payload.viewId());
             return null;
         }
         if (current.generation() != payload.viewGeneration()) {
-            warnDroppedStalePayload(payload, current.generation(), current.target().dimension(), "packet_generation_mismatch");
+            warnDroppedStalePayload(payload, current.generation(), current.targetDimension(), "packet_generation_mismatch");
             SkyesightClientChunkRequester.reset(payload.viewId());
             return null;
         }
-        if (!current.target().dimension().equals(payload.dimension())) {
-            warnDroppedStalePayload(payload, current.generation(), current.target().dimension(), "target_dimension_mismatch");
+        if (!current.targetDimension().equals(payload.dimension())) {
+            warnDroppedStalePayload(payload, current.generation(), current.targetDimension(), "target_dimension_mismatch");
             SkyesightClientChunkRequester.reset(payload.viewId());
             SkyesightVisualWorldManager.close(payload.viewId());
             return null;
         }
         SkyesightVisualWorld world = SkyesightVisualWorldManager.get(payload.viewId());
         if (world != null && !world.isClosed() && !world.dimension().equals(payload.dimension())) {
-            warnDroppedStalePayload(payload, current.generation(), current.target().dimension(), "visual_world_dim_mismatch");
+            warnDroppedStalePayload(payload, current.generation(), current.targetDimension(), "visual_world_dim_mismatch");
             SkyesightVisualWorldManager.close(payload.viewId());
             SkyesightClientChunkRequester.reset(payload.viewId());
             return null;
@@ -323,7 +324,7 @@ public final class SkyesightClientChunkHandler {
                 payload.chunkZ(),
                 payload.chunkData(),
                 payload.lightData(),
-                world.renderer()::scheduleTerrainUpdate
+                world::scheduleTerrainUpdate
         );
 
         return new VisualWorldRouteResult(

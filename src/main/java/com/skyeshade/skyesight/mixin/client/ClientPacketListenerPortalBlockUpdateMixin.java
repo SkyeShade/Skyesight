@@ -45,7 +45,7 @@ public abstract class ClientPacketListenerPortalBlockUpdateMixin {
 
     private static void scheduleBlock(BlockPos pos) {
         if (pos != null) {
-            DirectStencilPortalRenderPipeline.scheduleSodiumBlockUpdate(pos);
+            DirectStencilPortalRenderPipeline.scheduleSecondaryBlockUpdate(pos);
         }
     }
 }

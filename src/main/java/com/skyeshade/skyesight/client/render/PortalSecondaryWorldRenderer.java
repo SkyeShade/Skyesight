@@ -21,38 +21,20 @@ import com.skyeshade.skyesight.client.portal.PortalRenderDebugStatus;
 import com.skyeshade.skyesight.client.portal.PortalFrame;
 import com.skyeshade.skyesight.client.portal.PortalFrameMath;
 
-import com.skyeshade.skyesight.client.view.SkyesightMutableCamera;
 import com.skyeshade.skyesight.client.render.config.PortalProjectionConfig;
 import com.skyeshade.skyesight.client.render.config.PortalRemoteChunkConfig;
 import com.skyeshade.skyesight.client.render.config.PortalSecondaryRenderConfig;
 import com.skyeshade.skyesight.client.render.config.PortalSodiumRenderConfig;
 import com.skyeshade.skyesight.client.render.remote.PortalRemoteChunkController;
-import com.skyeshade.skyesight.client.render.sodium.SkyesightSodiumRenderContext;
-import com.skyeshade.skyesight.client.render.sodium.SameDimMainSodiumSectionReuse;
-import com.skyeshade.skyesight.client.render.sodium.SameDimPortalTerrainPrimer;
-import com.skyeshade.skyesight.client.render.sodium.PortalSodiumRendererPool;
 import com.skyeshade.skyesight.client.render.state.PortalSecondaryRenderState;
-import com.skyeshade.skyesight.client.render.state.PortalSodiumReflectionState;
 import com.skyeshade.skyesight.client.render.state.PortalRemoteChunkRuntimeState;
-import com.skyeshade.skyesight.mixin.client.CameraInvoker;
 import com.skyeshade.skyesight.mixin.client.GameRendererSetupInvoker;
-import com.skyeshade.skyesight.mixin.client.GameRendererStateAccessor;
 import com.skyeshade.skyesight.server.SkyesightSecondaryWatchRegion;
 import com.skyeshade.skyesight.server.SkyesightSecondaryChunkWatchRegion;
-import net.caffeinemc.mods.sodium.client.gl.device.RenderDevice;
-import net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer;
-import net.caffeinemc.mods.sodium.client.render.chunk.ChunkRenderMatrices;
-import net.caffeinemc.mods.sodium.client.render.chunk.RenderSection;
-import net.caffeinemc.mods.sodium.client.render.chunk.RenderSectionManager;
-import net.caffeinemc.mods.sodium.client.render.viewport.Viewport;
-import net.caffeinemc.mods.sodium.client.render.viewport.ViewportProvider;
-import net.caffeinemc.mods.sodium.client.world.cloned.ChunkRenderContext;
-import it.unimi.dsi.fastutil.longs.Long2ReferenceMap;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientChunkCache;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.ShaderInstance;
@@ -66,14 +48,11 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.effect.MobEffects;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.minecraft.world.level.ChunkPos;
 import org.joml.Matrix4f;
@@ -208,16 +187,7 @@ public final class PortalSecondaryWorldRenderer {
     }
 
     public static void prewarmPortalSodiumRenderersIfNeeded(Minecraft minecraft) {
-        if (!PortalSodiumRenderConfig.PORTAL_SODIUM_PREWARM_ENABLED) {
-            return;
-        }
-
-        PortalSodiumRendererPool.prewarmIfNeeded(
-                minecraft,
-                PortalSodiumRenderConfig.DEFAULT_PORTAL_SODIUM_PREWARM_RENDERERS,
-                PortalSodiumRenderConfig.DEFAULT_PORTAL_SODIUM_PREWARM_DELAY_FRAMES,
-                PortalSodiumRenderConfig.DEFAULT_PORTAL_SODIUM_PREWARM_PER_FRAME
-        );
+        SecondarySodiumTerrainPass.prewarmPortalRenderersIfNeeded(minecraft);
     }
 
 
@@ -311,11 +281,104 @@ public final class PortalSecondaryWorldRenderer {
                     clipPlane,
                     portalInstanceId
             );
-            SecondarySodiumTerrainPass.render(frame, context, minecraft, event);
+            if (SecondarySodiumTerrainPass.render(frame, context, minecraft, event)) {
+                renderPostTerrainFeatures(frame, context, minecraft, event.getPartialTick().getGameTimeDeltaPartialTick(true));
+            }
 
             return output;
         } finally {
-            recordSecondarySharedStateAfter(minecraft);
+            PortalSecondaryRenderState.renderingSecondaryView = false;
+
+            modelViewStack.popMatrix();
+            renderState.restore();
+        }
+    }
+
+    public static TextureTarget renderCameraViewToTexture(
+            SecondaryViewContext context,
+            Minecraft minecraft,
+            float partialTick,
+            Vec3 cameraPosition,
+            Quaternionf cameraRotation,
+            ResourceLocation viewId,
+            int width,
+            int height,
+            float fov,
+            int renderDistanceChunks,
+            boolean renderSky,
+            boolean renderTerrain,
+            boolean renderBlockEntities,
+            boolean renderEntities,
+            boolean renderParticles,
+            boolean publishWatchRegion
+    ) {
+        int targetWidth = Math.max(1, width);
+        int targetHeight = Math.max(1, height);
+        PortalTargetRenderState renderState = PortalTargetRenderState.capture();
+        TextureTarget output;
+        try {
+            output = context.getOrCreateRenderTarget(targetWidth, targetHeight);
+        } finally {
+            renderState.restore();
+        }
+
+        var modelViewStack = RenderSystem.getModelViewStack();
+        modelViewStack.pushMatrix();
+
+        PortalSecondaryRenderState.renderingSecondaryView = true;
+
+        try {
+            output.bindWrite(true);
+            RenderSystem.viewport(0, 0, output.width, output.height);
+            RenderSystem.clearColor(0.0F, 0.0F, 0.0F, 1.0F);
+            output.clear(Minecraft.ON_OSX);
+            output.bindWrite(true);
+
+            SecondaryViewFrame frame = createSecondaryViewFrameFromPose(
+                    context,
+                    minecraft,
+                    partialTick,
+                    output,
+                    targetWidth,
+                    targetHeight,
+                    cameraPosition,
+                    cameraRotation,
+                    publishWatchRegion,
+                    publishWatchRegion ? viewId : null,
+                    renderEntities,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    viewId == null ? "camera-view" : "camera-view:" + viewId,
+                    0,
+                    fov,
+                    renderDistanceChunks
+            );
+            frame.diagnostics().setRenderSkyInCurrentTarget(renderSky);
+            frame.diagnostics().setTerrainChunkRadius(renderDistanceChunks);
+            frame.diagnostics().setPortalOwnedRenderRadiusChunks(renderDistanceChunks);
+            frame.diagnostics().setSameDimPlayerLoadedReuseRadiusChunks(renderDistanceChunks);
+            frame.diagnostics().setReusePlayerLoadedChunksForSameDim(false);
+            frame.diagnostics().setEntityChunkRadius(renderDistanceChunks);
+            frame.diagnostics().setBlockEntityChunkRadius(renderDistanceChunks);
+            frame.diagnostics().setBlockUpdateChunkRadius(renderDistanceChunks);
+            frame.diagnostics().setRenderSky(renderSky);
+            frame.diagnostics().setRenderTerrain(renderTerrain);
+            frame.diagnostics().setRenderTranslucent(true);
+            frame.diagnostics().setRenderEntities(renderEntities);
+            frame.diagnostics().setRenderBlockEntities(renderBlockEntities);
+            frame.diagnostics().setRenderParticles(renderParticles);
+            if (publishWatchRegion) {
+                updateSecondaryChunkWatchRegionIfNeeded(minecraft, frame, context);
+            }
+            if (SecondarySodiumTerrainPass.render(frame, context, minecraft, partialTick)) {
+                renderPostTerrainFeatures(frame, context, minecraft, partialTick);
+            }
+
+            return output;
+        } finally {
             PortalSecondaryRenderState.renderingSecondaryView = false;
 
             modelViewStack.popMatrix();
@@ -370,7 +433,6 @@ public final class PortalSecondaryWorldRenderer {
         modelViewStack.pushMatrix();
 
         PortalSecondaryRenderState.renderingSecondaryView = true;
-        recordSecondarySharedStateBefore(minecraft);
         resetTargetBindDiagnostics();
         try {
             SecondaryViewFrame frame = createSecondaryViewFrameFromPose(
@@ -420,7 +482,9 @@ public final class PortalSecondaryWorldRenderer {
                 try {
                     try (SkyesightSecondaryRenderContext.Scope ignored =
                                  SkyesightSecondaryRenderContext.push(minecraft.getMainRenderTarget(), frame.camera(), minecraft.getMainRenderTarget())) {
-                        SecondarySodiumTerrainPass.render(frame, context, minecraft, event);
+                        if (SecondarySodiumTerrainPass.render(frame, context, minecraft, event)) {
+                            renderPostTerrainFeatures(frame, context, minecraft, event.getPartialTick().getGameTimeDeltaPartialTick(true));
+                        }
                     }
                 } finally {
                     if (PortalSecondaryRenderState.directTerrainRestoreAfterEachPortal) {
@@ -430,7 +494,6 @@ public final class PortalSecondaryWorldRenderer {
             }
             PortalSecondaryRenderState.lastException = "";
         } finally {
-            recordSecondarySharedStateAfter(minecraft);
             PortalSecondaryRenderState.renderingSecondaryView = false;
 
             modelViewStack.popMatrix();
@@ -490,10 +553,6 @@ public final class PortalSecondaryWorldRenderer {
         );
     }
 
-
-    private static void recordSecondarySharedStateBefore(Minecraft minecraft) {
-    }
-
     private static PortalFrame directProjectionExitPortal(PortalFrame exitPortal) {
         return switch (PortalProjectionConfig.DIRECT_PORTAL_PROJECTION_MODE) {
             case NORMAL_MAIN_ASPECT -> null;
@@ -535,15 +594,6 @@ public final class PortalSecondaryWorldRenderer {
                 || PortalProjectionConfig.DIRECT_PORTAL_PROJECTION_MODE == DirectPortalProjectionMode.LEGACY_CAMERA_AND_PROJECTION
                 || PortalProjectionConfig.DIRECT_PORTAL_PROJECTION_MODE == DirectPortalProjectionMode.LEGACY_PROJECTIVE_EQUIVALENT;
     }
-
-
-
-    private static void recordSecondarySharedStateAfter(Minecraft minecraft) {
-    }
-
-
-
-
 
     private static SecondaryViewFrame createSecondaryViewFrameFromPose(
             SecondaryViewContext context,
@@ -643,6 +693,52 @@ public final class PortalSecondaryWorldRenderer {
             int portalStencilRef
     ) {
         float partialTick = event.getPartialTick().getGameTimeDeltaPartialTick(true);
+        return createSecondaryViewFrameFromPose(
+                context,
+                minecraft,
+                partialTick,
+                output,
+                viewportWidth,
+                viewportHeight,
+                cameraPosition,
+                cameraRotation,
+                publishEntityWatchRegion,
+                entityWatchRegionId,
+                runEntityPass,
+                entrancePortal,
+                exitPortal,
+                clipPlane,
+                mainViewProjection,
+                mainProjection,
+                portalInstanceId,
+                portalStencilRef,
+                PortalProjectionConfig.VIEW_FOV,
+                minecraft.options.getEffectiveRenderDistance()
+        );
+    }
+
+    private static SecondaryViewFrame createSecondaryViewFrameFromPose(
+            SecondaryViewContext context,
+            Minecraft minecraft,
+            float partialTick,
+            TextureTarget output,
+            int viewportWidth,
+            int viewportHeight,
+            Vec3 cameraPosition,
+            Quaternionf cameraRotation,
+            boolean publishEntityWatchRegion,
+            ResourceLocation entityWatchRegionId,
+            boolean runEntityPass,
+            PortalFrame entrancePortal,
+            PortalFrame exitPortal,
+            SkyesightClipPlane clipPlane,
+            Matrix4f mainViewProjection,
+            Matrix4f mainProjection,
+            String portalInstanceId,
+            int portalStencilRef,
+            float fov,
+            int renderDistanceChunks
+    ) {
         var camera = context.camera();
         camera.setup(
                 minecraft.level,
@@ -659,9 +755,9 @@ public final class PortalSecondaryWorldRenderer {
 
         float aspect = (float) viewportWidth / (float) viewportHeight;
         float nearPlane = 0.05F;
-        float farPlane = minecraft.options.getEffectiveRenderDistance() * 16.0F;
+        float farPlane = Math.max(1, renderDistanceChunks) * 16.0F;
         Matrix4f normalProjection = SkyesightProjectionMatrices.perspective(
-                PortalProjectionConfig.VIEW_FOV,
+                Math.max(1.0F, fov),
                 aspect,
                 nearPlane,
                 farPlane
@@ -760,48 +856,6 @@ public final class PortalSecondaryWorldRenderer {
         return frame;
     }
 
-    private static void renderFullGameRendererBackend(
-            Minecraft minecraft,
-            RenderLevelStageEvent event,
-            TextureTarget output
-    ) {
-        float partialTick = event.getPartialTick().getGameTimeDeltaPartialTick(true);
-        Camera camera = configureSecondaryCamera(minecraft, partialTick);
-        GameRenderer gameRenderer = minecraft.gameRenderer;
-        GameRendererStateAccessor gameRendererState = (GameRendererStateAccessor) gameRenderer;
-        Camera actualMainCamera = gameRendererState.skyesight$getMainCameraField();
-
-        boolean previousRenderHand = gameRendererState.skyesight$getRenderHand();
-        boolean previousRenderBlockOutline = gameRendererState.skyesight$getRenderBlockOutline();
-        HitResult previousHitResult = minecraft.hitResult;
-        Entity previousCrosshairPickEntity = minecraft.crosshairPickEntity;
-        Vec3 previousMainCameraPosition = actualMainCamera.getPosition();
-        float previousMainCameraYaw = actualMainCamera.getYRot();
-        float previousMainCameraPitch = actualMainCamera.getXRot();
-        float previousMainCameraRoll = actualMainCamera.getRoll();
-
-        try (SkyesightSecondaryRenderContext.Scope ignored =
-                     SkyesightSecondaryRenderContext.push(output, camera, minecraft.getMainRenderTarget())) {
-            gameRenderer.setRenderHand(false);
-            gameRenderer.setRenderBlockOutline(false);
-
-            gameRenderer.renderLevel(event.getPartialTick());
-        } catch (RuntimeException exception) {
-            throw exception;
-        } finally {
-            gameRenderer.setRenderHand(previousRenderHand);
-            gameRenderer.setRenderBlockOutline(previousRenderBlockOutline);
-            minecraft.hitResult = previousHitResult;
-            minecraft.crosshairPickEntity = previousCrosshairPickEntity;
-            ((CameraInvoker) actualMainCamera).skyesight$setPosition(previousMainCameraPosition);
-            ((CameraInvoker) actualMainCamera).skyesight$setRotation(
-                    previousMainCameraYaw,
-                    previousMainCameraPitch,
-                    previousMainCameraRoll
-            );
-        }
-    }
-
     private static void resetTargetBindDiagnostics() {
         secondaryContextNonSecondaryTargetBindCount = 0;
         secondaryContextLastNonSecondaryBind = "n/a";
@@ -887,416 +941,7 @@ public final class PortalSecondaryWorldRenderer {
         projection.rotate(-angle, axis);
     }
 
-    static void renderSodiumTerrainOnly(
-            SecondaryViewFrame frame,
-            SecondaryViewContext context,
-            Minecraft minecraft,
-            RenderLevelStageEvent event
-    ) {
-        if (minecraft.level == null || minecraft.player == null) {
-            return;
-        }
-
-        float partialTick = event.getPartialTick().getGameTimeDeltaPartialTick(true);
-        Camera camera = frame.camera();
-        PortalSecondaryRenderState.activeRemoteTerrainChunkRadius = configuredSameDimRenderChunkRadius(frame);
-        Matrix4f projection = frame.projectionMatrix();
-        Matrix4f modelView = frame.modelViewMatrix();
-        Frustum frustum = frame.frustum();
-
-        RenderSystem.setProjectionMatrix(projection, VertexSorting.DISTANCE_TO_ORIGIN);
-
-        var modelViewStack = RenderSystem.getModelViewStack();
-        modelViewStack.identity();
-        RenderSystem.applyModelViewMatrix();
-
-        if (!frame.diagnostics().renderToCurrentTarget()
-                || frame.diagnostics().renderSkyInCurrentTarget()) {
-            renderSecondarySkyIfEnabled(frame, minecraft, partialTick);
-        } else {
-            resetSecondaryFeatureDiagnosticsForDirectRender();
-        }
-
-        RenderSystem.setProjectionMatrix(projection, VertexSorting.DISTANCE_TO_ORIGIN);
-        modelViewStack.identity();
-        RenderSystem.applyModelViewMatrix();
-
-        ResourceLocation viewId = frame.diagnostics().entityWatchRegionId();
-        String stickFlashMode = stickFlashTestModeFor(viewId);
-        if ("no_sodium".equals(stickFlashMode)) {
-            return;
-        }
-        if (SkyesightDebugConfig.DEBUG_DISABLE_SAME_DIM_PORTAL_TERRAIN_FOR_FLASH_TEST
-                && frame.diagnostics().renderToCurrentTarget()) {
-            return;
-        }
-
-        int sectionCount = Math.max(1, minecraft.level.getSectionsCount());
-        int portalOwnedRadius = configuredPortalOwnedRenderRadiusChunks(frame);
-        int targetReuseRadius = configuredSameDimPlayerLoadedReuseRadiusChunks(frame);
-        context.updateSameDimTerrainWarmup(
-                targetReuseRadius,
-                PortalSodiumRenderConfig.DEFAULT_SAME_DIM_REUSE_INITIAL_RADIUS_CHUNKS,
-                PortalSodiumRenderConfig.DEFAULT_SAME_DIM_REUSE_FIRST_ACTIVE_MAX_RADIUS_CHUNKS,
-                PortalSodiumRenderConfig.DEFAULT_SAME_DIM_REUSE_RADIUS_GROWTH_INTERVAL_FRAMES,
-                PortalSodiumRenderConfig.DEFAULT_SAME_DIM_REUSE_RADIUS_GROWTH_STEP_CHUNKS
-        );
-        double yawDelta = context.updatePortalCameraYawDelta(camera.getYRot());
-        boolean turnThrottled = yawDelta > PortalSodiumRenderConfig.DEFAULT_PORTAL_TURN_THROTTLE_DEGREES;
-        boolean warmupCompleteBeforeWork = context.sameDimTerrainWarmupComplete();
-        if (!warmupCompleteBeforeWork
-                && PortalSecondaryRenderState.sameDimPortalTerrainWarmupsThisFrame >= PortalSodiumRenderConfig.DEFAULT_MAX_NEW_SAME_DIM_PORTAL_TERRAIN_WARMUPS_PER_FRAME) {
-            return;
-        }
-        if (!warmupCompleteBeforeWork) {
-            PortalSecondaryRenderState.sameDimPortalTerrainWarmupsThisFrame++;
-        }
-        int effectiveReuseRadius = context.currentSameDimReuseRadiusChunks();
-        if (SkyesightDebugConfig.DEBUG_FORCE_SAME_DIM_REUSE_RADIUS_ON_FIRST_ACTIVATION >= 0
-                && context.terrainWarmupAgeFrames() <= 1) {
-            effectiveReuseRadius = Math.min(
-                    effectiveReuseRadius,
-                    SkyesightDebugConfig.DEBUG_FORCE_SAME_DIM_REUSE_RADIUS_ON_FIRST_ACTIVATION
-            );
-        }
-        if (turnThrottled) {
-            effectiveReuseRadius = Math.min(effectiveReuseRadius, PortalSodiumRenderConfig.DEFAULT_PORTAL_TURN_THROTTLED_REUSE_RADIUS_CAP);
-        }
-        if (PortalSodiumRenderConfig.DEFAULT_PORTAL_REUSE_SHRINK_ON_SPIKE
-                && context.recentSetupTerrainMs() > PortalSodiumRenderConfig.DEFAULT_PORTAL_REUSE_GROWTH_MAX_SETUP_MS) {
-            effectiveReuseRadius = Math.max(portalOwnedRadius, effectiveReuseRadius - 1);
-        }
-        effectiveReuseRadius = Math.max(0, Math.min(targetReuseRadius, effectiveReuseRadius));
-        int maxScannedChunks = Math.max(
-                1,
-                PortalSodiumRenderConfig.DEFAULT_MAX_SAME_DIM_READY_SECTIONS_SCANNED_PER_FRAME / sectionCount
-        );
-        long readyChunkStart = PortalRenderCostAudit.start();
-        boolean chunkTrackerSkippedForStickTest = "no_chunk_tracker".equals(stickFlashMode);
-        if (!chunkTrackerSkippedForStickTest) {
-            context.sodiumChunkSource().updateReadyChunks(
-                    minecraft.level,
-                    context.sodiumChunkTracker(),
-                    camera.getPosition(),
-                    portalOwnedRadius,
-                    effectiveReuseRadius,
-                    configuredReusePlayerLoadedChunksForSameDim(frame),
-                    PortalSodiumRenderConfig.DEFAULT_MAX_SAME_DIM_READY_CHUNKS_ADDED_PER_FRAME,
-                    maxScannedChunks
-            );
-        }
-        PortalRenderCostAudit.record(viewId, "readyChunks", readyChunkStart);
-        PortalRenderCostAudit.record(viewId, "terrainChunkReadyUpdate", readyChunkStart);
-        int candidateSectionsAfterBudget = chunkTrackerSkippedForStickTest
-                ? 0
-                : context.sodiumChunkSource().lastScannedChunkCount() * sectionCount;
-        int readyChunksAdded = chunkTrackerSkippedForStickTest
-                ? 0
-                : context.sodiumChunkSource().lastAddedChunkCount();
-        boolean budgetLimited = !chunkTrackerSkippedForStickTest
-                && (!context.sodiumChunkSource().lastScanCompletedCycle()
-                || context.sodiumChunkSource().lastBudgetSkippedChunkCount() > 0);
-        context.recordSameDimTerrainPopulation(candidateSectionsAfterBudget, readyChunksAdded);
-        if (budgetLimited && !warmupCompleteBeforeWork) {
-            return;
-        }
-        long sodiumAcquireStart = PortalRenderCostAudit.start();
-        SodiumWorldRenderer renderer = frame.diagnostics().renderToCurrentTarget()
-                ? getOrCreateSodiumRenderer(minecraft, minecraft.level, context, frame.diagnostics().entityWatchRegionId())
-                : getSodiumRendererForSecondaryDebug(minecraft, minecraft.level, context, frame.diagnostics().entityWatchRegionId());
-        PortalRenderCostAudit.record(viewId, "sodiumAcquire", sodiumAcquireStart);
-        if (renderer == null) {
-            return;
-        }
-        boolean usingMainSodiumRenderer = SodiumWorldRenderer.instanceNullable() == renderer;
-        if (shouldSkipNewPortalTerrainWarmup(frame, context)) {
-            context.incrementFirstVisibleTerrainFramesSkipped();
-            context.incrementSodiumRendererReadyAgeFrames();
-            return;
-        }
-        context.incrementSodiumRendererReadyAgeFrames();
-        long cameraUpdateStart = PortalRenderCostAudit.start();
-        Viewport viewport = ((ViewportProvider) frustum).sodium$createViewport();
-        ChunkRenderMatrices matrices = new ChunkRenderMatrices(projection, modelView);
-        var cameraPosition = camera.getPosition();
-        PortalRenderCostAudit.record(viewId, "terrainCameraUpdate", cameraUpdateStart);
-        long sectionPrimerStart = PortalRenderCostAudit.start();
-
-        int clampedReuseRadius = Math.clamp(
-                effectiveReuseRadius,
-                PortalSodiumRenderConfig.DEFAULT_SAME_DIM_MAIN_SECTION_PRIMER_RADIUS_CHUNKS,
-                targetReuseRadius
-        );
-        SameDimPortalTerrainPrimer.primeFromMainCompiledSections(
-                frame.diagnostics().entityWatchRegionId(),
-                minecraft.level,
-                context,
-                renderer,
-                cameraPosition,
-                clampedReuseRadius,
-                PortalSodiumRenderConfig.DEFAULT_MAX_MAIN_SECTION_PRIMER_SECTIONS_PER_FRAME,
-                PortalSodiumRenderConfig.DEFAULT_MAX_MAIN_SECTION_PRIMER_FRAMES
-        );
-        PortalRenderCostAudit.record(viewId, "sectionPrimer", sectionPrimerStart);
-        PortalRenderCostAudit.record(viewId, "terrainSectionCollect", sectionPrimerStart);
-
-        RenderDevice.enterManagedCode();
-
-        try (SkyesightSodiumRenderContext.Scope ignored =
-                             SkyesightSodiumRenderContext.push(
-                             context.sodiumChunkTracker(),
-                             PortalSodiumRenderConfig.SODIUM_DISABLE_OCCLUSION_CULLING_FOR_SECONDARY
-                     )) {
-            int pendingRebuildChunkCountGlobal = context.pendingSodiumRebuildChunks().size();
-            int pendingRebuildChunkCountForView = countPendingRebuildChunksForTrackedTerrain(context);
-            long pendingRebuildChunkSignatureForView = pendingRebuildChunkSignatureForTrackedTerrain(context);
-            int pendingBlockUpdateChunkCount = context.pendingSodiumBlockUpdateChunks().size();
-            int pendingBlockUpdateChunkCountForView = countPendingBlockUpdatesForTrackedTerrain(context);
-            long pendingBlockUpdateSignatureForView = pendingBlockUpdateSignatureForTrackedTerrain(context);
-            SecondaryViewContext.TerrainSetupReuseKey setupReuseKey =
-                    new SecondaryViewContext.TerrainSetupReuseKey(
-                            viewId,
-                            minecraft.level,
-                            camera.getPosition(),
-                            new Quaternionf(camera.rotation()),
-                            frame.viewportWidth(),
-                            frame.viewportHeight(),
-                            frame.diagnostics().terrainChunkRadius(),
-                            frame.diagnostics().portalOwnedRenderRadiusChunks(),
-                            effectiveReuseRadius,
-                            configuredReusePlayerLoadedChunksForSameDim(frame),
-                            frame.diagnostics().renderTranslucent(),
-                            context.sodiumChunkSource().trackedChunkCount(),
-                            context.sodiumChunkSource().trackedChunkSignature(),
-                            pendingRebuildChunkCountGlobal,
-                            pendingRebuildChunkCountForView,
-                            pendingRebuildChunkSignatureForView,
-                            pendingBlockUpdateChunkCount,
-                            pendingBlockUpdateChunkCountForView,
-                            pendingBlockUpdateSignatureForView,
-                            frame.projectionMatrix(),
-                            frame.modelViewMatrix(),
-                            frame.cullProjectionMatrix()
-                    );
-            SecondaryViewContext.TerrainSetupReuseDecision setupReuseDecision =
-                    context.terrainSetupReuseDecision(setupReuseKey);
-            boolean setupTerrainReused = context.setupTerrainCalled() && setupReuseDecision.reuse();
-            long setupTerrainStart = 0L;
-            long setupTerrainDurationMs = 0L;
-            if (!setupTerrainReused) {
-                setupTerrainStart = PortalRenderCostAudit.start();
-                renderer.setupTerrain(
-                        camera,
-                        viewport,
-                        minecraft.player.isSpectator(),
-                        false
-                );
-                context.markSetupTerrainCalled();
-                context.recordTerrainSetupReuseKey(setupReuseKey);
-                setupTerrainDurationMs = (System.nanoTime() - setupTerrainStart) / 1_000_000L;
-                PortalRenderCostAudit.record(viewId, "terrainSetup", setupTerrainStart);
-                PortalRenderCostAudit.record(viewId, "terrainSetupTerrainCall", setupTerrainStart);
-                PortalRenderCostAudit.record(viewId, "sodiumSetupTerrain", setupTerrainStart);
-                context.setRecentSetupTerrainMs(setupTerrainDurationMs);
-            } else {
-                context.setRecentSetupTerrainMs(0.0D);
-            }
-            PortalRenderCostAudit.recordTerrainSetupDetails(
-                    viewId,
-                    !setupTerrainReused,
-                    setupTerrainReused,
-                    setupReuseDecision.positionDeltaBlocks(),
-                    setupReuseDecision.rotationDeltaDegrees(),
-                    setupReuseDecision.pendingRebuildCountGlobal(),
-                    setupReuseDecision.pendingRebuildCountForView(),
-                    pendingBlockUpdateChunkCount,
-                    setupReuseDecision.pendingBlockUpdateCountForView(),
-                    setupReuseDecision.reuseBlockedByPendingViewChunks(),
-                    setupReuseDecision.pendingRebuildChanged(),
-                    setupReuseDecision.pendingRebuildOldCount(),
-                    setupReuseDecision.pendingRebuildNewCount(),
-                    setupReuseDecision.pendingRebuildAdded(),
-                    setupReuseDecision.pendingRebuildRemoved(),
-                    setupReuseDecision.pendingRebuildStableFrames(),
-                    setupReuseDecision.reuseBlockedByNewPendingChunks(),
-                    setupReuseDecision.readyChunksActualChanged(),
-                    setupReuseDecision.readyChunksOldCount(),
-                    setupReuseDecision.readyChunksNewCount(),
-                    context.sodiumChunkSource().lastAddedChunkCount(),
-                    context.sodiumChunkSource().lastRemovedChunkCount(),
-                    setupReuseDecision.reason()
-            );
-            BlockPos sharedRemoteCenter = secondaryRemoteCenterBlockPos(context, frame);
-            scheduleRemoteSodiumRebuildsIfNeeded(renderer, minecraft.level, sharedRemoteCenter, context);
-
-            RenderSystem.enableDepthTest();
-            RenderSystem.depthFunc(GL11.GL_LEQUAL);
-            RenderSystem.depthMask(true);
-            RenderSystem.enableCull();
-            RenderType.solid().setupRenderState();
-
-            try {
-                if (frame.diagnostics().renderToCurrentTarget()) {
-                    applyDirectDepthModeAtSodiumDrawPoint();
-                }
-
-                long drawSolidStart = PortalRenderCostAudit.start();
-                renderer.drawChunkLayer(
-                        RenderType.solid(),
-                        matrices,
-                        cameraPosition.x(),
-                        cameraPosition.y(),
-                        cameraPosition.z()
-                );
-                PortalRenderCostAudit.record(viewId, "terrainSolid", drawSolidStart);
-                long drawCutoutStart = PortalRenderCostAudit.start();
-                drawSodiumTerrainLayer(renderer, RenderType.cutoutMipped(), matrices, cameraPosition);
-                drawSodiumTerrainLayer(renderer, RenderType.cutout(), matrices, cameraPosition);
-                PortalRenderCostAudit.record(viewId, "terrainCutout", drawCutoutStart);
-                boolean alwaysBorrowDrawEnabled =
-                        SkyesightDebugConfig.ENABLE_SAME_DIM_MAIN_SECTION_BORROWED_DRAWING_SOLID_CUTOUT;
-                if (alwaysBorrowDrawEnabled) {
-                    SameDimMainSodiumSectionReuse.drawBorrowedSolidCutoutSections(
-                            frame.diagnostics().entityWatchRegionId(),
-                            minecraft.level,
-                            renderer,
-                            cameraPosition,
-                            portalOwnedRadius,
-                            effectiveReuseRadius,
-                            configuredReusePlayerLoadedChunksForSameDim(frame),
-                            viewport,
-                            matrices,
-                            minecraft.screen != null,
-                            GL30.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING)
-                                    == minecraft.getMainRenderTarget().frameBufferId,
-                            GL11.glIsEnabled(GL11.GL_STENCIL_TEST),
-                            true
-                    );
-                }
-            } catch (RuntimeException exception) {
-                Skyesight.LOGGER.warn(
-                        "[Skyesight] Sodium terrain draw failed",
-                        exception
-                );
-            } finally {
-                RenderType.solid().clearRenderState();
-            }
-            if (frame.diagnostics().renderToCurrentTarget() && PortalSecondaryRenderConfig.DIRECT_RENDER_TERRAIN_DRAW_SOLID_ONLY) {
-                renderDirectTranslucentTerrainIfEnabled(frame, renderer, matrices, usingMainSodiumRenderer);
-                renderDirectBlockEntitiesIfEnabled(frame, context, minecraft, partialTick);
-                if (!PortalSecondaryRenderConfig.PORTAL_PARTICLES_ALL_AFTER_ENTITIES && !PortalSecondaryRenderConfig.PORTAL_PARTICLES_AFTER_ENTITIES) {
-                    renderSecondaryParticlesIfEnabled(
-                            frame,
-                            minecraft,
-                            partialTick,
-                            SecondaryParticlePass.RenderGroup.OPAQUE
-                    );
-                }
-                renderSecondaryEntitiesIfEnabled(frame, context, minecraft, partialTick);
-                if (PortalSecondaryRenderConfig.PORTAL_PARTICLES_ALL_AFTER_ENTITIES) {
-                    renderSecondaryParticlesIfEnabled(
-                            frame,
-                            minecraft,
-                            partialTick,
-                            SecondaryParticlePass.RenderGroup.ALL
-                    );
-                } else {
-                    renderSecondaryParticlesIfEnabled(
-                            frame,
-                            minecraft,
-                            partialTick,
-                            SecondaryParticlePass.RenderGroup.TRANSLUCENT
-                    );
-                }
-                return;
-            }
-
-            if (!frame.diagnostics().renderToCurrentTarget() && !PortalSecondaryRenderConfig.SECONDARY_RENDER_ENTITIES_AFTER_TRANSLUCENT) {
-                renderSecondaryBlockEntitiesIfEnabled(frame, context, minecraft, partialTick);
-                renderSecondaryEntitiesIfEnabled(frame, context, minecraft, partialTick);
-            }
-
-            try {
-                if (!frame.diagnostics().renderToCurrentTarget()
-                        && PortalSecondaryRenderConfig.SECONDARY_FEATURE_TRANSLUCENT
-                        && !usingMainSodiumRenderer) {
-                    long translucentStart = PortalRenderCostAudit.start();
-                    SecondarySodiumTranslucentTerrainPass.render(frame, renderer, matrices);
-                    PortalRenderCostAudit.record(viewId, "terrainTranslucent", translucentStart);
-                }
-            } catch (RuntimeException exception) {
-                Skyesight.LOGGER.warn(
-                        "[Skyesight] Sodium translucent terrain draw failed",
-                        exception
-                );
-            }
-
-            if (!frame.diagnostics().renderToCurrentTarget() && PortalSecondaryRenderConfig.SECONDARY_RENDER_ENTITIES_AFTER_TRANSLUCENT) {
-                renderSecondaryBlockEntitiesIfEnabled(frame, context, minecraft, partialTick);
-                renderSecondaryEntitiesIfEnabled(frame, context, minecraft, partialTick);
-            }
-
-            if (!frame.diagnostics().renderToCurrentTarget()) {
-                renderSecondaryParticlesIfEnabled(frame, minecraft, partialTick);
-            }
-        } finally {
-            RenderDevice.exitManagedCode();
-        }
-    }
-
-    private static void renderDirectTranslucentTerrainIfEnabled(
-            SecondaryViewFrame frame,
-            SodiumWorldRenderer renderer,
-            ChunkRenderMatrices matrices,
-            boolean usingMainSodiumRenderer
-    ) {
-        if (!PortalSecondaryRenderConfig.DIRECT_RENDER_TRANSLUCENT_TERRAIN
-                || !frame.diagnostics().renderToCurrentTarget()
-                || !frame.diagnostics().renderTranslucent()
-                || usingMainSodiumRenderer) {
-            return;
-        }
-
-        try {
-            RenderSystem.enableDepthTest();
-            RenderSystem.depthFunc(GL11.GL_LEQUAL);
-            RenderSystem.depthMask(SecondaryBlockEntityPass.depthWriteEnabled());
-            SecondarySodiumTranslucentTerrainPass.render(frame, renderer, matrices);
-        } catch (RuntimeException exception) {
-            Skyesight.LOGGER.warn("[Skyesight] Direct portal translucent terrain failed", exception);
-        } finally {
-            RenderSystem.depthFunc(GL11.GL_LEQUAL);
-            RenderSystem.depthMask(true);
-            RenderSystem.enableDepthTest();
-        }
-    }
-
-    private static void drawSodiumTerrainLayer(
-            SodiumWorldRenderer renderer,
-            RenderType renderType,
-            ChunkRenderMatrices matrices,
-            Vec3 cameraPosition
-    ) {
-        RenderSystem.enableDepthTest();
-        RenderSystem.depthFunc(GL11.GL_LEQUAL);
-        RenderSystem.depthMask(true);
-        RenderSystem.enableCull();
-        renderType.setupRenderState();
-
-        try {
-            renderer.drawChunkLayer(
-                    renderType,
-                    matrices,
-                    cameraPosition.x(),
-                    cameraPosition.y(),
-                    cameraPosition.z()
-            );
-        } finally {
-            renderType.clearRenderState();
-        }
-    }
-
-    private static void renderDirectBlockEntitiesIfEnabled(
+    static void renderDirectBlockEntitiesIfEnabled(
             SecondaryViewFrame frame,
             SecondaryViewContext context,
             Minecraft minecraft,
@@ -1362,6 +1007,63 @@ public final class PortalSecondaryWorldRenderer {
         }
     }
 
+    static void renderPostTerrainFeatures(
+            SecondaryViewFrame frame,
+            SecondaryViewContext context,
+            Minecraft minecraft,
+            float partialTick
+    ) {
+        if (frame == null || context == null || minecraft == null) {
+            return;
+        }
+
+        if (frame.diagnostics().renderToCurrentTarget()) {
+            if (!PortalSecondaryRenderConfig.DIRECT_RENDER_TERRAIN_DRAW_SOLID_ONLY) {
+                return;
+            }
+
+            renderDirectBlockEntitiesIfEnabled(frame, context, minecraft, partialTick);
+            if (!PortalSecondaryRenderConfig.PORTAL_PARTICLES_ALL_AFTER_ENTITIES
+                    && !PortalSecondaryRenderConfig.PORTAL_PARTICLES_AFTER_ENTITIES) {
+                renderSecondaryParticlesIfEnabled(
+                        frame,
+                        minecraft,
+                        partialTick,
+                        SecondaryParticlePass.RenderGroup.OPAQUE
+                );
+            }
+            renderSecondaryEntitiesIfEnabled(frame, context, minecraft, partialTick);
+            if (PortalSecondaryRenderConfig.PORTAL_PARTICLES_ALL_AFTER_ENTITIES) {
+                renderSecondaryParticlesIfEnabled(
+                        frame,
+                        minecraft,
+                        partialTick,
+                        SecondaryParticlePass.RenderGroup.ALL
+                );
+            } else {
+                renderSecondaryParticlesIfEnabled(
+                        frame,
+                        minecraft,
+                        partialTick,
+                        SecondaryParticlePass.RenderGroup.TRANSLUCENT
+                );
+            }
+            return;
+        }
+
+        if (!PortalSecondaryRenderConfig.SECONDARY_RENDER_ENTITIES_AFTER_TRANSLUCENT) {
+            renderSecondaryBlockEntitiesIfEnabled(frame, context, minecraft, partialTick);
+            renderSecondaryEntitiesIfEnabled(frame, context, minecraft, partialTick);
+        }
+
+        if (PortalSecondaryRenderConfig.SECONDARY_RENDER_ENTITIES_AFTER_TRANSLUCENT) {
+            renderSecondaryBlockEntitiesIfEnabled(frame, context, minecraft, partialTick);
+            renderSecondaryEntitiesIfEnabled(frame, context, minecraft, partialTick);
+        }
+
+        renderSecondaryParticlesIfEnabled(frame, minecraft, partialTick);
+    }
+
     private static int fallbackStencilRefForLegacyDebugFrame(SecondaryViewFrame frame) {
         String portalId = frame == null ? "" : frame.diagnostics().portalInstanceId();
         int explicitRef = frame == null ? 0 : frame.diagnostics().portalStencilRef();
@@ -1384,7 +1086,7 @@ public final class PortalSecondaryWorldRenderer {
         return fallbackRef;
     }
 
-    private static void applyDirectDepthModeAtSodiumDrawPoint() {
+    static void applyDirectDepthModeAtSodiumDrawPoint() {
         String mode = PortalRenderDebugStatus.directPortalDepthMode();
 
         switch (mode) {
@@ -1410,13 +1112,13 @@ public final class PortalSecondaryWorldRenderer {
         }
     }
 
-    private static void renderSecondarySkyIfEnabled(
+    static void renderSecondarySkyIfEnabled(
             SecondaryViewFrame frame,
             Minecraft minecraft,
             float partialTick
     ) {
         secondaryEntityPassAttempted = false;
-        if (!PortalSecondaryRenderConfig.SECONDARY_FEATURE_SKY || minecraft.level == null) {
+        if (!PortalSecondaryRenderConfig.SECONDARY_FEATURE_SKY || !frame.diagnostics().renderSky() || minecraft.level == null) {
             return;
         }
 
@@ -1437,11 +1139,11 @@ public final class PortalSecondaryWorldRenderer {
         }
     }
 
-    private static void resetSecondaryFeatureDiagnosticsForDirectRender() {
+    static void resetSecondaryFeatureDiagnosticsForDirectRender() {
         secondaryEntityPassAttempted = false;
     }
 
-    private static void renderSecondaryBlockEntitiesIfEnabled(
+    static void renderSecondaryBlockEntitiesIfEnabled(
             SecondaryViewFrame frame,
             SecondaryViewContext context,
             Minecraft minecraft,
@@ -1469,7 +1171,7 @@ public final class PortalSecondaryWorldRenderer {
         PortalRenderCostAudit.record(viewId, "blockEntities", auditStart);
     }
 
-    private static BlockPos secondaryRemoteCenterBlockPos(SecondaryViewContext context, SecondaryViewFrame frame) {
+    static BlockPos secondaryRemoteCenterBlockPos(SecondaryViewContext context, SecondaryViewFrame frame) {
         Vec3 frozenCenter = context.frozenRemoteCameraPosition();
         return BlockPos.containing(frozenCenter == null ? frame.camera().getPosition() : frozenCenter);
     }
@@ -1483,7 +1185,7 @@ public final class PortalSecondaryWorldRenderer {
         );
     }
 
-    private static void renderSecondaryEntitiesIfEnabled(
+    static void renderSecondaryEntitiesIfEnabled(
             SecondaryViewFrame frame,
             SecondaryViewContext context,
             Minecraft minecraft,
@@ -1633,29 +1335,29 @@ public final class PortalSecondaryWorldRenderer {
         });
     }
 
-    private static int configuredTerrainChunkRadius(SecondaryViewFrame frame) {
+    static int configuredTerrainChunkRadius(SecondaryViewFrame frame) {
         return frame == null || frame.diagnostics().terrainChunkRadius() <= 0
                 ? PortalRemoteChunkConfig.FORCE_LOAD_REMOTE_CHUNK_RADIUS
                 : frame.diagnostics().terrainChunkRadius();
     }
 
-    private static int configuredPortalOwnedRenderRadiusChunks(SecondaryViewFrame frame) {
+    static int configuredPortalOwnedRenderRadiusChunks(SecondaryViewFrame frame) {
         return frame == null || frame.diagnostics().portalOwnedRenderRadiusChunks() <= 0
                 ? configuredTerrainChunkRadius(frame)
                 : frame.diagnostics().portalOwnedRenderRadiusChunks();
     }
 
-    private static int configuredSameDimPlayerLoadedReuseRadiusChunks(SecondaryViewFrame frame) {
+    static int configuredSameDimPlayerLoadedReuseRadiusChunks(SecondaryViewFrame frame) {
         return frame == null || frame.diagnostics().sameDimPlayerLoadedReuseRadiusChunks() <= 0
                 ? PortalRenderSettings.DEFAULT_SAME_DIM_PLAYER_LOADED_REUSE_RADIUS_CHUNKS
                 : frame.diagnostics().sameDimPlayerLoadedReuseRadiusChunks();
     }
 
-    private static boolean configuredReusePlayerLoadedChunksForSameDim(SecondaryViewFrame frame) {
+    static boolean configuredReusePlayerLoadedChunksForSameDim(SecondaryViewFrame frame) {
         return frame != null && frame.diagnostics().reusePlayerLoadedChunksForSameDim();
     }
 
-    private static boolean shouldSkipNewPortalTerrainWarmup(SecondaryViewFrame frame, SecondaryViewContext context) {
+    static boolean shouldSkipNewPortalTerrainWarmup(SecondaryViewFrame frame, SecondaryViewContext context) {
         return frame != null
                 && context != null
                 && frame.diagnostics().renderToCurrentTarget()
@@ -1663,7 +1365,7 @@ public final class PortalSecondaryWorldRenderer {
                 && context.firstVisibleTerrainFramesSkipped() < PortalSodiumRenderConfig.DEFAULT_NEW_PORTAL_TERRAIN_SKIP_FRAMES;
     }
 
-    private static int configuredSameDimRenderChunkRadius(SecondaryViewFrame frame) {
+    static int configuredSameDimRenderChunkRadius(SecondaryViewFrame frame) {
         int ownedRadius = configuredPortalOwnedRenderRadiusChunks(frame);
         if (!configuredReusePlayerLoadedChunksForSameDim(frame)) {
             return ownedRadius;
@@ -1932,7 +1634,7 @@ public final class PortalSecondaryWorldRenderer {
         });
     }
 
-    private static void renderSecondaryParticlesIfEnabled(
+    static void renderSecondaryParticlesIfEnabled(
             SecondaryViewFrame frame,
             Minecraft minecraft,
             float partialTick
@@ -1940,13 +1642,16 @@ public final class PortalSecondaryWorldRenderer {
         renderSecondaryParticlesIfEnabled(frame, minecraft, partialTick, SecondaryParticlePass.RenderGroup.ALL);
     }
 
-    private static void renderSecondaryParticlesIfEnabled(
+    static void renderSecondaryParticlesIfEnabled(
             SecondaryViewFrame frame,
             Minecraft minecraft,
             float partialTick,
             SecondaryParticlePass.RenderGroup renderGroup
     ) {
         if (!PortalSecondaryRenderConfig.SECONDARY_RENDER_PARTICLES) {
+            return;
+        }
+        if (!frame.diagnostics().renderParticles()) {
             return;
         }
         if (PortalSecondaryRenderConfig.PORTAL_PARTICLES_SAME_DIM_ONLY && minecraft.level == null) {
@@ -1976,347 +1681,6 @@ public final class PortalSecondaryWorldRenderer {
         return distance <= 32.0D ? "near-same-dim" : "far-same-dim";
     }
 
-    private static String stickFlashTestModeFor(ResourceLocation viewId) {
-        if (viewId == null) {
-            return "normal";
-        }
-        RegisteredPortalView view = SkyesightPortalApi.getPortal(viewId.toString());
-        if (view == null || !"debug-stick".equals(view.sourceTag())) {
-            return "normal";
-        }
-        if (SkyesightDebugConfig.DEBUG_STICK_RENDER_NO_SODIUM_RENDERER_FOR_FLASH_TEST) {
-            return "no_sodium";
-        }
-        if (SkyesightDebugConfig.DEBUG_STICK_RENDER_NO_CHUNK_TRACKER_UPDATE_FOR_FLASH_TEST) {
-            return "no_chunk_tracker";
-        }
-        return "normal";
-    }
-
-    private static int candidateSectionCountForRadius(int radiusChunks, int sectionCount) {
-        int radius = Math.max(0, radiusChunks);
-        int side = radius * 2 + 3;
-        return side * side * Math.max(1, sectionCount);
-    }
-
-    private static SodiumWorldRenderer createPortalSodiumRendererInRenderStage(
-            Minecraft minecraft,
-            ClientLevel level,
-            SecondaryViewContext context,
-            ResourceLocation viewId
-    ) {
-        SodiumWorldRenderer previousRenderer = context.sodiumRenderer();
-        if (previousRenderer != null) {
-            return previousRenderer;
-        }
-        SodiumWorldRenderer pooled = PortalSodiumRendererPool.acquire(viewId, level);
-        if (pooled != null) {
-            context.setSodiumRenderer(pooled);
-            context.setSodiumRendererLevel(level);
-            context.markSodiumRendererCreated(level.getGameTime());
-            context.setSodiumRendererAssignedFromPool(true);
-            return pooled;
-        }
-        if (PortalSecondaryRenderState.newPortalSodiumRenderersCreatedThisFrame >= PortalSodiumRenderConfig.DEFAULT_MAX_NEW_PORTAL_SODIUM_RENDERERS_PER_FRAME) {
-            return null;
-        }
-
-        SodiumWorldRenderer renderer = null;
-        long createStart = System.nanoTime();
-        boolean created = false;
-        boolean calledSetLevel = false;
-        PortalSodiumRendererPool.logFallbackCreate(viewId, 0L, "fallback-create-start");
-        RenderDevice.enterManagedCode();
-        try {
-            renderer = new SodiumWorldRenderer(minecraft);
-            created = true;
-            context.setSodiumRenderer(renderer);
-            context.setSodiumRendererLevel(level);
-            context.markSodiumRendererCreated(level.getGameTime());
-            context.setSodiumRendererAssignedFromPool(false);
-            renderer.setLevel(level);
-            calledSetLevel = true;
-            renderer.scheduleTerrainUpdate();
-            PortalSecondaryRenderState.newPortalSodiumRenderersCreatedThisFrame++;
-            return renderer;
-        } catch (IllegalStateException exception) {
-            return null;
-        } finally {
-            RenderDevice.exitManagedCode();
-            long durationMs = (System.nanoTime() - createStart) / 1_000_000L;
-            PortalSodiumRendererPool.logFirstUseInitAudit(
-                    "fallback_render_stage_create",
-                    created,
-                    calledSetLevel,
-                    durationMs,
-                    renderer == null ? "fallback-create-failed" : "fallback-renderer-created"
-            );
-            PortalSodiumRendererPool.logFallbackCreate(
-                    viewId,
-                    durationMs,
-                    renderer == null ? "fallback-create-failed" : "fallback-renderer-created"
-            );
-        }
-    }
-
-    private static SodiumWorldRenderer getOrCreateSodiumRenderer(
-            Minecraft minecraft,
-            ClientLevel level,
-            SecondaryViewContext context,
-            ResourceLocation viewId
-    ) {
-        SodiumWorldRenderer sodiumRenderer = context.sodiumRenderer();
-        ClientLevel sodiumRendererLevel = context.sodiumRendererLevel();
-
-        if (sodiumRenderer == null || sodiumRendererLevel != level) {
-            if (sodiumRenderer != null) {
-                RenderDevice.enterManagedCode();
-
-                try {
-                    sodiumRenderer.setLevel(null);
-                } finally {
-                    RenderDevice.exitManagedCode();
-                }
-            }
-
-            return createPortalSodiumRendererInRenderStage(minecraft, level, context, viewId);
-        }
-
-        return sodiumRenderer;
-    }
-
-    private static SodiumWorldRenderer getSodiumRendererForSecondaryDebug(
-            Minecraft minecraft,
-            ClientLevel level,
-            SecondaryViewContext context,
-            ResourceLocation viewId
-    ) {
-        if (PortalSodiumRenderConfig.USE_MAIN_SODIUM_RENDERER_FOR_SECONDARY_VIEW) {
-            SodiumWorldRenderer mainRenderer = SodiumWorldRenderer.instanceNullable();
-
-            if (mainRenderer != null) {
-                return mainRenderer;
-            }
-        }
-
-        return getOrCreateSodiumRenderer(minecraft, level, context, viewId);
-    }
-
-    @SuppressWarnings("unchecked")
-    private static int countSodiumSectionsInRadius(
-            SodiumWorldRenderer renderer,
-            ClientLevel level,
-            BlockPos cameraBlockPos
-    ) {
-        try {
-            RenderSectionManager manager = getSodiumRenderSectionManager(renderer);
-
-            if (manager == null) {
-                return 0;
-            }
-
-            Long2ReferenceMap<RenderSection> sectionByPosition =
-                    (Long2ReferenceMap<RenderSection>) PortalSodiumReflectionState.sodiumSectionManagerSectionByPositionField.get(manager);
-            int centerChunkX = SectionPos.blockToSectionCoord(cameraBlockPos.getX());
-            int centerChunkZ = SectionPos.blockToSectionCoord(cameraBlockPos.getZ());
-            int minSection = level.getMinSection();
-            int maxSection = level.getMaxSection();
-            int stored = 0;
-
-            int radius = Math.max(0, PortalSecondaryRenderState.activeRemoteTerrainChunkRadius);
-            for (int chunkZ = centerChunkZ - radius;
-                 chunkZ <= centerChunkZ + radius;
-                 chunkZ++) {
-                for (int chunkX = centerChunkX - radius;
-                     chunkX <= centerChunkX + radius;
-                     chunkX++) {
-                    for (int sectionY = minSection; sectionY < maxSection; sectionY++) {
-                        RenderSection section = sectionByPosition.get(SectionPos.asLong(chunkX, sectionY, chunkZ));
-
-                        if (section == null) {
-                            continue;
-                        }
-
-                        stored++;
-                    }
-                }
-            }
-
-            return stored;
-        } catch (ReflectiveOperationException | RuntimeException exception) {
-            PortalSodiumReflectionState.sodiumReflectionFailed = true;
-            return 0;
-        }
-    }
-
-    private static boolean scheduleRemoteSodiumRebuildsIfNeeded(
-            SodiumWorldRenderer renderer,
-            ClientLevel level,
-            BlockPos cameraBlockPos,
-            SecondaryViewContext context
-    ) {
-        if (!PortalSodiumRenderConfig.SODIUM_SCHEDULE_REMOTE_REBUILDS || PortalRemoteChunkRuntimeState.loadedChunksInRadius <= 0) {
-            return false;
-        }
-
-        ChunkPos center = new ChunkPos(cameraBlockPos);
-        int expectedClientChunks = expectedRemoteChunkCount();
-        int expectedRequiredClientChunks = expectedRequiredRemoteChunkCount();
-
-        if (PortalRemoteChunkRuntimeState.loadedChunksInRadius < expectedClientChunks) {
-            PortalSecondaryRenderState.sodiumDelayedRebuildStableFrames = 0;
-            return false;
-        }
-
-        if (PortalRemoteChunkRuntimeState.requiredLoadedChunksInRadius < expectedRequiredClientChunks) {
-            PortalSecondaryRenderState.sodiumDelayedRebuildStableFrames = 0;
-            return false;
-        }
-
-        if (PortalRemoteChunkRuntimeState.clientChunkNonAirSamples <= 0 && PortalRemoteChunkRuntimeState.clientCenterSectionNonAirCount <= 0) {
-            PortalSecondaryRenderState.sodiumDelayedRebuildStableFrames = 0;
-            return false;
-        }
-
-        PortalSecondaryRenderState.sodiumDelayedRebuildStableFrames++;
-
-        if (PortalSecondaryRenderState.sodiumDelayedRebuildStableFrames < PortalSodiumRenderConfig.SODIUM_DELAYED_REBUILD_FRAMES) {
-            return false;
-        }
-
-        if (countSodiumSectionsInRadius(renderer, level, cameraBlockPos) <= 0) {
-            return false;
-        }
-
-        enqueuePortalRebuildChunksIfNeeded(center, context);
-        int budget = context.lastPortalCameraYawDeltaDegrees() > PortalSodiumRenderConfig.DEFAULT_PORTAL_TURN_THROTTLE_DEGREES
-                ? PortalSodiumRenderConfig.DEFAULT_PORTAL_TURN_THROTTLED_REBUILD_BUDGET
-                : PortalSodiumRenderConfig.DEFAULT_MAX_PORTAL_SECTION_REBUILDS_SCHEDULED_PER_FRAME;
-        int scheduledNow = drainPortalRebuildQueue(renderer, level, context, budget);
-        boolean scheduled = scheduledNow > 0;
-        if (scheduled) {
-            renderer.scheduleTerrainUpdate();
-        }
-        context.setSodiumRebuildCenter(center);
-        return scheduled;
-    }
-
-    private static int enqueuePortalRebuildChunksIfNeeded(ChunkPos center, SecondaryViewContext context) {
-        if (center == null || context == null) {
-            return 0;
-        }
-        if (center.equals(context.pendingSodiumRebuildCenter()) && !context.pendingSodiumRebuildChunks().isEmpty()) {
-            return 0;
-        }
-        if (center.equals(context.sodiumRebuildCenter()) && context.pendingSodiumRebuildChunks().isEmpty()) {
-            return 0;
-        }
-        context.pendingSodiumRebuildChunks().clear();
-        context.setPendingSodiumRebuildCenter(center);
-        if (PortalSodiumRenderConfig.SODIUM_REBUILD_CENTER_SECTION_ONLY) {
-            context.pendingSodiumRebuildChunks().add(center);
-            return 1;
-        }
-
-        int radius = Math.max(0, PortalSecondaryRenderState.activeRemoteTerrainChunkRadius);
-        int discovered = 0;
-        for (int dz = -radius; dz <= radius; dz++) {
-            for (int dx = -radius; dx <= radius; dx++) {
-                context.pendingSodiumRebuildChunks().add(new ChunkPos(center.x + dx, center.z + dz));
-                discovered++;
-            }
-        }
-        return discovered;
-    }
-
-    private static int countPendingRebuildChunksForTrackedTerrain(SecondaryViewContext context) {
-        if (context == null) {
-            return 0;
-        }
-        int count = 0;
-        for (ChunkPos chunk : context.pendingSodiumRebuildChunks()) {
-            if (context.sodiumChunkSource().isTracked(chunk)) {
-                count++;
-            }
-        }
-        return count;
-    }
-
-    private static long pendingRebuildChunkSignatureForTrackedTerrain(SecondaryViewContext context) {
-        if (context == null) {
-            return 0L;
-        }
-        long signature = 0L;
-        for (ChunkPos chunk : context.pendingSodiumRebuildChunks()) {
-            if (context.sodiumChunkSource().isTracked(chunk)) {
-                signature += mixPackedChunk(ChunkPos.asLong(chunk.x, chunk.z));
-            }
-        }
-        return signature;
-    }
-
-    private static int countPendingBlockUpdatesForTrackedTerrain(SecondaryViewContext context) {
-        if (context == null) {
-            return 0;
-        }
-        int count = 0;
-        for (long packed : context.pendingSodiumBlockUpdateChunks()) {
-            if (context.sodiumChunkSource().isTracked(packed)) {
-                count++;
-            }
-        }
-        return count;
-    }
-
-    private static long pendingBlockUpdateSignatureForTrackedTerrain(SecondaryViewContext context) {
-        if (context == null) {
-            return 0L;
-        }
-        long signature = 0L;
-        for (long packed : context.pendingSodiumBlockUpdateChunks()) {
-            if (context.sodiumChunkSource().isTracked(packed)) {
-                signature += mixPackedChunk(packed);
-            }
-        }
-        return signature;
-    }
-
-    private static long mixPackedChunk(long value) {
-        long mixed = value;
-        mixed ^= mixed >>> 33;
-        mixed *= 0xff51afd7ed558ccdL;
-        mixed ^= mixed >>> 33;
-        mixed *= 0xc4ceb9fe1a85ec53L;
-        mixed ^= mixed >>> 33;
-        return mixed;
-    }
-
-    private static int drainPortalRebuildQueue(
-            SodiumWorldRenderer renderer,
-            ClientLevel level,
-            SecondaryViewContext context,
-            int budget
-    ) {
-        if (renderer == null || level == null || context == null || budget <= 0) {
-            return 0;
-        }
-        int scheduled = 0;
-        while (scheduled < budget && !context.pendingSodiumRebuildChunks().isEmpty()) {
-            ChunkPos chunk = context.pendingSodiumRebuildChunks().poll();
-            renderer.scheduleRebuildForChunks(
-                    chunk.x,
-                    level.getMinSection(),
-                    chunk.z,
-                    chunk.x,
-                    level.getMaxSection() - 1,
-                    chunk.z,
-                    false
-            );
-            scheduled++;
-        }
-        return scheduled;
-    }
-
     public static boolean sodiumForceRemoteRenderListEnabled() {
         return PortalSodiumRenderConfig.SODIUM_FORCE_REMOTE_RENDER_LIST
                 && PortalSodiumRenderConfig.SODIUM_FORCE_RENDER_LIST_FROM_REMOTE_GEOMETRY;
@@ -2328,127 +1692,6 @@ public final class PortalSecondaryWorldRenderer {
 
     public static int activeRemoteTerrainChunkRadius() {
         return PortalSecondaryRenderState.activeRemoteTerrainChunkRadius;
-    }
-    private static int expectedRemoteChunkCount() {
-        int width = PortalRemoteChunkConfig.FORCE_LOAD_REMOTE_CHUNK_RADIUS * 2 + 1;
-        return width * width;
-    }
-
-    private static int expectedRequiredRemoteChunkCount() {
-        int width = PortalRemoteChunkConfig.REMOTE_CHUNK_CLIENT_LOAD_RADIUS * 2 + 1;
-        return width * width;
-    }
-
-    private static RenderSectionManager getSodiumRenderSectionManager(SodiumWorldRenderer renderer)
-            throws ReflectiveOperationException {
-        if (renderer == null) {
-            return null;
-        }
-
-        initializeSodiumReflection();
-
-        if (PortalSodiumReflectionState.sodiumReflectionFailed) {
-            return null;
-        }
-
-        return (RenderSectionManager) PortalSodiumReflectionState.sodiumWorldRendererSectionManagerField.get(renderer);
-    }
-
-    private static void initializeSodiumReflection() throws NoSuchFieldException {
-        if (PortalSodiumReflectionState.sodiumWorldRendererSectionManagerField != null || PortalSodiumReflectionState.sodiumReflectionFailed) {
-            return;
-        }
-
-        PortalSodiumReflectionState.sodiumWorldRendererSectionManagerField =
-                SodiumWorldRenderer.class.getDeclaredField("renderSectionManager");
-        PortalSodiumReflectionState.sodiumWorldRendererSectionManagerField.setAccessible(true);
-        PortalSodiumReflectionState.sodiumSectionManagerSectionByPositionField =
-                RenderSectionManager.class.getDeclaredField("sectionByPosition");
-        PortalSodiumReflectionState.sodiumSectionManagerSectionByPositionField.setAccessible(true);
-        PortalSodiumReflectionState.sodiumSectionManagerRenderListsField =
-                RenderSectionManager.class.getDeclaredField("renderLists");
-        PortalSodiumReflectionState.sodiumSectionManagerRenderListsField.setAccessible(true);
-    }
-
-    private static Camera configureSecondaryCamera(Minecraft minecraft, float partialTick) {
-        LocalPlayer player = minecraft.player;
-
-        var camera = PortalSecondaryRenderState.SECONDARY_VIEW.camera();
-        camera.setup(
-                minecraft.level,
-                player,
-                false,
-                false,
-                partialTick
-        );
-
-        var targetPosition = player.getEyePosition(partialTick);
-        var cameraPosition = targetPosition.add(
-                PortalProjectionConfig.REMOTE_CAMERA_X_OFFSET,
-                0.0D,
-                PortalProjectionConfig.REMOTE_CAMERA_Z_OFFSET
-        );
-        if (PortalProjectionConfig.FREEZE_SECONDARY_REMOTE_CENTER && minecraft.level != null) {
-            cameraPosition = PortalSecondaryRenderState.SECONDARY_VIEW.getOrSetFrozenRemoteCameraPosition(minecraft.level, cameraPosition);
-        }
-        var lookDirection = targetPosition.subtract(cameraPosition);
-
-        camera.setPositionPublic(cameraPosition);
-        applySecondaryCameraRotation(minecraft, player, camera, lookDirection, partialTick);
-
-        BlockPos blockPos = BlockPos.containing(cameraPosition);
-        ChunkPos chunkPos = new ChunkPos(blockPos);
-        PortalSecondaryRenderState.SECONDARY_VIEW.setRemoteChunkCenter(chunkPos);
-
-        if (!PortalRemoteChunkConfig.DIRECT_DISABLE_REMOTE_CLIENT_CACHE_EXPANSION) {
-            updateClientChunkCacheExpansion(minecraft, chunkPos);
-        }
-        PortalRemoteChunkController.updateRemoteChunkForceLoading(minecraft, chunkPos);
-
-        PortalRemoteChunkRuntimeState.loadedChunksInRadius = PortalRemoteChunkController.countClientLoadedChunksInRadius(
-                minecraft,
-                chunkPos,
-                PortalRemoteChunkConfig.FORCE_LOAD_REMOTE_CHUNK_RADIUS
-        );
-        PortalRemoteChunkRuntimeState.requiredLoadedChunksInRadius = PortalRemoteChunkController.countClientLoadedChunksInRequiredRadius(
-                minecraft,
-                chunkPos,
-                PortalRemoteChunkConfig.REMOTE_CHUNK_CLIENT_LOAD_RADIUS
-        );
-        PortalRemoteChunkController.updateRemoteClientChunkReadiness(minecraft, chunkPos);
-
-        return camera;
-    }
-
-    private static void applySecondaryCameraRotation(
-            Minecraft minecraft,
-            LocalPlayer player,
-            SkyesightMutableCamera camera,
-            Vec3 lookDirection,
-            float partialTick
-    ) {
-        switch (PortalProjectionConfig.SECONDARY_CAMERA_ROTATION_MODE) {
-            case COPY_MAIN_CAMERA -> {
-                Camera mainCamera = minecraft.gameRenderer.getMainCamera();
-                camera.setRotationPublic(new Quaternionf(mainCamera.rotation()));
-            }
-            case COPY_PLAYER_VIEW -> camera.setRotationPublic(
-                    player.getViewYRot(partialTick),
-                    player.getViewXRot(partialTick),
-                    0.0F
-            );
-            case LOOK_AT_PLAYER -> {
-                double horizontalLength = Math.sqrt(
-                        lookDirection.x() * lookDirection.x()
-                                + lookDirection.z() * lookDirection.z()
-                );
-
-                float yaw = (float) Math.toDegrees(Math.atan2(-lookDirection.x(), lookDirection.z()));
-                float pitch = (float) Math.toDegrees(Math.atan2(-lookDirection.y(), horizontalLength));
-
-                camera.setRotationPublic(yaw, pitch, 0.0F);
-            }
-        }
     }
 
     private static void updateClientChunkCacheExpansion(
@@ -2546,21 +1789,6 @@ public final class PortalSecondaryWorldRenderer {
 
     public static String directPortalProjectionHandedness() {
         return "COMMITTED_FLIPPED_RIGHT";
-    }
-
-
-    public enum Backend {
-        NONE,
-        SODIUM_TERRAIN_ONLY,
-        FULL_GAME_RENDERER,
-        FULL_LEVEL_RENDERER,
-        SODIUM
-    }
-
-    public enum SecondaryCameraRotationMode {
-        LOOK_AT_PLAYER,
-        COPY_MAIN_CAMERA,
-        COPY_PLAYER_VIEW
     }
 
     public enum SecondaryProjectionMode {

@@ -5,7 +5,6 @@ import com.skyeshade.skyesight.SkyesightDebugConfig;
 import it.unimi.dsi.fastutil.longs.LongConsumer;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
-import net.caffeinemc.mods.sodium.client.render.chunk.map.ChunkTracker;
 import net.minecraft.client.multiplayer.ClientChunkCache;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
@@ -43,7 +42,7 @@ public final class SkyesightRemoteChunkReceiver {
     private static final int CAMERA_GENERIC_DISPLAY_TICK_HORIZONTAL_RADIUS = 16;
     private static final int CAMERA_GENERIC_DISPLAY_TICK_VERTICAL_RADIUS = 16;
     private final SkyesightVisualClientLevel level;
-    private final ChunkTracker tracker;
+    private final ChunkStatusListener chunkStatusListener;
     private final LongSet loadedChunks = new LongOpenHashSet();
     private final RandomSource visualParticleRandom = RandomSource.create();
     private int viewCenterChunkX;
@@ -53,9 +52,9 @@ public final class SkyesightRemoteChunkReceiver {
     private long lastVisualParticleSourceLogMillis;
     private long lastCameraVisualParticleSourceLogMillis;
 
-    public SkyesightRemoteChunkReceiver(SkyesightVisualClientLevel level, ChunkTracker tracker) {
+    public SkyesightRemoteChunkReceiver(SkyesightVisualClientLevel level, ChunkStatusListener chunkStatusListener) {
         this.level = level;
-        this.tracker = tracker;
+        this.chunkStatusListener = chunkStatusListener;
     }
 
     public void setViewCenter(int chunkX, int chunkZ, int radius) {
@@ -134,7 +133,7 @@ public final class SkyesightRemoteChunkReceiver {
         }
 
         this.loadedChunks.add(ChunkPos.asLong(chunkX, chunkZ));
-        this.tracker.onChunkStatusAdded(chunkX, chunkZ, 3);
+        this.chunkStatusListener.onChunkStatusAdded(chunkX, chunkZ);
         return true;
     }
     public boolean applyLightUpdate(
@@ -848,6 +847,12 @@ public final class SkyesightRemoteChunkReceiver {
     public void unloadChunk(ChunkPos pos) {
         this.loadedChunks.remove(pos.toLong());
         this.level.getChunkSource().drop(pos);
-        this.tracker.onChunkStatusRemoved(pos.x, pos.z, 3);
+        this.chunkStatusListener.onChunkStatusRemoved(pos.x, pos.z);
+    }
+
+    public interface ChunkStatusListener {
+        void onChunkStatusAdded(int chunkX, int chunkZ);
+
+        void onChunkStatusRemoved(int chunkX, int chunkZ);
     }
 }

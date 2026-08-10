@@ -2,6 +2,7 @@ package com.skyeshade.skyesight.client.portal;
 
 import com.skyeshade.skyesight.client.render.PortalSecondaryWorldRenderer;
 import com.skyeshade.skyesight.api.RegisteredPortalView;
+import com.skyeshade.skyesight.api.PortalEndpoint;
 import com.skyeshade.skyesight.server.SkyesightSecondaryWatchRegion;
 import com.skyeshade.skyesight.server.SkyesightServerViewTracker;
 import net.minecraft.client.Camera;
@@ -43,6 +44,40 @@ public final class CrossDimPortalViewUpdater {
         );
     }
 
+    public static boolean requestInitialTerrainWarmup(
+            Minecraft minecraft,
+            Camera camera,
+            RegisteredPortalView view
+    ) {
+        if (minecraft == null
+                || minecraft.level == null
+                || camera == null
+                || view == null
+                || view.source() == null
+                || view.target() == null
+                || view.renderSettings() == null
+                || !view.active()
+                || !view.renderSettings().enabled()
+                || !view.renderSettings().rendersView()
+                || !view.renderSettings().renderTerrain()
+                || !view.isCrossDimension()
+                || !view.source().dimension().equals(minecraft.level.dimension())) {
+            return false;
+        }
+
+        requestChunksForPortalFrames(
+                minecraft,
+                camera,
+                view.id().getPath(),
+                view.id(),
+                portalFrame(view.source()),
+                portalFrame(view.target()),
+                view.target().dimension(),
+                view.renderSettings().terrainChunkRadius()
+        );
+        return true;
+    }
+
     private static void updateStorageForView(
             Minecraft minecraft,
             Camera camera,
@@ -54,6 +89,32 @@ public final class CrossDimPortalViewUpdater {
             ResourceKey<Level> targetDimension
     ) {
         if (camera == null || entrancePortal == null || exitPortal == null || renderView == null || targetDimension == null || !renderView.renderConfig().enabled()) {
+            return;
+        }
+
+        requestChunksForPortalFrames(
+                minecraft,
+                camera,
+                label,
+                regionId,
+                entrancePortal,
+                exitPortal,
+                targetDimension,
+                renderView.renderConfig().terrainChunkRadius()
+        );
+    }
+
+    private static void requestChunksForPortalFrames(
+            Minecraft minecraft,
+            Camera camera,
+            String label,
+            ResourceLocation regionId,
+            PortalFrame entrancePortal,
+            PortalFrame exitPortal,
+            ResourceKey<Level> targetDimension,
+            int terrainChunkRadius
+    ) {
+        if (minecraft == null || minecraft.level == null || camera == null || entrancePortal == null || exitPortal == null || regionId == null || targetDimension == null) {
             return;
         }
 
@@ -69,7 +130,7 @@ public final class CrossDimPortalViewUpdater {
                 targetDimension,
                 targetBlock,
                 targetChunk,
-                renderView.renderConfig().terrainChunkRadius()
+                terrainChunkRadius
         );
     }
 
@@ -144,6 +205,15 @@ public final class CrossDimPortalViewUpdater {
         }
 
         return chunks;
+    }
+
+    private static PortalFrame portalFrame(PortalEndpoint endpoint) {
+        return new PortalFrame(
+                endpoint.center(),
+                endpoint.rotation(),
+                endpoint.width(),
+                endpoint.height()
+        );
     }
 
 }

@@ -38,6 +38,7 @@ public final class SameDimPortalTerrainPrimer {
                 || context.mainCompiledSectionsPrimed()) {
             return Result.empty(context == null ? 0 : context.primedSections());
         }
+        SodiumSecondaryViewState state = SodiumSecondaryViewState.getOrCreate(context);
 
         SodiumWorldRenderer mainRenderer = SodiumWorldRenderer.instanceNullable();
         if (mainRenderer == null || mainRenderer == portalRenderer) {
@@ -112,7 +113,7 @@ public final class SameDimPortalTerrainPrimer {
                 continue;
             }
 
-            if (context.sodiumChunkSource().primeTrackedChunk(context.sodiumChunkTracker(), chunk)) {
+            if (state.chunkSource().primeTrackedChunk(state.chunkTracker(), chunk)) {
                 primedNow++;
             }
             long packedChunk = ChunkPos.asLong(chunkX, chunkZ);

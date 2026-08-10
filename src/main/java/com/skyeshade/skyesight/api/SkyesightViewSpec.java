@@ -15,5 +15,31 @@ public record SkyesightViewSpec(
         int width,
         int height,
         float fov,
-        SkyesightRenderMode renderMode
-) {}
+        SkyesightRenderMode renderMode,
+        SkyesightViewRenderOptions renderOptions
+) {
+    public SkyesightViewSpec(
+            ResourceLocation id,
+            ResourceKey<Level> dimension,
+            Vec3 position,
+            Quaternionf rotation,
+            int renderDistanceChunks,
+            int width,
+            int height,
+            float fov,
+            SkyesightRenderMode renderMode
+    ) {
+        this(
+                id,
+                dimension,
+                position,
+                rotation,
+                renderDistanceChunks,
+                width,
+                height,
+                fov,
+                renderMode,
+                SkyesightViewRenderOptions.defaults()
+        );
+    }
+}

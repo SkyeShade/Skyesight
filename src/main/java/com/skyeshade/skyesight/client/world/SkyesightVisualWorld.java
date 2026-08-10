@@ -1,10 +1,9 @@
 package com.skyeshade.skyesight.client.world;
 
-import com.skyeshade.skyesight.Skyesight;
-import com.skyeshade.skyesight.client.render.sodium.SkyesightSodiumWorldRenderer;
-import net.caffeinemc.mods.sodium.client.render.chunk.map.ChunkTracker;
+import com.skyeshade.skyesight.client.compat.sodium.SkyesightSodiumCompat;
+import com.skyeshade.skyesight.client.render.SkyesightVisualFeatureRenderer;
+import com.skyeshade.skyesight.client.render.vanilla.SkyesightVisualVanillaTerrain;
 import net.minecraft.client.Camera;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.core.BlockPos;
@@ -16,9 +15,8 @@ import org.joml.Matrix4f;
 public final class SkyesightVisualWorld implements AutoCloseable {
     private final ResourceKey<Level> dimension;
     private final SkyesightVisualClientLevel level;
-    private final ChunkTracker chunkTracker;
     private boolean closed;
-    private final SkyesightSodiumWorldRenderer renderer;
+    private final SkyesightVisualTerrainBackend terrainBackend;
     private final SkyesightRemoteChunkReceiver chunkReceiver;
     private final SkyesightVisualEntityStore entityStore;
     private final SkyesightVisualParticleManager particles;
@@ -32,13 +30,26 @@ public final class SkyesightVisualWorld implements AutoCloseable {
     ) {
         this.dimension = dimension;
         this.level = level;
-        this.chunkTracker = new ChunkTracker();
-        this.chunkReceiver = new SkyesightRemoteChunkReceiver(level, this.chunkTracker);
+        this.terrainBackend = SkyesightSodiumCompat.isLoaded()
+                ? SodiumVisualMethods.create(level)
+                : SkyesightVisualVanillaTerrain.create(level);
+        this.chunkReceiver = new SkyesightRemoteChunkReceiver(
+                level,
+                new SkyesightRemoteChunkReceiver.ChunkStatusListener() {
+                    @Override
+                    public void onChunkStatusAdded(int chunkX, int chunkZ) {
+                        SkyesightVisualWorld.this.onChunkStatusAdded(chunkX, chunkZ);
+                    }
+
+                    @Override
+                    public void onChunkStatusRemoved(int chunkX, int chunkZ) {
+                        SkyesightVisualWorld.this.onChunkStatusRemoved(chunkX, chunkZ);
+                    }
+                }
+        );
         this.entityStore = new SkyesightVisualEntityStore(level);
         this.particles = new SkyesightVisualParticleManager(dimension);
         this.level.setSkyesightParticleManager(this.particles);
-        this.renderer = new SkyesightSodiumWorldRenderer(Minecraft.getInstance(), this.chunkTracker);
-        this.renderer.setLevel(level);
 
     }
 
@@ -79,9 +90,6 @@ public final class SkyesightVisualWorld implements AutoCloseable {
         // Cross-dimension particles are rendered by SecondaryParticlePass so
         // they can share the direct portal stencil/depth slot with terrain and entities.
     }
-    public SkyesightSodiumWorldRenderer renderer() {
-        return this.renderer;
-    }
     public void renderTerrain(
             Camera camera,
             Frustum frustum,
@@ -100,11 +108,15 @@ public final class SkyesightVisualWorld implements AutoCloseable {
             int chunkRadius,
             boolean renderTranslucent
     ) {
-        this.renderer.renderTerrain(
+        if (this.terrainBackend == null) {
+            return;
+        }
+        this.terrainBackend.renderTerrain(
                 camera,
                 frustum,
                 modelMatrix,
                 projectionMatrix,
+                chunkRadius,
                 renderTranslucent
         );
     }
@@ -124,7 +136,8 @@ public final class SkyesightVisualWorld implements AutoCloseable {
             Matrix4f projectionMatrix,
             float partialTick
     ) {
-        this.renderer.renderBlockEntitiesManual(
+        SkyesightVisualFeatureRenderer.renderBlockEntities(
+                this.level,
                 viewId,
                 this.chunkReceiver,
                 camera,
@@ -147,7 +160,8 @@ public final class SkyesightVisualWorld implements AutoCloseable {
             Matrix4f modelMatrix,
             float partialTick
     ) {
-        this.renderer.renderEntities(
+        SkyesightVisualFeatureRenderer.renderEntities(
+                this.level,
                 entities,
                 camera,
                 modelMatrix,
@@ -163,8 +177,29 @@ public final class SkyesightVisualWorld implements AutoCloseable {
         return level;
     }
 
-    public ChunkTracker chunkTracker() {
-        return chunkTracker;
+    public void scheduleTerrainUpdate() {
+        if (this.terrainBackend != null) {
+            this.terrainBackend.scheduleTerrainUpdate();
+        }
+    }
+
+    public void scheduleBlockUpdate(BlockPos pos) {
+        if (this.terrainBackend != null) {
+            this.terrainBackend.scheduleBlockUpdate(pos);
+        }
+    }
+
+    public void scheduleChunkRebuild(int chunkX, int chunkZ, boolean important) {
+        if (this.terrainBackend != null) {
+            this.terrainBackend.scheduleChunkRebuild(chunkX, chunkZ, important);
+        }
+    }
+
+    public int visibleChunkCount() {
+        if (this.terrainBackend == null) {
+            return 0;
+        }
+        return this.terrainBackend.visibleChunkCount();
     }
     public boolean isClosed() {
         return this.closed;
@@ -192,6 +227,28 @@ public final class SkyesightVisualWorld implements AutoCloseable {
         this.chunkReceiver.clear();
         this.entityStore.clear();
         this.particles.close();
-        this.renderer.close();
+        if (this.terrainBackend != null) {
+            this.terrainBackend.close();
+        }
+    }
+
+    private void onChunkStatusAdded(int chunkX, int chunkZ) {
+        if (this.terrainBackend != null) {
+            this.terrainBackend.onChunkStatusAdded(chunkX, chunkZ);
+        }
+    }
+
+    private void onChunkStatusRemoved(int chunkX, int chunkZ) {
+        if (this.terrainBackend != null) {
+            this.terrainBackend.onChunkStatusRemoved(chunkX, chunkZ);
+        }
+    }
+
+    private static final class SodiumVisualMethods {
+        private SodiumVisualMethods() {}
+
+        private static SkyesightVisualTerrainBackend create(SkyesightVisualClientLevel level) {
+            return (SkyesightVisualTerrainBackend) com.skyeshade.skyesight.client.render.sodium.SkyesightVisualSodiumTerrain.create(level);
+        }
     }
 }

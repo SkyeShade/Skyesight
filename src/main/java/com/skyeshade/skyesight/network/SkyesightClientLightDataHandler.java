@@ -24,7 +24,7 @@ public final class SkyesightClientLightDataHandler {
         );
 
         if (applied) {
-            world.renderer().scheduleChunkRebuild(
+            world.scheduleChunkRebuild(
                     payload.chunkX(),
                     payload.chunkZ(),
                     true

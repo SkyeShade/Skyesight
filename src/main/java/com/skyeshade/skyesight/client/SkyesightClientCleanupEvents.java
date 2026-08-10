@@ -3,8 +3,9 @@ package com.skyeshade.skyesight.client;
 import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.api.SkyesightPortalApi;
 import com.skyeshade.skyesight.client.chunk.SkyesightPortalChunkStorage;
+import com.skyeshade.skyesight.client.portal.CrossDimPortalTerrainWarmup;
 import com.skyeshade.skyesight.client.portal.PortalDirectStencilRenderer;
-import com.skyeshade.skyesight.client.render.sodium.PortalSodiumRendererPool;
+import com.skyeshade.skyesight.client.render.SecondarySodiumTerrainPass;
 import com.skyeshade.skyesight.client.render.state.PortalRemoteChunkRuntimeState;
 import com.skyeshade.skyesight.client.render.state.PortalSecondaryRenderState;
 import com.skyeshade.skyesight.client.view.SkyesightClientApi;
@@ -93,10 +94,11 @@ public final class SkyesightClientCleanupEvents {
         PortalRemoteChunkRuntimeState.reset();
 
         SkyesightClientChunkRequester.reset();
+        CrossDimPortalTerrainWarmup.clear();
         SkyesightPortalChunkStorage.clear();
         SkyesightVisualWorldManager.closeAll();
         SkyesightPortalEntityPool.clearAll();
-        PortalSodiumRendererPool.clear();
+        SecondarySodiumTerrainPass.clearRendererPool();
 
         Skyesight.LOGGER.info(
                 "[Skyesight] CLIENT_LEVEL_CHANGED_INVALIDATE: reason={} viewContextsCleared={} visualWorldsCleared={} remoteChunkCachesCleared=yes portalRegistryEntriesPreserved={}",

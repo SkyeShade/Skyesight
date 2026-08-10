@@ -1,6 +1,7 @@
 package com.skyeshade.skyesight.api;
 
 import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry;
 
 import net.minecraft.resources.ResourceLocation;
 
@@ -58,7 +59,10 @@ public final class SkyesightPortalRegistry {
                 ? new PortalReplacement("register", PortalCachePolicy.SOFT_REPLACE)
                 : classifyReplacement(oldView, newView);
         PORTALS.put(id, newView);
-        if (oldView != null) {
+        mirrorRemoteView(newView);
+        if (oldView == null) {
+            notifyInvalidated(null, newView, replacement.reason(), replacement.cachePolicy());
+        } else {
             notifyInvalidated(oldView, newView, replacement.reason(), replacement.cachePolicy());
         }
         return PortalRegistrationResult.success(List.of(id), "registered " + id);
@@ -70,6 +74,7 @@ public final class SkyesightPortalRegistry {
         }
         RegisteredPortalView removed = PORTALS.remove(id);
         if (removed != null) {
+            SkyesightRemoteViewRegistry.unregister(id);
             notifyInvalidated(removed, null, "remove", PortalCachePolicy.REMOVE);
             return true;
         }
@@ -101,6 +106,7 @@ public final class SkyesightPortalRegistry {
                 true
         );
         PORTALS.put(id, disabledView);
+        mirrorRemoteView(disabledView);
         notifyInvalidated(oldView, disabledView, "disable_retain_cache", PortalCachePolicy.DISABLE_RETAIN_CACHE);
         return true;
     }
@@ -118,6 +124,7 @@ public final class SkyesightPortalRegistry {
             return false;
         });
         for (RegisteredPortalView view : removed) {
+            SkyesightRemoteViewRegistry.unregister(view.id());
             notifyInvalidated(view, null, "clear", PortalCachePolicy.CLEAR);
         }
         return removed.size();
@@ -227,6 +234,17 @@ public final class SkyesightPortalRegistry {
                 );
             }
         }
+    }
+
+    private static void mirrorRemoteView(RegisteredPortalView view) {
+        if (view == null || view.target() == null) {
+            return;
+        }
+        SkyesightRemoteViewRegistry.register(
+                view.id(),
+                view.target().dimension(),
+                view.generation()
+        );
     }
 
     public interface PortalChangeListener {
