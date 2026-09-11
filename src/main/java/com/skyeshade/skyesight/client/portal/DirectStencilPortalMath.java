@@ -65,7 +65,36 @@ public final class DirectStencilPortalMath {
     }
 
     public static SkyesightClipPlane exitClipPlane(PortalFrame exitPortal) {
-        Vec3 normal = normal(exitPortal);
+        return exitClipPlane(exitPortal, 1);
+    }
+
+    /** Select from the physical eye before any exit push can cross the plane. */
+    public static int viewingSide(PortalFrame entrancePortal, Vec3 sourcePosition) {
+        return sourcePosition.subtract(entrancePortal.position()).dot(normal(entrancePortal)) >= 0 ? 1 : -1;
+    }
+
+    public static double apertureOffset(PortalFrame entrancePortal, Vec3 sourcePosition, double magnitude) {
+        return viewingSide(entrancePortal, sourcePosition) * magnitude;
+    }
+
+    public static Vec3 effectiveExitNormal(PortalFrame entrancePortal, PortalFrame exitPortal, Vec3 sourcePosition) {
+        // The portal transform flips local Z. This normal points into the destination,
+        // away from the unpushed virtual eye, on either side of the fixed aperture.
+        return normal(exitPortal).scale(viewingSide(entrancePortal, sourcePosition));
+    }
+
+    public static PortalCameraPose pushThroughExit(PortalCameraPose pose, PortalFrame entrancePortal,
+                                                  PortalFrame exitPortal, Vec3 sourcePosition, double magnitude) {
+        return new PortalCameraPose(pose.position().add(
+                effectiveExitNormal(entrancePortal, exitPortal, sourcePosition).scale(magnitude)), pose.rotation());
+    }
+
+    public static SkyesightClipPlane exitClipPlane(PortalFrame entrancePortal, PortalFrame exitPortal, Vec3 sourcePosition) {
+        return exitClipPlane(exitPortal, viewingSide(entrancePortal, sourcePosition));
+    }
+
+    private static SkyesightClipPlane exitClipPlane(PortalFrame exitPortal, int side) {
+        Vec3 normal = normal(exitPortal).scale(side);
         return new SkyesightClipPlane(
                 exitPortal.position().add(
                         normal.x() * CLIP_PLANE_OFFSET,

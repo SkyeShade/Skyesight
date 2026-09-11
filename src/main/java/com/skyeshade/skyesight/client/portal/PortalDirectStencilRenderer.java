@@ -774,7 +774,7 @@ public final class PortalDirectStencilRenderer {
                 pose.rotation(),
                 instance.entrancePortal(),
                 instance.exitPortal(),
-                DirectStencilPortalMath.exitClipPlane(instance.exitPortal()),
+                DirectStencilPortalMath.exitClipPlane(instance.entrancePortal(), instance.exitPortal(), event.getCamera().getPosition()),
                 mainViewProjection,
                 mainProjection,
                 "skyCapture:" + key + ":" + event.getRenderTick()
@@ -1215,7 +1215,7 @@ public final class PortalDirectStencilRenderer {
                     instance.exitPortal(),
                     behaviorViewId
             );
-            SkyesightClipPlane directClipPlane = DirectStencilPortalMath.exitClipPlane(instance.exitPortal());
+            SkyesightClipPlane directClipPlane = DirectStencilPortalMath.exitClipPlane(instance.entrancePortal(), instance.exitPortal(), mainCamera.getPosition());
             Quaternionf transformedMainRotation = new Quaternionf(directPose.rotation());
             Quaternionf exitRenderRotation = PortalFrameMath.portalRenderRotation(instance.exitPortal());
             ProjectionBasis projectionBasis = projectionBasis(instance.exitPortal());
@@ -2255,26 +2255,8 @@ public final class PortalDirectStencilRenderer {
                 entrancePortal,
                 exitPortal
         );
-        return applyPortalCameraExitPush(pose, exitPortal, viewId);
-    }
-
-    private static DirectStencilPortalMath.PortalCameraPose applyPortalCameraExitPush(
-            DirectStencilPortalMath.PortalCameraPose pose,
-            PortalFrame exitPortal,
-            ResourceLocation viewId
-    ) {
-        if (pose == null || PORTAL_CAMERA_EXIT_PUSH_EPSILON_BLOCKS <= 0.0F) {
-            return pose;
-        }
-
-        Vec3 exitNormal = DirectStencilPortalMath.normal(exitPortal);
-        if (exitNormal.lengthSqr() < 1.0E-8D) {
-            return pose;
-        }
-
-        Vec3 normalizedExitNormal = exitNormal.normalize();
-        Vec3 pushedPosition = pose.position().add(normalizedExitNormal.scale(PORTAL_CAMERA_EXIT_PUSH_EPSILON_BLOCKS));
-        return new DirectStencilPortalMath.PortalCameraPose(pushedPosition, pose.rotation());
+        return DirectStencilPortalMath.pushThroughExit(pose, entrancePortal, exitPortal,
+                sourceCamera.getPosition(), PORTAL_CAMERA_EXIT_PUSH_EPSILON_BLOCKS);
     }
 
     private static Quaternionf resolveDirectCameraRotation(

@@ -42,6 +42,9 @@ public final class SecondaryPortalCompositePass {
                     portalPosition.z() - cameraPosition.z()
             );
             poseStack.mulPose(new Quaternionf(portal.rotation()));
+            // Bias toward the physical viewer without changing the registered plane.
+            double offset = DirectStencilPortalMath.apertureOffset(portal, cameraPosition, PORTAL_Z_OFFSET);
+            poseStack.translate(0, 0, offset - PORTAL_Z_OFFSET);
 
             RenderSystem.setShader(GameRenderer::getPositionTexShader);
             RenderSystem.setShaderTexture(0, colorTextureId);
@@ -566,6 +569,9 @@ public final class SecondaryPortalCompositePass {
                     portalPosition.z() - cameraPosition.z()
             );
             poseStack.mulPose(new Quaternionf(portal.rotation()));
+            // Bias toward the physical viewer without changing the registered plane.
+            double offset = DirectStencilPortalMath.apertureOffset(portal, cameraPosition, PORTAL_Z_OFFSET);
+            poseStack.translate(0, 0, offset - PORTAL_Z_OFFSET);
 
             Matrix4f matrix = poseStack.last().pose();
             float halfWidth = Math.max(0.0F, portal.width() * 0.5F - PORTAL_APERTURE_EDGE_INSET_BLOCKS);
