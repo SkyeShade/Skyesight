@@ -44,4 +44,24 @@ class SkyesightServerRemoteViewRegistryTest {
         assertTrue(SkyesightServerRemoteViewRegistry.register(a, VIEW, other, 2));
         assertEquals(other, SkyesightServerRemoteViewRegistry.unregister(a, VIEW, 2).orElseThrow().targetDimension());
     }
+    @Test void retiredLanObserverCannotFallBackToHostsMatchingPortalGeneration() {
+        String id = "test:lan_portal";
+        var key = ResourceLocation.parse(id);
+        var source = com.skyeshade.skyesight.api.PortalEndpoint.of(id, Level.OVERWORLD,
+                net.minecraft.world.phys.Vec3.ZERO, net.minecraft.core.Direction.NORTH, 5, 5);
+        var target = com.skyeshade.skyesight.api.PortalEndpoint.of("test:destination", DECAY,
+                net.minecraft.world.phys.Vec3.ZERO, net.minecraft.core.Direction.SOUTH, 5, 5);
+        com.skyeshade.skyesight.api.SkyesightPortalApi.registerPortal(id, source, target);
+        try {
+            long generation = com.skyeshade.skyesight.api.SkyesightPortalApi.getPortal(id).generation();
+            UUID a = UUID.randomUUID(), b = UUID.randomUUID();
+            assertTrue(SkyesightServerRemoteViewRegistry.register(a, key, DECAY, generation));
+            assertTrue(SkyesightServerRemoteViewRegistry.register(b, key, DECAY, generation));
+            assertTrue(SkyesightServerRemoteViewRegistry.unregister(a, key, generation).isPresent());
+            assertTrue(SkyesightServerRemoteViewRegistry.resolve(a, key).isEmpty());
+            assertTrue(SkyesightServerRemoteViewRegistry.resolve(b, key).isPresent());
+            assertNotNull(com.skyeshade.skyesight.api.SkyesightPortalApi.getPortal(id));
+        } finally { com.skyeshade.skyesight.api.SkyesightPortalApi.removePortal(id); }
+    }
+
 }
