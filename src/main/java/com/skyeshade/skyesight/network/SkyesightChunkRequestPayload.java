@@ -16,12 +16,19 @@ import java.util.List;
 public record SkyesightChunkRequestPayload(
         ResourceLocation viewId,
         long viewGeneration,
+        long requestSequence,
         ResourceKey<Level> dimension,
         int centerChunkX,
         int centerChunkZ,
         int radius,
         List<ChunkPos> chunks
 ) implements CustomPacketPayload {
+    /** Sequence zero is reserved for producers without a camera request (e.g. portals). */
+    public SkyesightChunkRequestPayload(ResourceLocation viewId, long viewGeneration, ResourceKey<Level> dimension,
+            int centerChunkX, int centerChunkZ, int radius, List<ChunkPos> chunks) {
+        this(viewId, viewGeneration, 0L, dimension, centerChunkX, centerChunkZ, radius, chunks);
+    }
+
     public static final Type<SkyesightChunkRequestPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(Skyesight.MODID, "chunk_request"));
 
@@ -34,6 +41,7 @@ public record SkyesightChunkRequestPayload(
     private static SkyesightChunkRequestPayload read(RegistryFriendlyByteBuf buffer) {
         ResourceLocation viewId = buffer.readResourceLocation();
         long viewGeneration = buffer.readVarLong();
+        long requestSequence = buffer.readVarLong();
         ResourceLocation dimensionId = buffer.readResourceLocation();
 
         int centerChunkX = buffer.readInt();
@@ -41,6 +49,7 @@ public record SkyesightChunkRequestPayload(
         int radius = buffer.readVarInt();
 
         int count = buffer.readVarInt();
+        if (count < 0 || count > 256) throw new io.netty.handler.codec.DecoderException("Remote chunk request count must be 0..256");
         List<ChunkPos> chunks = new ArrayList<>(count);
 
         for (int i = 0; i < count; i++) {
@@ -50,6 +59,7 @@ public record SkyesightChunkRequestPayload(
         return new SkyesightChunkRequestPayload(
                 viewId,
                 viewGeneration,
+                requestSequence,
                 ResourceKey.create(Registries.DIMENSION, dimensionId),
                 centerChunkX,
                 centerChunkZ,
@@ -61,6 +71,7 @@ public record SkyesightChunkRequestPayload(
     private static void write(RegistryFriendlyByteBuf buffer, SkyesightChunkRequestPayload payload) {
         buffer.writeResourceLocation(payload.viewId);
         buffer.writeVarLong(payload.viewGeneration);
+        buffer.writeVarLong(payload.requestSequence);
         buffer.writeResourceLocation(payload.dimension.location());
 
         buffer.writeInt(payload.centerChunkX);

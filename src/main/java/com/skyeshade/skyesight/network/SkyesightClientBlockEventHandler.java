@@ -7,6 +7,11 @@ public final class SkyesightClientBlockEventHandler {
     private SkyesightClientBlockEventHandler() {}
 
     public static void handle(SkyesightBlockEventPayload payload) {
+        if (!com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry.accepts(
+                payload.viewId(), payload.generation(), payload.dimension())) {
+            return;
+        }
+
         SkyesightVisualWorld world =
                 SkyesightVisualWorldManager.getIfCurrent(payload.viewId(), payload.dimension());
 

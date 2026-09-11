@@ -42,13 +42,9 @@ public final class SkyesightVisualSodiumTerrain implements SkyesightVisualTerrai
             int chunkRadius,
             boolean renderTranslucent
     ) {
-        this.renderer.renderTerrain(
-                camera,
-                frustum,
-                modelMatrix,
-                projectionMatrix,
-                renderTranslucent
-        );
+        try (var distance = new com.skyeshade.skyesight.client.render.SkyesightViewDistanceScope(chunkRadius)) {
+            this.renderer.renderTerrain(camera, frustum, modelMatrix, projectionMatrix, renderTranslucent);
+        }
     }
 
     @Override

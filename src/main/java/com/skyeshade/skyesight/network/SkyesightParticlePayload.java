@@ -13,6 +13,7 @@ import net.minecraft.world.level.Level;
 
 public record SkyesightParticlePayload(
         ResourceLocation viewId,
+        long generation,
         ResourceKey<Level> dimension,
         ParticleOptions particle,
         boolean overrideLimiter,
@@ -36,6 +37,7 @@ public record SkyesightParticlePayload(
 
     private static SkyesightParticlePayload read(RegistryFriendlyByteBuf buffer) {
         ResourceLocation viewId = buffer.readResourceLocation();
+        long generation = buffer.readVarLong();
         ResourceLocation dimensionId = buffer.readResourceLocation();
 
         ParticleOptions particle = ParticleTypes.STREAM_CODEC.decode(buffer);
@@ -56,6 +58,7 @@ public record SkyesightParticlePayload(
 
         return new SkyesightParticlePayload(
                 viewId,
+                generation,
                 ResourceKey.create(Registries.DIMENSION, dimensionId),
                 particle,
                 overrideLimiter,
@@ -72,6 +75,7 @@ public record SkyesightParticlePayload(
 
     private static void write(RegistryFriendlyByteBuf buffer, SkyesightParticlePayload payload) {
         buffer.writeResourceLocation(payload.viewId());
+        buffer.writeVarLong(payload.generation());
         buffer.writeResourceLocation(payload.dimension().location());
 
         ParticleTypes.STREAM_CODEC.encode(buffer, payload.particle());

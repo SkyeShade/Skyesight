@@ -57,6 +57,7 @@ public final class SkyesightServerParticleBroadcaster {
                     player,
                     new SkyesightParticlePayload(
                             watched.watch().viewId(),
+                            watched.watch().generation(),
                             level.dimension(),
                             particle,
                             overrideLimiter,

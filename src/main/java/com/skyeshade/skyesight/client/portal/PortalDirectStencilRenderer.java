@@ -152,6 +152,7 @@ public final class PortalDirectStencilRenderer {
         invalidPortalStencilRefWarnings.remove(viewId);
         PortalStickSkyWarmup.clear(viewId);
         PortalRenderTargetBounds.clear(viewId);
+        PORTAL_SKY_CAPTURE_MANAGER.removeCloudState(skyCaptureKey(viewId));
         clearCrossDimEntitySourceLog(viewId);
     }
 
@@ -185,6 +186,7 @@ public final class PortalDirectStencilRenderer {
         portalRenderedThisFrameByView.remove(viewId);
         invalidPortalStencilRefWarnings.remove(viewId);
         PortalRenderTargetBounds.clear(viewId);
+        PORTAL_SKY_CAPTURE_MANAGER.removeCloudState(skyCaptureKey(viewId));
         clearCrossDimEntitySourceLog(viewId);
     }
 
@@ -764,16 +766,6 @@ public final class PortalDirectStencilRenderer {
         Matrix4f mainProjection = new Matrix4f(event.getProjectionMatrix());
         Matrix4f mainViewProjection = new Matrix4f(event.getProjectionMatrix()).mul(event.getModelViewMatrix());
         var mainTarget = minecraft.getMainRenderTarget();
-        PortalRenderTargetBounds.TargetSize skyTargetSize = PortalRenderTargetBounds.resolveTargetSize(
-                viewId,
-                mainViewProjection,
-                instance.entrancePortal(),
-                event.getCamera() == null ? null : event.getCamera().getPosition(),
-                mainTarget == null ? 0 : mainTarget.width,
-                mainTarget == null ? 0 : mainTarget.height,
-                mainTarget == null ? 0 : mainTarget.width,
-                mainTarget == null ? 0 : mainTarget.height
-        );
         SecondaryViewFrame terrainFrame = PortalSecondaryWorldRenderer.createDirectPortalFrameForCapture(
                 instance.viewContext(),
                 minecraft,
@@ -799,8 +791,9 @@ public final class PortalDirectStencilRenderer {
                 terrainFrame.projectionMatrix(),
                 terrainFrame.diagnostics().projectionSummary(),
                 PortalSecondaryWorldRenderer.directPortalProjectionFov(),
-                skyTargetSize.width(),
-                skyTargetSize.height()
+                mainTarget == null ? 0 : mainTarget.width,
+                mainTarget == null ? 0 : mainTarget.height,
+                viewId
         );
     }
 

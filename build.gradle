@@ -199,3 +199,16 @@ idea {
         downloadJavadoc = true
     }
 }
+
+// Regression coverage for shared remote chunk ownership and per-player generations.
+dependencies {
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.0'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher:1.10.0'
+}
+tasks.named('test', Test) {
+    useJUnitPlatform()
+    workingDir = layout.buildDirectory.dir('test-runtime').get().asFile
+    doFirst { workingDir.mkdirs() }
+}
+sourceSets.test.compileClasspath += sourceSets.main.compileClasspath
+sourceSets.test.runtimeClasspath += sourceSets.main.runtimeClasspath

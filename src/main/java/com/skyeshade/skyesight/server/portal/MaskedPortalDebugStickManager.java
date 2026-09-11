@@ -40,8 +40,8 @@ public final class MaskedPortalDebugStickManager {
     public static final ResourceLocation DEBUG_MASK_TEXTURE =
             ResourceLocation.fromNamespaceAndPath(Skyesight.MODID, "stencil/debug_mask");
     private static final String MARKER_TAG = "skyesight_debug_masked_portal_stick_marker";
-    private static final float MASKED_PORTAL_WIDTH = 2.0F;
-    private static final float MASKED_PORTAL_HEIGHT = 2.0F;
+    private static final float MASKED_PORTAL_WIDTH = 5.0F;
+    private static final float MASKED_PORTAL_HEIGHT = 5.0F;
     private static final Map<UUID, StickState> STATES = new HashMap<>();
 
     private MaskedPortalDebugStickManager() {

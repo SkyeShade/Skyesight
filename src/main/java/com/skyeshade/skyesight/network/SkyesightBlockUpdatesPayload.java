@@ -18,6 +18,7 @@ import java.util.List;
 
 public record SkyesightBlockUpdatesPayload(
         ResourceLocation viewId,
+        long generation,
         ResourceKey<Level> dimension,
         List<Entry> updates
 ) implements CustomPacketPayload {
@@ -32,6 +33,7 @@ public record SkyesightBlockUpdatesPayload(
 
     private static SkyesightBlockUpdatesPayload read(RegistryFriendlyByteBuf buffer) {
         ResourceLocation viewId = buffer.readResourceLocation();
+        long generation = buffer.readVarLong();
         ResourceLocation dimensionId = buffer.readResourceLocation();
 
         int size = buffer.readVarInt();
@@ -46,6 +48,7 @@ public record SkyesightBlockUpdatesPayload(
 
         return new SkyesightBlockUpdatesPayload(
                 viewId,
+                generation,
                 ResourceKey.create(Registries.DIMENSION, dimensionId),
                 updates
         );
@@ -53,6 +56,7 @@ public record SkyesightBlockUpdatesPayload(
 
     private static void write(RegistryFriendlyByteBuf buffer, SkyesightBlockUpdatesPayload payload) {
         buffer.writeResourceLocation(payload.viewId());
+        buffer.writeVarLong(payload.generation());
         buffer.writeResourceLocation(payload.dimension().location());
 
         buffer.writeVarInt(payload.updates().size());

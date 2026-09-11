@@ -1,5 +1,6 @@
 package com.skyeshade.skyesight.server.portal;
 
+import com.skyeshade.skyesight.server.SkyesightForcedChunkTickets;
 import com.skyeshade.skyesight.server.portal.PortalRegionTracker.Key;
 import com.skyeshade.skyesight.server.portal.PortalRegionTracker.Region;
 import net.minecraft.server.MinecraftServer;
@@ -11,6 +12,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public final class PortalChunkTicketController {
+    private static final TicketType<String> SIMULATION_TICKET = TicketType.create("skyesight_simulation", java.util.Comparator.<String>naturalOrder());
     private static final Map<Key, Long> LAST_TICKET_REFRESH_TICKS = new HashMap<>();
 
     private PortalChunkTicketController() {
@@ -19,24 +21,22 @@ public final class PortalChunkTicketController {
     public static void refreshRegionTickets(ServerLevel level, Region region, boolean entityTickingEnabled, int pathfindingChunkMargin) {
         ChunkPos center = new ChunkPos(region.centerChunkX(), region.centerChunkZ());
         if (entityTickingEnabled) {
-            level.getChunkSource().addRegionTicket(TicketType.PLAYER, center, region.loadRadiusChunks() + pathfindingChunkMargin, center, true);
+            level.getChunkSource().addRegionTicket(SIMULATION_TICKET, center, region.loadRadiusChunks() + pathfindingChunkMargin, region.playerId() + "/" + region.viewId(), true);
             LAST_TICKET_REFRESH_TICKS.put(new Key(region.playerId(), region.viewId()), (long) level.getServer().getTickCount());
         }
         for (long packed : region.chunks()) {
-            level.setChunkForced(ChunkPos.getX(packed), ChunkPos.getZ(packed), true);
+            SkyesightForcedChunkTickets.acquire(level, packed, "simulation", region.playerId(), region.viewId());
         }
     }
 
     public static void removeRegionTickets(MinecraftServer server, Region region, int pathfindingChunkMargin) {
         ServerLevel level = server.getLevel(region.dimension());
-        if (level == null) {
-            return;
-        }
+
         ChunkPos center = new ChunkPos(region.centerChunkX(), region.centerChunkZ());
-        level.getChunkSource().removeRegionTicket(TicketType.PLAYER, center, region.loadRadiusChunks() + pathfindingChunkMargin, center, true);
+        if (level != null) level.getChunkSource().removeRegionTicket(SIMULATION_TICKET, center, region.loadRadiusChunks() + pathfindingChunkMargin, region.playerId() + "/" + region.viewId(), true);
         LAST_TICKET_REFRESH_TICKS.remove(new Key(region.playerId(), region.viewId()));
         for (long packed : region.chunks()) {
-            level.setChunkForced(ChunkPos.getX(packed), ChunkPos.getZ(packed), false);
+            SkyesightForcedChunkTickets.release(server, region.dimension(), packed, "simulation", region.playerId(), region.viewId());
         }
     }
 

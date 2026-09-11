@@ -2,6 +2,7 @@ package com.skyeshade.skyesight.network;
 
 import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.SkyesightDebugConfig;
+import com.skyeshade.skyesight.server.SkyesightRemoteViewLifecycleHandler;
 import com.skyeshade.skyesight.server.SkyesightServerChunkSender;
 import com.skyeshade.skyesight.server.portal.PortalProxyArmorStandDebugManager;
 import net.minecraft.server.level.ServerPlayer;
@@ -17,12 +18,17 @@ public final class SkyesightPayloads {
         }
 
         PayloadRegistrar registrar = event.registrar(Skyesight.MODID)
-                .versioned("1");
+                .versioned("4");
 
         registrar.playToServer(
                 SkyesightChunkRequestPayload.TYPE,
                 SkyesightChunkRequestPayload.STREAM_CODEC,
                 SkyesightServerChunkSender::handleChunkRequest
+        );
+        registrar.playToServer(
+                SkyesightRemoteViewLifecyclePayload.TYPE,
+                SkyesightRemoteViewLifecyclePayload.STREAM_CODEC,
+                SkyesightRemoteViewLifecycleHandler::handle
         );
         registrar.playToServer(
                 SkyesightProxyMarkerPayload.TYPE,
@@ -81,6 +87,20 @@ public final class SkyesightPayloads {
                 SkyesightParticlePayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
                         () -> SkyesightClientParticleHandler.handle(payload)
+                )
+        );
+        registrar.playToClient(
+                SkyesightDimensionMetadataPayload.TYPE,
+                SkyesightDimensionMetadataPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> com.skyeshade.skyesight.client.world.SkyesightClientDimensionMetadata.accept(payload)
+                )
+        );
+        registrar.playToClient(
+                SkyesightEnvironmentPayload.TYPE,
+                SkyesightEnvironmentPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(
+                        () -> SkyesightClientEnvironmentHandler.handle(payload)
                 )
         );
     }

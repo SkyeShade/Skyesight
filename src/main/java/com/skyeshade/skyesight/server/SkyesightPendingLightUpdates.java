@@ -84,6 +84,7 @@ public final class SkyesightPendingLightUpdates {
                         player,
                         new SkyesightLightDataPayload(
                                 watched.watch().viewId(),
+                                watched.watch().generation(),
                                 level.dimension(),
                                 pos.x,
                                 pos.z,

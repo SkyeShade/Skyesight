@@ -12,6 +12,7 @@ import net.minecraft.world.level.Level;
 
 public record SkyesightBlockEventPayload(
         ResourceLocation viewId,
+        long generation,
         ResourceKey<Level> dimension,
         BlockPos pos,
         int eventId,
@@ -28,6 +29,7 @@ public record SkyesightBlockEventPayload(
 
     private static SkyesightBlockEventPayload read(RegistryFriendlyByteBuf buffer) {
         ResourceLocation viewId = buffer.readResourceLocation();
+        long generation = buffer.readVarLong();
         ResourceLocation dimensionId = buffer.readResourceLocation();
 
         BlockPos pos = buffer.readBlockPos();
@@ -36,6 +38,7 @@ public record SkyesightBlockEventPayload(
 
         return new SkyesightBlockEventPayload(
                 viewId,
+                generation,
                 ResourceKey.create(Registries.DIMENSION, dimensionId),
                 pos,
                 eventId,
@@ -45,6 +48,7 @@ public record SkyesightBlockEventPayload(
 
     private static void write(RegistryFriendlyByteBuf buffer, SkyesightBlockEventPayload payload) {
         buffer.writeResourceLocation(payload.viewId());
+        buffer.writeVarLong(payload.generation());
         buffer.writeResourceLocation(payload.dimension().location());
 
         buffer.writeBlockPos(payload.pos());

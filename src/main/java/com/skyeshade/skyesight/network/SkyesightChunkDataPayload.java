@@ -14,6 +14,7 @@ import net.minecraft.world.level.Level;
 public record SkyesightChunkDataPayload(
         ResourceLocation viewId,
         long viewGeneration,
+        long requestSequence,
         ResourceKey<Level> dimension,
         int centerChunkX,
         int centerChunkZ,
@@ -23,6 +24,12 @@ public record SkyesightChunkDataPayload(
         ClientboundLevelChunkPacketData chunkData,
         ClientboundLightUpdatePacketData lightData
 ) implements CustomPacketPayload {
+    /** Sequence zero is reserved for producers without a camera request (e.g. portals). */
+    public SkyesightChunkDataPayload(ResourceLocation viewId, long viewGeneration, ResourceKey<Level> dimension,
+            int centerChunkX, int centerChunkZ, int radius, int chunkX, int chunkZ, ClientboundLevelChunkPacketData chunkData, ClientboundLightUpdatePacketData lightData) {
+        this(viewId, viewGeneration, 0L, dimension, centerChunkX, centerChunkZ, radius, chunkX, chunkZ, chunkData, lightData);
+    }
+
     public static final Type<SkyesightChunkDataPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(Skyesight.MODID, "chunk_data"));
 
@@ -35,6 +42,7 @@ public record SkyesightChunkDataPayload(
     private static SkyesightChunkDataPayload read(RegistryFriendlyByteBuf buffer) {
         ResourceLocation viewId = buffer.readResourceLocation();
         long viewGeneration = buffer.readVarLong();
+        long requestSequence = buffer.readVarLong();
         ResourceLocation dimensionId = buffer.readResourceLocation();
 
         int centerChunkX = buffer.readInt();
@@ -53,6 +61,7 @@ public record SkyesightChunkDataPayload(
         return new SkyesightChunkDataPayload(
                 viewId,
                 viewGeneration,
+                requestSequence,
                 ResourceKey.create(Registries.DIMENSION, dimensionId),
                 centerChunkX,
                 centerChunkZ,
@@ -67,6 +76,7 @@ public record SkyesightChunkDataPayload(
     private static void write(RegistryFriendlyByteBuf buffer, SkyesightChunkDataPayload payload) {
         buffer.writeResourceLocation(payload.viewId);
         buffer.writeVarLong(payload.viewGeneration);
+        buffer.writeVarLong(payload.requestSequence);
         buffer.writeResourceLocation(payload.dimension.location());
 
         buffer.writeInt(payload.centerChunkX);

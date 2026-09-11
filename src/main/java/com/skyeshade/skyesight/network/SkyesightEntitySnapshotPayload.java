@@ -22,6 +22,7 @@ import java.util.UUID;
 
 public record SkyesightEntitySnapshotPayload(
         ResourceLocation viewId,
+        long generation,
         ResourceKey<Level> dimension,
         List<Entry> entities
 ) implements CustomPacketPayload {
@@ -40,6 +41,7 @@ public record SkyesightEntitySnapshotPayload(
 
     private static SkyesightEntitySnapshotPayload read(RegistryFriendlyByteBuf buffer) {
         ResourceLocation viewId = buffer.readResourceLocation();
+        long generation = buffer.readVarLong();
         ResourceLocation dimensionId = buffer.readResourceLocation();
 
         int count = buffer.readVarInt();
@@ -125,6 +127,7 @@ public record SkyesightEntitySnapshotPayload(
 
         return new SkyesightEntitySnapshotPayload(
                 viewId,
+                generation,
                 ResourceKey.create(Registries.DIMENSION, dimensionId),
                 entities
         );
@@ -132,6 +135,7 @@ public record SkyesightEntitySnapshotPayload(
 
     private static void write(RegistryFriendlyByteBuf buffer, SkyesightEntitySnapshotPayload payload) {
         buffer.writeResourceLocation(payload.viewId());
+        buffer.writeVarLong(payload.generation());
         buffer.writeResourceLocation(payload.dimension().location());
 
         buffer.writeVarInt(payload.entities().size());

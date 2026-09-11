@@ -16,6 +16,15 @@ public final class SkyesightServerEntitySnapshotEvents {
     @SubscribeEvent
     public static void onServerTick(ServerTickEvent.Post event) {
         PortalSimulationCoordinator.tick(event.getServer());
+        if (event.getServer().getTickCount() % SkyesightServerEnvironmentSender.UPDATE_INTERVAL_TICKS == 0) {
+            SkyesightServerViewTracker.forEachWatch((playerId, watch) -> {
+                ServerPlayer player = event.getServer().getPlayerList().getPlayer(playerId);
+                ServerLevel level = event.getServer().getLevel(watch.dimension());
+                if (player != null && level != null) {
+                    SkyesightServerEnvironmentSender.send(player, watch, level);
+                }
+            });
+        }
         if (event.getServer().getTickCount() % SNAPSHOT_INTERVAL_TICKS != 0) {
             return;
         }

@@ -121,7 +121,7 @@ public final class SkyesightVisualVanillaTerrain implements SkyesightVisualTerra
             return;
         }
 
-        try {
+        try (var distance = new com.skyeshade.skyesight.client.render.SkyesightViewDistanceScope(chunkRadius)) {
             LevelRendererSecondaryTerrainBridge bridge = (LevelRendererSecondaryTerrainBridge) this.levelRenderer;
             RenderSystem.setProjectionMatrix(projectionMatrix, VertexSorting.DISTANCE_TO_ORIGIN);
             var modelViewStack = RenderSystem.getModelViewStack();
@@ -172,6 +172,12 @@ public final class SkyesightVisualVanillaTerrain implements SkyesightVisualTerra
                     modelMatrix,
                     projectionMatrix
             );
+            if (renderTranslucent) {
+                bridge.skyesight$renderSecondarySectionLayer(
+                        RenderType.translucent(), cameraPosition.x(), cameraPosition.y(), cameraPosition.z(),
+                        modelMatrix, projectionMatrix
+                );
+            }
         } catch (RuntimeException exception) {
             logFailureOnce(exception);
         } finally {

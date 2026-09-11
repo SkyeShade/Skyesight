@@ -30,6 +30,7 @@
   ],
   "client": [
     "client.CameraInvoker",
+    "client.OptionsSecondaryViewDistanceMixin",
     "client.ClientLevelParticleCaptureMixin",
     "client.ClientLevelPortalEntityRenderContextMixin",
     "client.ClientPacketListenerEntityLeakTripwireMixin",
@@ -42,6 +43,7 @@
     "client.GameRendererStateAccessor",
     "client.LevelRendererAccessor",
     "client.LevelRendererCloudInvoker",
+    "client.LevelRendererCloudNdcDiagnosticMixin",
     "client.LevelRendererEndSkyInvoker",
     "client.LevelRendererSecondaryTerrainMixin",
     "client.LevelRendererSkyBufferAccessor",
@@ -53,6 +55,7 @@
     "client.ParticleAccessor",
     "client.ParticleEngineAccessor",
     "client.RenderTargetBindWriteDebugMixin",
+    "client.VertexBufferCloudDiagnosticMixin",
     "client.sodium.RenderSectionManagerMixin",
     "client.sodium.RenderSectionManagerRenderLayerDebugMixin",
     "client.sodium.SodiumWorldRendererMixin"

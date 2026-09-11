@@ -12,6 +12,7 @@ import net.minecraft.world.level.Level;
 
 public record SkyesightLightDataPayload(
         ResourceLocation viewId,
+        long generation,
         ResourceKey<Level> dimension,
         int chunkX,
         int chunkZ,
@@ -28,6 +29,7 @@ public record SkyesightLightDataPayload(
 
     private static SkyesightLightDataPayload read(RegistryFriendlyByteBuf buffer) {
         ResourceLocation viewId = buffer.readResourceLocation();
+        long generation = buffer.readVarLong();
         ResourceLocation dimensionId = buffer.readResourceLocation();
 
         int chunkX = buffer.readInt();
@@ -38,6 +40,7 @@ public record SkyesightLightDataPayload(
 
         return new SkyesightLightDataPayload(
                 viewId,
+                generation,
                 ResourceKey.create(Registries.DIMENSION, dimensionId),
                 chunkX,
                 chunkZ,
@@ -47,6 +50,7 @@ public record SkyesightLightDataPayload(
 
     private static void write(RegistryFriendlyByteBuf buffer, SkyesightLightDataPayload payload) {
         buffer.writeResourceLocation(payload.viewId());
+        buffer.writeVarLong(payload.generation());
         buffer.writeResourceLocation(payload.dimension().location());
 
         buffer.writeInt(payload.chunkX());

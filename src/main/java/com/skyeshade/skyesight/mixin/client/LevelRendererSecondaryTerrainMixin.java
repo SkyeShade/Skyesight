@@ -80,9 +80,10 @@ public abstract class LevelRendererSecondaryTerrainMixin implements LevelRendere
         if (this.level == null || camera == null || frustum == null) {
             return;
         }
-        if (this.minecraft.options.getEffectiveRenderDistance() != this.lastViewDistance
+        boolean rebuilt = this.minecraft.options.getEffectiveRenderDistance() != this.lastViewDistance
                 || this.viewArea == null
-                || this.sectionRenderDispatcher == null) {
+                || this.sectionRenderDispatcher == null;
+        if (rebuilt) {
             this.allChanged();
         }
         if (this.viewArea == null || this.sectionRenderDispatcher == null) {
@@ -93,7 +94,9 @@ public abstract class LevelRendererSecondaryTerrainMixin implements LevelRendere
         int sectionX = SectionPos.posToSectionCoord(cameraPosition.x());
         int sectionY = SectionPos.posToSectionCoord(cameraPosition.y());
         int sectionZ = SectionPos.posToSectionCoord(cameraPosition.z());
-        if (this.lastCameraSectionX != sectionX
+        // allChanged initially positions the new grid at the physical camera.
+        // A stationary secondary camera still needs its replacement grid repositioned.
+        if (rebuilt || this.lastCameraSectionX != sectionX
                 || this.lastCameraSectionY != sectionY
                 || this.lastCameraSectionZ != sectionZ) {
             this.lastCameraSectionX = sectionX;

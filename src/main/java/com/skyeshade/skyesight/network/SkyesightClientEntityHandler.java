@@ -10,6 +10,11 @@ public final class SkyesightClientEntityHandler {
     private SkyesightClientEntityHandler() {}
 
     public static void handle(SkyesightEntitySnapshotPayload payload) {
+        if (!com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry.accepts(
+                payload.viewId(), payload.generation(), payload.dimension())) {
+            return;
+        }
+
         SkyesightVisualWorld world =
                 SkyesightVisualWorldManager.getIfCurrent(payload.viewId(), payload.dimension());
 

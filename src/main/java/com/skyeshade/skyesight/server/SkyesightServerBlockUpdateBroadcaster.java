@@ -49,6 +49,7 @@ public final class SkyesightServerBlockUpdateBroadcaster {
                     player,
                     new SkyesightBlockUpdatesPayload(
                             watched.watch().viewId(),
+                            watched.watch().generation(),
                             level.dimension(),
                             List.of(new SkyesightBlockUpdatesPayload.Entry(
                                     pos.immutable(),

@@ -133,6 +133,9 @@ public final class SkyesightVisualWorldManager {
         }
 
         SkyesightVisualClientLevel skyesightLevel = SkyesightClientLevelFactory.create(dimension);
+        if (skyesightLevel == null) {
+            return null; // Retry creation on a later frame after authoritative identity arrives.
+        }
         SkyesightVisualWorld world = new SkyesightVisualWorld(dimension, skyesightLevel);
         PortalPathProximity.registerVisualLevel(
                 skyesightLevel,

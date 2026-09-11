@@ -2,6 +2,7 @@ package com.skyeshade.skyesight.client.world;
 
 import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.SkyesightDebugConfig;
+import com.skyeshade.skyesight.network.SkyesightEnvironmentPayload;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.renderer.LevelRenderer;
@@ -17,6 +18,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.dimension.DimensionType;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.phys.Vec3;
@@ -30,6 +32,10 @@ public final class SkyesightVisualClientLevel extends ClientLevel {
     private String particleCaptureSource = "visual-addParticle";
     private ResourceLocation skyesightViewId;
     private long lastParticleCapturePathLogMillis;
+    private boolean skyesightEnvironmentSynchronized;
+    private boolean skyesightRaining;
+    private boolean skyesightThundering;
+    private long skyesightLastEnvironmentUpdateMillis;
     private final Set<String> suppressedSideEffectsLogged = new HashSet<>();
 
     public SkyesightVisualClientLevel(
@@ -72,6 +78,51 @@ public final class SkyesightVisualClientLevel extends ClientLevel {
 
     public SkyesightVisualParticleManager skyesightParticleManager() {
         return this.particleManager;
+    }
+
+    public void applySkyesightEnvironment(SkyesightEnvironmentPayload payload) {
+        this.setGameTime(payload.gameTime());
+        this.setDayTime(payload.dayTime());
+        this.getGameRules().getRule(GameRules.RULE_DAYLIGHT)
+                .set(payload.daylightCycleRunning(), null);
+        this.setDayTimeFraction(payload.dayTimeFraction());
+        this.setDayTimePerTick(payload.dayTimePerTick());
+        this.getLevelData().setRaining(payload.raining());
+        this.skyesightRaining = payload.raining();
+        this.skyesightThundering = payload.thundering();
+        this.setRainLevel(payload.rainLevel());
+        this.setThunderLevel(payload.thunderLevel());
+        this.skyesightEnvironmentSynchronized = true;
+        this.skyesightLastEnvironmentUpdateMillis = System.currentTimeMillis();
+        this.updateSkyBrightness();
+    }
+
+    public void tickSkyesightEnvironment() {
+        if (!this.skyesightEnvironmentSynchronized) {
+            return;
+        }
+
+        this.setGameTime(this.getGameTime() + 1L);
+        if (this.getGameRules().getBoolean(GameRules.RULE_DAYLIGHT)) {
+            this.setDayTime(this.getDayTime() + this.advanceDaytime());
+        }
+
+        this.oRainLevel = this.rainLevel;
+        this.rainLevel = approach(this.rainLevel, this.skyesightRaining ? 1.0F : 0.0F, 0.01F);
+        this.oThunderLevel = this.thunderLevel;
+        this.thunderLevel = approach(this.thunderLevel, this.skyesightThundering ? 1.0F : 0.0F, 0.01F);
+        this.updateSkyBrightness();
+    }
+
+    public long skyesightLastEnvironmentUpdateMillis() {
+        return this.skyesightLastEnvironmentUpdateMillis;
+    }
+
+    private static float approach(float value, float target, float step) {
+        if (value < target) {
+            return Math.min(target, value + step);
+        }
+        return Math.max(target, value - step);
     }
 
     @Override

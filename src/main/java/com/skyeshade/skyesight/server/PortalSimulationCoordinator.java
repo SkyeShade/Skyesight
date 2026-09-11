@@ -162,6 +162,19 @@ public class PortalSimulationCoordinator {
         PortalRegionTracker.put(region);
     }
 
+    public static void remove(ServerPlayer player, ResourceLocation viewId) {
+        if (player == null || viewId == null) {
+            return;
+        }
+        Key key = new Key(player.getUUID(), viewId);
+        Region region = PortalRegionTracker.get(key);
+        if (region == null) {
+            return;
+        }
+        removeRegionTickets(player.server, region);
+        PortalRegionTracker.remove(key);
+    }
+
 
     public static void tick(MinecraftServer server) {
         if (!PORTAL_SIMULATION_ENABLED || server == null) {
@@ -210,7 +223,7 @@ public class PortalSimulationCoordinator {
             for (long packed : region.chunks()) {
                 int chunkX = ChunkPos.getX(packed);
                 int chunkZ = ChunkPos.getZ(packed);
-                level.setChunkForced(chunkX, chunkZ, true);
+                // Region ticket ownership is refreshed once above; never force chunks independently.
 
                 if (level.getChunkSource().hasChunk(chunkX, chunkZ)) {
                     chunksLoaded++;

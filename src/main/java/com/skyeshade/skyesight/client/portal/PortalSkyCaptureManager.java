@@ -2,17 +2,21 @@ package com.skyeshade.skyesight.client.portal;
 
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import com.mojang.blaze3d.vertex.VertexBuffer;
 import com.mojang.blaze3d.vertex.VertexSorting;
 import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.SkyesightClientConfig;
 import com.skyeshade.skyesight.SkyesightDebugConfig;
 import com.skyeshade.skyesight.client.compat.iris.SkyesightIrisCompat;
+import com.skyeshade.skyesight.client.render.PortalCloudTerrainFrameDiagnostics;
 import com.skyeshade.skyesight.client.render.SkyesightClonedSkyRenderer;
+import com.skyeshade.skyesight.client.render.SkyesightIsolatedCloudRenderer;
 import com.skyeshade.skyesight.mixin.client.CameraInvoker;
-import com.skyeshade.skyesight.mixin.client.LevelRendererCloudInvoker;
 import com.skyeshade.skyesight.mixin.client.LevelRendererSkyInvoker;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.CloudStatus;
@@ -23,6 +27,7 @@ import net.minecraft.client.renderer.DimensionSpecialEffects;
 import net.minecraft.client.renderer.FogRenderer;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.ShaderInstance;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
@@ -31,6 +36,7 @@ import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL14;
 import org.lwjgl.opengl.GL30;
 
 import java.nio.ByteBuffer;
@@ -53,6 +59,7 @@ public final class PortalSkyCaptureManager {
     private static final RgbaSample PORTAL_E_FIXED_NETHER_FALLBACK_COLOR = new RgbaSample(42, 12, 9, 255);
     private static final ThreadLocal<Boolean> PORTAL_SKY_CAPTURE_ACTIVE = ThreadLocal.withInitial(() -> false);
     private static long lastCaptureSummaryLogNanos = 0L;
+    private static long lastCaptureResolutionLogNanos = 0L;
 
     private enum PortalCloudMode {
         DISABLED,
@@ -88,6 +95,8 @@ public final class PortalSkyCaptureManager {
 
     private final Map<String, TextureTarget> targets = new HashMap<>();
     private final Map<String, Capture> captures = new HashMap<>();
+    private final Map<String, DebugCloudReferencePattern> debugCloudReferencePatterns = new HashMap<>();
+    private final SkyesightIsolatedCloudRenderer isolatedCloudRenderer = new SkyesightIsolatedCloudRenderer();
 
     public Capture captureMainCameraCopy(Minecraft minecraft, RenderLevelStageEvent event) {
         var mainTarget = minecraft.getMainRenderTarget();
@@ -155,6 +164,38 @@ public final class PortalSkyCaptureManager {
             int targetWidth,
             int targetHeight
     ) {
+        return capturePortalCameraSky(
+                minecraft,
+                event,
+                key,
+                targetLevel,
+                targetLevelSource,
+                camera,
+                cameraRotation,
+                terrainProjection,
+                terrainProjectionSummary,
+                terrainFov,
+                targetWidth,
+                targetHeight,
+                null
+        );
+    }
+
+    Capture capturePortalCameraSky(
+            Minecraft minecraft,
+            RenderLevelStageEvent event,
+            String key,
+            ClientLevel targetLevel,
+            String targetLevelSource,
+            Camera camera,
+            Quaternionf cameraRotation,
+            Matrix4f terrainProjection,
+            String terrainProjectionSummary,
+            double terrainFov,
+            int targetWidth,
+            int targetHeight,
+            ResourceLocation diagnosticViewId
+    ) {
         ClientLevel level = targetLevel;
         var mainTarget = minecraft.getMainRenderTarget();
         if (level == null || mainTarget == null || mainTarget.width <= 0 || mainTarget.height <= 0) {
@@ -175,6 +216,10 @@ public final class PortalSkyCaptureManager {
         modelViewStack.pushMatrix();
         boolean depthTestBefore = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
         boolean blendBefore = GL11.glIsEnabled(GL11.GL_BLEND);
+        int blendSrcRgbBefore = GL11.glGetInteger(GL14.GL_BLEND_SRC_RGB);
+        int blendDstRgbBefore = GL11.glGetInteger(GL14.GL_BLEND_DST_RGB);
+        int blendSrcAlphaBefore = GL11.glGetInteger(GL14.GL_BLEND_SRC_ALPHA);
+        int blendDstAlphaBefore = GL11.glGetInteger(GL14.GL_BLEND_DST_ALPHA);
         boolean cullBefore = GL11.glIsEnabled(GL11.GL_CULL_FACE);
         boolean depthMaskBefore = GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK);
         boolean[] colorMaskBefore = colorMask();
@@ -188,6 +233,9 @@ public final class PortalSkyCaptureManager {
 
         try {
             TextureTarget target = getOrCreate(key, captureWidth, captureHeight);
+            // Capture starts after the physical dimension's sky hook. Its blend factors
+            // are not necessarily vanilla's, even when blending itself is disabled.
+            RenderSystem.defaultBlendFunc();
             target.bindWrite(true);
             RenderSystem.viewport(0, 0, target.width, target.height);
             RenderSystem.colorMask(true, true, true, true);
@@ -204,9 +252,9 @@ public final class PortalSkyCaptureManager {
                     ? new Matrix4f(terrainProjection)
                     : fallbackProjection;
             Matrix4f frustum = new Matrix4f().rotation(new Quaternionf(cameraRotation).conjugate());
-            Vec3 originalCameraPosition = camera.getPosition();
-            cameraPositionBeforeCapture = originalCameraPosition;
-            double originalCameraY = originalCameraPosition.y();
+            Vec3 truePortalCameraPosition = camera.getPosition();
+            cameraPositionBeforeCapture = truePortalCameraPosition;
+            double originalCameraY = truePortalCameraPosition.y();
             double horizon = level.getLevelData().getHorizonHeight(level);
             boolean originalBelowHorizon = originalCameraY - horizon < 0.0D;
             boolean cameraYAdjusted = false;
@@ -214,9 +262,9 @@ public final class PortalSkyCaptureManager {
             if (FORCE_SKY_CAMERA_ABOVE_HORIZON && originalBelowHorizon) {
                 effectiveCameraY = horizon + 8.0D;
                 ((CameraInvoker) camera).skyesight$setPosition(new Vec3(
-                        originalCameraPosition.x(),
+                        truePortalCameraPosition.x(),
                         effectiveCameraY,
-                        originalCameraPosition.z()
+                        truePortalCameraPosition.z()
                 ));
                 cameraYAdjusted = true;
                 cameraPositionAdjustedForSky = true;
@@ -224,6 +272,7 @@ public final class PortalSkyCaptureManager {
             String dimension = String.valueOf(level.dimension().location());
             String skyType = level.effects().skyType().name();
             boolean normalSkyType = level.effects().skyType() == DimensionSpecialEffects.SkyType.NORMAL;
+            boolean targetIsPhysicalLevel = level == minecraft.level;
             boolean portalENetherTarget = "E".equals(key) && level.dimension() == Level.NETHER;
             boolean disableTargetFogSetup = portalENetherTarget && USE_PORTAL_E_FIXED_NETHER_FOG_FALLBACK;
             String targetFogMode = "TARGET_LEVEL_FOG_SETUP";
@@ -251,29 +300,50 @@ public final class PortalSkyCaptureManager {
             PORTAL_SKY_CAPTURE_ACTIVE.set(true);
             String skippedVanillaSkyReason = "-";
             String renderer;
-            if (normalSkyType) {
+            String skyRenderer;
+            if (targetIsPhysicalLevel && normalSkyType) {
                 renderer = renderVanillaSkyCapture(minecraft, level, camera, frustum, projection, partialTick);
+                skyRenderer = renderer.startsWith("clonedFallbackAfterVanillaFailure")
+                        ? "clonedTargetLevel"
+                        : "vanillaLevelRenderer";
             } else {
-                renderer = "dimensionClearOnly";
-                skippedVanillaSkyReason = "skyType " + skyType + " is not NORMAL";
+                renderer = renderClonedTargetLevelSkyCapture(minecraft, level, camera, frustum, projection, partialTick);
+                skyRenderer = "clonedTargetLevel";
+                skippedVanillaSkyReason = targetIsPhysicalLevel
+                        ? "skyType " + skyType + " is not NORMAL"
+                        : "target level differs from physical LevelRenderer level";
             }
             PORTAL_SKY_CAPTURE_ACTIVE.set(false);
+            if (cameraYAdjusted) {
+                ((CameraInvoker) camera).skyesight$setPosition(truePortalCameraPosition);
+                cameraPositionAdjustedForSky = false;
+            }
             // The portal environment texture contains sky first, then first-pass clouds.
             // Clouds are background-only here and may appear behind all portal terrain;
             // depth-aware clouds would need a later separate/direct pass.
             CloudCaptureResult cloudResult = capturePortalClouds(
+                    key,
                     minecraft,
                     level,
                     target,
-                    camera,
+                    truePortalCameraPosition,
                     frustum,
                     projection,
                     partialTick,
-                    "vanillaLevelRenderer".equals(renderer)
+                    targetIsPhysicalLevel,
+                    "vanillaLevelRenderer".equals(renderer),
+                    event.getRenderTick()
             );
-            if (cameraYAdjusted) {
-                ((CameraInvoker) camera).skyesight$setPosition(originalCameraPosition);
-                cameraPositionAdjustedForSky = false;
+            if (cloudResult.succeeded()) {
+                renderDebugCloudReferences(
+                        key,
+                        level,
+                        target,
+                        truePortalCameraPosition,
+                        cameraRotation,
+                        frustum,
+                        projection
+                );
             }
             boolean alphaFixApplied = forceCaptureAlphaOpaque(target);
             boolean vanillaInvokerUsed = "vanillaLevelRenderer".equals(renderer);
@@ -289,6 +359,7 @@ public final class PortalSkyCaptureManager {
                     + " targetDimension=" + dimension
                     + " targetLevelSource=" + emptyDash(targetLevelSource)
                     + " renderer=" + renderer
+                    + " skyRenderer=" + skyRenderer
                     + " skyType=" + skyType
                     + " targetFogMode=" + targetFogMode
                     + " usedVanillaInvoker=" + yesNo(vanillaInvokerUsed)
@@ -305,6 +376,7 @@ public final class PortalSkyCaptureManager {
                     + " size=" + target.width + "x" + target.height
                     + " glError=" + glError;
             logCaptureSummaryThrottled(summary);
+            logCaptureResolutionThrottled(mainTarget.width, mainTarget.height, target.width, target.height);
 
             Capture capture = new Capture(
                     Mode.PORTAL_CAMERA_RENDER,
@@ -313,6 +385,20 @@ public final class PortalSkyCaptureManager {
                     event.getRenderTick(),
                     summary
             );
+            if (diagnosticViewId != null && targetIsPhysicalLevel && cloudResult.succeeded()) {
+                PortalCloudTerrainFrameDiagnostics.recordCloudFrame(
+                        diagnosticViewId,
+                        event.getRenderTick(),
+                        truePortalCameraPosition,
+                        cameraRotation,
+                        frustum,
+                        projection,
+                        cloudResult.cloudTicks(),
+                        truePortalCameraPosition,
+                        target.frameBufferId,
+                        capture.frameId()
+                );
+            }
             this.captures.put(key, capture);
             return capture;
         } catch (RuntimeException exception) {
@@ -345,6 +431,8 @@ public final class PortalSkyCaptureManager {
             RenderSystem.depthMask(depthMaskBefore);
             RenderSystem.colorMask(colorMaskBefore[0], colorMaskBefore[1], colorMaskBefore[2], colorMaskBefore[3]);
             setEnabled(GL11.GL_DEPTH_TEST, depthTestBefore);
+            RenderSystem.blendFuncSeparate(blendSrcRgbBefore, blendDstRgbBefore,
+                    blendSrcAlphaBefore, blendDstAlphaBefore);
             setEnabled(GL11.GL_BLEND, blendBefore);
             setEnabled(GL11.GL_CULL_FACE, cullBefore);
         }
@@ -402,15 +490,61 @@ public final class PortalSkyCaptureManager {
         }
     }
 
-    private static CloudCaptureResult capturePortalClouds(
+    private static String renderClonedTargetLevelSkyCapture(
             Minecraft minecraft,
             ClientLevel level,
-            TextureTarget target,
             Camera camera,
             Matrix4f frustum,
             Matrix4f projection,
+            float partialTick
+    ) {
+        FogRenderer.setupColor(
+                camera,
+                partialTick,
+                level,
+                minecraft.options.getEffectiveRenderDistance(),
+                minecraft.gameRenderer.getDarkenWorldAmount(partialTick)
+        );
+        FogRenderer.levelFogColor();
+
+        float renderDistance = minecraft.gameRenderer.getRenderDistance();
+        boolean foggy = level.effects().isFoggyAt(
+                Mth.floor(camera.getPosition().x()),
+                Mth.floor(camera.getPosition().y())
+        ) || minecraft.gui.getBossOverlay().shouldCreateWorldFog();
+
+        Runnable skyFogSetup = () -> {
+            FogRenderer.setupFog(
+                    camera,
+                    FogRenderer.FogMode.FOG_SKY,
+                    renderDistance,
+                    foggy,
+                    partialTick
+            );
+            RenderSystem.setShader(GameRenderer::getPositionShader);
+        };
+
+        try {
+            skyFogSetup.run();
+            SkyesightClonedSkyRenderer.renderSky(level, camera, frustum, projection, partialTick, skyFogSetup);
+            return "clonedTargetLevel";
+        } catch (RuntimeException exception) {
+            return "clonedTargetLevelFailed:" + exception.getClass().getSimpleName();
+        }
+    }
+
+    private CloudCaptureResult capturePortalClouds(
+            String cacheKey,
+            Minecraft minecraft,
+            ClientLevel level,
+            TextureTarget target,
+            Vec3 truePortalCameraPosition,
+            Matrix4f frustum,
+            Matrix4f projection,
             float partialTick,
-            boolean vanillaSkyCaptureSucceeded
+            boolean targetIsPhysicalLevel,
+            boolean vanillaSkyCaptureSucceeded,
+            int renderFrame
     ) {
         CloudStatus cloudStatus = minecraft.options.getCloudsType();
         float cloudHeight = level.effects().getCloudHeight();
@@ -427,6 +561,9 @@ public final class PortalSkyCaptureManager {
         }
         if (Float.isNaN(cloudHeight)) {
             return CloudCaptureResult.skipped(cloudStatus, "dimension cloud height NaN");
+        }
+        if (!targetIsPhysicalLevel) {
+            return CloudCaptureResult.skipped(cloudStatus, "cross-dim-levelrenderer-level-mismatch");
         }
         if (!vanillaSkyCaptureSucceeded || target == null || target.frameBufferId <= 0) {
             return CloudCaptureResult.skipped(cloudStatus, "sky capture target unavailable");
@@ -451,18 +588,23 @@ public final class PortalSkyCaptureManager {
             FogRenderer.levelFogColor();
 
             PoseStack poseStack = new PoseStack();
-            ((LevelRendererCloudInvoker) minecraft.levelRenderer).skyesight$renderClouds(
+            SkyesightIsolatedCloudRenderer.RenderResult renderResult = this.isolatedCloudRenderer.render(
+                    cacheKey,
+                    minecraft.levelRenderer,
                     poseStack,
                     frustum,
                     projection,
                     partialTick,
-                    camera.getPosition().x(),
-                    camera.getPosition().y(),
-                    camera.getPosition().z()
+                    truePortalCameraPosition.x(),
+                    truePortalCameraPosition.y(),
+                    truePortalCameraPosition.z(),
+                    renderFrame,
+                    target.frameBufferId
             );
 
             return CloudCaptureResult.succeeded(
-                    cloudStatus
+                    cloudStatus,
+                    renderResult.ticks()
             );
         } catch (RuntimeException exception) {
             return CloudCaptureResult.failed(
@@ -616,6 +758,165 @@ public final class PortalSkyCaptureManager {
         }
     }
 
+    private void renderDebugCloudReferences(
+            String key,
+            ClientLevel level,
+            TextureTarget target,
+            Vec3 cameraPosition,
+            Quaternionf cameraRotation,
+            Matrix4f frustum,
+            Matrix4f projection
+    ) {
+        if (!SkyesightDebugConfig.SKY_CAPTURE_AUDIT || key == null || level == null || target == null) {
+            return;
+        }
+        float cloudHeight = level.effects().getCloudHeight();
+        if (!Float.isFinite(cloudHeight)) {
+            return;
+        }
+
+        DebugCloudReferencePattern pattern = this.debugCloudReferencePatterns.computeIfAbsent(
+                key,
+                ignored -> createDebugCloudReferencePattern(cameraPosition, cameraRotation, cloudHeight + 2.0D)
+        );
+
+        boolean depthTestBefore = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
+        boolean blendBefore = GL11.glIsEnabled(GL11.GL_BLEND);
+        boolean cullBefore = GL11.glIsEnabled(GL11.GL_CULL_FACE);
+        boolean depthMaskBefore = GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK);
+        float lineWidthBefore = RenderSystem.getShaderLineWidth();
+        float[] shaderColorBefore = RenderSystem.getShaderColor().clone();
+        ShaderInstance shaderBefore = RenderSystem.getShader();
+
+        try {
+            target.bindWrite(true);
+            RenderSystem.viewport(0, 0, target.width, target.height);
+            RenderSystem.disableDepthTest();
+            RenderSystem.depthMask(false);
+            RenderSystem.disableBlend();
+            RenderSystem.disableCull();
+            RenderSystem.lineWidth(4.0F);
+            RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+
+            PoseStack poseStack = new PoseStack();
+            poseStack.mulPose(frustum);
+            Matrix4f modelView = poseStack.last().pose();
+            BufferBuilder builder = Tesselator.getInstance().begin(
+                    VertexFormat.Mode.DEBUG_LINES,
+                    DefaultVertexFormat.POSITION_COLOR
+            );
+            addDebugReference(builder, pattern.center(), cameraPosition, 255, 64, 255);
+            addDebugReference(builder, pattern.left(), cameraPosition, 64, 255, 64);
+            addDebugReference(builder, pattern.right(), cameraPosition, 64, 192, 255);
+
+            try (VertexBuffer vertexBuffer = new VertexBuffer(VertexBuffer.Usage.STATIC)) {
+                vertexBuffer.bind();
+                vertexBuffer.upload(builder.buildOrThrow());
+                vertexBuffer.bind();
+                vertexBuffer.drawWithShader(modelView, projection, GameRenderer.getPositionColorShader());
+            } finally {
+                VertexBuffer.unbind();
+            }
+        } finally {
+            setEnabled(GL11.GL_DEPTH_TEST, depthTestBefore);
+            setEnabled(GL11.GL_BLEND, blendBefore);
+            setEnabled(GL11.GL_CULL_FACE, cullBefore);
+            RenderSystem.depthMask(depthMaskBefore);
+            RenderSystem.lineWidth(lineWidthBefore);
+            RenderSystem.setShaderColor(
+                    shaderColorBefore[0],
+                    shaderColorBefore[1],
+                    shaderColorBefore[2],
+                    shaderColorBefore[3]
+            );
+            if (shaderBefore != null) {
+                RenderSystem.setShader(() -> shaderBefore);
+            }
+        }
+    }
+
+    private static DebugCloudReferencePattern createDebugCloudReferencePattern(
+            Vec3 cameraPosition,
+            Quaternionf cameraRotation,
+            double cloudY
+    ) {
+        org.joml.Vector3f rotatedForward = new org.joml.Vector3f(0.0F, 0.0F, -1.0F)
+                .rotate(new Quaternionf(cameraRotation));
+        Vec3 forward = new Vec3(rotatedForward.x(), 0.0D, rotatedForward.z());
+        if (forward.lengthSqr() < 1.0E-8D) {
+            forward = new Vec3(1.0D, 0.0D, 0.0D);
+        } else {
+            forward = forward.normalize();
+        }
+        Vec3 right = forward.cross(new Vec3(0.0D, 1.0D, 0.0D)).normalize();
+        Vec3 center = new Vec3(
+                cameraPosition.x() + forward.x() * 128.0D,
+                cloudY,
+                cameraPosition.z() + forward.z() * 128.0D
+        );
+        DebugCloudReferencePattern pattern = new DebugCloudReferencePattern(
+                center,
+                center.subtract(right.scale(40.0D)),
+                center.add(right.scale(40.0D))
+        );
+        Skyesight.LOGGER.info(
+                "[Skyesight] CLOUD_REFERENCE_INIT center={} left={} right={}",
+                pattern.center(),
+                pattern.left(),
+                pattern.right()
+        );
+        return pattern;
+    }
+
+    private static void addDebugReference(
+            BufferBuilder builder,
+            Vec3 worldPosition,
+            Vec3 cameraPosition,
+            int red,
+            int green,
+            int blue
+    ) {
+        Vec3 relative = worldPosition.subtract(cameraPosition);
+        addDebugLine(builder, relative.add(-6.0D, 0.0D, 0.0D), relative.add(6.0D, 0.0D, 0.0D), red, green, blue);
+        addDebugLine(builder, relative.add(0.0D, 0.0D, -6.0D), relative.add(0.0D, 0.0D, 6.0D), red, green, blue);
+        addDebugLine(builder, relative.add(0.0D, -12.0D, 0.0D), relative.add(0.0D, 12.0D, 0.0D), red, green, blue);
+    }
+
+    private static void addDebugLine(
+            BufferBuilder builder,
+            Vec3 from,
+            Vec3 to,
+            int red,
+            int green,
+            int blue
+    ) {
+        builder.addVertex((float) from.x(), (float) from.y(), (float) from.z()).setColor(red, green, blue, 255);
+        builder.addVertex((float) to.x(), (float) to.y(), (float) to.z()).setColor(red, green, blue, 255);
+    }
+
+    private static void logCaptureResolutionThrottled(
+            int mainFramebufferWidth,
+            int mainFramebufferHeight,
+            int skyCaptureWidth,
+            int skyCaptureHeight
+    ) {
+        if (!SkyesightDebugConfig.SKY_CAPTURE_AUDIT) {
+            return;
+        }
+        long now = System.nanoTime();
+        if (now - lastCaptureResolutionLogNanos > 2_000_000_000L) {
+            lastCaptureResolutionLogNanos = now;
+            Skyesight.LOGGER.info(
+                    "[Skyesight] SKY_CAPTURE_RESOLUTION mainFramebuffer={}x{} skyCapture={}x{} boundsScalingEnabled={}",
+                    mainFramebufferWidth,
+                    mainFramebufferHeight,
+                    skyCaptureWidth,
+                    skyCaptureHeight,
+                    SkyesightClientConfig.enableBoundsScaledPortalResolution()
+            );
+        }
+    }
+
     private static String yesNo(boolean value) {
         return value ? "yes" : "no";
     }
@@ -626,11 +927,14 @@ public final class PortalSkyCaptureManager {
 
     private record FogRestoreResult(boolean fogRestored) {}
 
+    private record DebugCloudReferencePattern(Vec3 center, Vec3 left, Vec3 right) {}
+
     private record CloudCaptureResult(
             boolean cloudsEnabled,
             String cloudStatus,
             boolean succeeded,
-            String skippedReason
+            String skippedReason,
+            int cloudTicks
     ) {
         private static CloudCaptureResult skipped(
                 CloudStatus cloudStatus,
@@ -640,18 +944,21 @@ public final class PortalSkyCaptureManager {
                     false,
                     cloudStatus.name(),
                     false,
-                    reason
+                    reason,
+                    -1
             );
         }
 
         private static CloudCaptureResult succeeded(
-                CloudStatus cloudStatus
+                CloudStatus cloudStatus,
+                int cloudTicks
         ) {
             return new CloudCaptureResult(
                     true,
                     cloudStatus.name(),
                     true,
-                    "-"
+                    "-",
+                    cloudTicks
             );
         }
 
@@ -663,7 +970,8 @@ public final class PortalSkyCaptureManager {
                     true,
                     cloudStatus.name(),
                     false,
-                    reason
+                    reason,
+                    -1
             );
         }
     }
@@ -710,6 +1018,12 @@ public final class PortalSkyCaptureManager {
         }
         this.targets.clear();
         this.captures.clear();
+        this.debugCloudReferencePatterns.clear();
+        this.isolatedCloudRenderer.close();
+    }
+
+    public void removeCloudState(String key) {
+        this.isolatedCloudRenderer.remove(key);
     }
 
     private TextureTarget getOrCreate(String key, int width, int height) {
