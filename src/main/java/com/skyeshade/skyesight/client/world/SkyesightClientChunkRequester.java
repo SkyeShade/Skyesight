@@ -19,6 +19,12 @@ public final class SkyesightClientChunkRequester {
     private SkyesightClientChunkRequester() {}
 
     public static void requestChunksFor(ResourceLocation viewId, ResourceKey<Level> dimension, Camera camera, int radius) {
+        requestChunksFor(viewId, dimension,
+                new ChunkPos(Mth.floor(camera.getPosition().x()) >> 4, Mth.floor(camera.getPosition().z()) >> 4), radius);
+    }
+
+    /** Portal callers already have a transformed destination chunk; share the same demand lifecycle. */
+    public static void requestChunksFor(ResourceLocation viewId, ResourceKey<Level> dimension, ChunkPos center, int radius) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.level == null || minecraft.player == null || minecraft.getConnection() == null) return;
         var registration = SkyesightRemoteViewRegistry.get(viewId).orElse(null);
@@ -26,7 +32,6 @@ public final class SkyesightClientChunkRequester {
         var world = SkyesightVisualWorldManager.getOrCreate(viewId, dimension);
         if (world == null) return;
         var state = stateFor(viewId,registration.generation(),dimension);
-        ChunkPos center = new ChunkPos(Mth.floor(camera.getPosition().x()) >> 4, Mth.floor(camera.getPosition().z()) >> 4);
         ChunkPos previous = state.center;
         world.chunkReceiver().setViewCenter(center.x,center.z,radius+3);
         world.chunkReceiver().pruneOutside(center.x,center.z,radius+3);

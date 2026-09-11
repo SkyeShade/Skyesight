@@ -15,8 +15,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Player-scoped server mirror for remote views created through the generic
- * camera API. Portal registrations remain global in SkyesightRemoteViewRegistry.
+ * Player-scoped server mirror for network camera and portal observers.
+ * Unpublished integrated portals may use the process-global fallback.
  */
 public final class SkyesightServerRemoteViewRegistry {
     private static final int MAX_DYNAMIC_VIEWS_PER_PLAYER = 32;
@@ -36,7 +36,9 @@ public final class SkyesightServerRemoteViewRegistry {
         if (player == null || viewId == null || targetDimension == null || generation <= 0L) {
             return false;
         }
-        if (!player.isAlive() || player.isRemoved() || SkyesightPortalRegistry.contains(viewId)) return false;
+        // A LAN host shares the client portal registry with its server. A global
+        // entry must not prevent another observer's independent network generation.
+        if (!player.isAlive() || player.isRemoved()) return false;
         return register(player.getUUID(), viewId, targetDimension, generation);
     }
 
@@ -79,8 +81,15 @@ public final class SkyesightServerRemoteViewRegistry {
             ServerPlayer player,
             ResourceLocation viewId
     ) {
-        Optional<SkyesightRemoteViewRegistration> dynamic = get(player, viewId);
-        if (dynamic.isPresent()) return dynamic;
+        return resolve(player.getUUID(), viewId);
+    }
+
+    static synchronized Optional<SkyesightRemoteViewRegistration> resolve(UUID playerId, ResourceLocation viewId) {
+        var dynamic = REGISTRATIONS.getOrDefault(playerId, Map.of()).get(viewId);
+        if (dynamic != null) return Optional.of(dynamic);
+        // A retired network lease must not be resurrected through the LAN host's
+        // process-global portal entry, even when their generation numbers happen to match.
+        if (LAST_GENERATIONS.getOrDefault(playerId, Map.of()).containsKey(viewId)) return Optional.empty();
         // Only actual portal registrations may use the global fallback. A host client's
         // camera entry must never authorize another player's stale/missing camera view.
         var portal = SkyesightPortalRegistry.get(viewId);

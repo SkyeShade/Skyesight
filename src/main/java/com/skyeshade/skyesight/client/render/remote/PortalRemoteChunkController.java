@@ -45,7 +45,12 @@ public final class PortalRemoteChunkController {
     ) {
         MinecraftServer server = minecraft == null ? null : minecraft.getSingleplayerServer();
 
-        if (server == null || minecraft.player == null || regionId == null || targetDimension == null || center == null) {
+        if (minecraft == null || minecraft.player == null || regionId == null || targetDimension == null || center == null) return;
+        if (server == null || server.isPublished()) {
+            if (PortalNetworkStreaming.ensure(minecraft, regionId, targetDimension)) {
+                com.skyeshade.skyesight.client.world.SkyesightClientChunkRequester.requestChunksFor(
+                        regionId, targetDimension, center, radius);
+            }
             return;
         }
 
