@@ -12,6 +12,49 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class DirectStencilPortalMathTest {
+    @Test void fixedMidpointOffsetsReverseTogetherForFrontAndBackEyes() {
+        Quaternionf[] rotations = {
+                new Quaternionf(), new Quaternionf().rotateY((float) Math.PI),
+                new Quaternionf().rotateY((float) Math.PI / 2),
+                new Quaternionf().rotateX((float) Math.PI / 2)
+        };
+        for (Quaternionf sourceRotation : rotations) {
+            for (Quaternionf targetRotation : rotations) {
+                var source = new PortalFrame(new Vec3(-932.5, 80.5, 824.5), sourceRotation, 5, 5);
+                var target = new PortalFrame(new Vec3(12.5, 40.5, -8.5), targetRotation, 5, 5);
+                for (int side : new int[]{1, -1}) {
+                    for (double distance : new double[]{0.0001, 0.889, 4}) {
+                        Vec3 eye = source.position().add(DirectStencilPortalMath.normal(source).scale(side * distance));
+                        assertEquals(side, DirectStencilPortalMath.viewingSide(source, eye));
+                        double stencilBias = DirectStencilPortalMath.apertureOffset(source, eye, 0.001);
+                        assertEquals(side * 0.001, stencilBias);
+                        assertTrue(eye.subtract(source.position()).dot(
+                                DirectStencilPortalMath.normal(source).scale(stencilBias)) > 0);
+                        Vec3 expectedNormal = DirectStencilPortalMath.normal(target).scale(side);
+                        assertEquals(expectedNormal, DirectStencilPortalMath.effectiveExitNormal(source, target, eye));
+                        var eyeRotation = new Quaternionf(sourceRotation).rotateY(side < 0 ? (float) Math.PI : 0);
+                        var pose = DirectStencilPortalMath.transformPose(eye, eyeRotation, source, target);
+                        var pushed = DirectStencilPortalMath.pushThroughExit(pose, source, target, eye, 0.005);
+                        assertTrue(pushed.position().subtract(pose.position()).distanceTo(expectedNormal.scale(0.005)) < 1E-10);
+                        assertEquals(pose.rotation(), pushed.rotation());
+                        var clip = DirectStencilPortalMath.exitClipPlane(source, target, eye);
+                        assertEquals(expectedNormal, clip.normal());
+                        assertTrue(clip.point().subtract(target.position()).distanceTo(expectedNormal.scale(0.001)) < 1E-10);
+                        if (distance > 0.01) {
+                            var camera = new SkyesightMutableCamera();
+                            camera.setPositionPublic(pushed.position());
+                            camera.setRotationPublic(pushed.rotation());
+                            var projection = SkyesightProjectionMatrices.applyObliqueClipPlane(
+                                    SkyesightProjectionMatrices.perspective(70, 16F / 9, 0.05F, 128), camera, clip);
+                            assertTrue(nearDistance(projection, camera, clip.point().add(expectedNormal.scale(0.01))) > 0);
+                            assertTrue(nearDistance(projection, camera, clip.point().subtract(expectedNormal.scale(0.01))) < 0);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     @Test void reverseTransformAndObliqueHalfSpaceAreSymmetricForEveryWallFacing() {
         for (int a = 0; a < 360; a += 90) {
             for (int b = 0; b < 360; b += 90) {
