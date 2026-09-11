@@ -95,7 +95,7 @@ public final class SkyesightVisualEntityStore {
                     applyEntityData(entity, entry.entityData());
                     applyEquipment(entity, entry.equipment());
 
-                    visualEntity = new SkyesightVisualEntity(entity, entry);
+                    visualEntity = new SkyesightVisualEntity(entity, entry, payload.sampleTick() == Integer.MIN_VALUE ? entry.tickCount() : payload.sampleTick());
                     this.entities.put(entry.uuid(), visualEntity);
                     continue;
                 }
@@ -103,7 +103,7 @@ public final class SkyesightVisualEntityStore {
                 ((SkyesightEntityDimensionContext) visualEntity.entity()).skyesight$setExplicitDimension(payload.dimension());
                 applyEntityData(visualEntity.entity(), entry.entityData());
                 applyEquipment(visualEntity.entity(), entry.equipment());
-                visualEntity.acceptSnapshot(entry);
+                visualEntity.acceptSnapshot(entry, payload.sampleTick() == Integer.MIN_VALUE ? entry.tickCount() : payload.sampleTick());
             } catch (RuntimeException exception) {
                 warnSnapshotEntrySkipped(entry, exception);
             }

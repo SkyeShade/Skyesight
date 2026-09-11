@@ -18,6 +18,7 @@ public final class SecondarySceneRenderer {
     private SecondarySceneRenderer() {}
 
     public static boolean renderContents(SecondarySceneFrame scene) {
+        if (scene.visualWorld() != null && !scene.visualWorld().environmentReady()) return false;
         boolean terrainRendered = true;
         var minecraft = Minecraft.getInstance();
         var frame = scene.view();

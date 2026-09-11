@@ -26,7 +26,7 @@ public final class SkyesightRemoteViewServerEvents {
 
     @SubscribeEvent
     public static void onDimensionChange(PlayerEvent.PlayerChangedDimensionEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player) SkyesightRemoteViewLifecycleHandler.removeAll(player);
+        if (event.getEntity() instanceof ServerPlayer player) SkyesightRemoteViewLifecycleHandler.dimensionChanged(player);
     }
 
     @SubscribeEvent

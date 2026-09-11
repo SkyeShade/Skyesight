@@ -32,5 +32,7 @@ class StaleRemotePayloadTest {
         assertDoesNotThrow(() -> SkyesightClientLightDataHandler.handle(new SkyesightLightDataPayload(VIEW, 1, TARGET, 0, 0, null)));
         assertDoesNotThrow(() -> SkyesightClientEntityHandler.handle(new SkyesightEntitySnapshotPayload(VIEW, 1, TARGET, null)));
         assertDoesNotThrow(() -> SkyesightClientParticleHandler.handle(new SkyesightParticlePayload(VIEW, 1, TARGET, null, false, 0, 0, 0, 0, 0, 0, 0, 0)));
+        assertDoesNotThrow(() -> SkyesightClientEnvironmentHandler.handle(new SkyesightEnvironmentPayload(
+                VIEW, TARGET, 1, 0, 0, false, 0, 1, false, false, 0, 0)));
     }
 }

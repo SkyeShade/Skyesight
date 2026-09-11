@@ -79,6 +79,8 @@ public final class SkyesightPortalEntityPacketApplier {
             return;
         }
 
+        if (com.skyeshade.skyesight.client.render.PlayerPerspectiveViews.contains(payload.viewId())
+                && !com.skyeshade.skyesight.client.world.SkyesightClientChunkRequester.hasDemand(payload.viewId())) return;
         SkyesightVisualWorld world =
                 SkyesightVisualWorldManager.getOrCreateIfCurrent(payload.viewId(), payload.targetDimension());
         if (world == null || world.isClosed() || world.level() == null) {

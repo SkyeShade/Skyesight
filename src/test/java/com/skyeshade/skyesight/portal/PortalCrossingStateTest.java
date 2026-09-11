@@ -34,7 +34,7 @@ class PortalCrossingStateTest {
         var state = new PortalCrossingState();
         sample(state, 0, .1); sample(state, 0, -.001);
         assertTrue(state.hasPendingCrossing());
-        assertNull(sample(state, .8, -.002));
+        assertNull(sample(state, 1.1, -.002));
         assertFalse(state.hasPendingCrossing());
         assertNull(sample(state, 0, -.02));
     }
@@ -44,24 +44,43 @@ class PortalCrossingStateTest {
         var hit = sample(state, 1, -1);
         assertNotNull(hit); assertEquals(0, hit.x, 1e-6);
     }
-    @Test void bodyMustFitBothHorizontalAndVerticalEdges() {
-        for (double x : new double[]{-.69, .69}) {
+    @Test void bodyOverlapsVerticallyButCenterlineMustEnterTheOpening() {
+        for (double x : new double[]{-.95, .95}) {
             var state = new PortalCrossingState();
             sample(state, x, .1); assertNotNull(sample(state, x, -.1));
         }
-        for (double x : new double[]{-.8, .8}) {
+        for (double x : new double[]{-1.05, 1.05}) {
             var state = new PortalCrossingState();
             sample(state, x, .1); assertNull(sample(state, x, -.1));
         }
-        for (double y : new double[]{-1.6, 0}) {
+        for (double y : new double[]{-3.31, 1.51}) {
             var state = new PortalCrossingState();
             state.update(portal, new Vec3(0, y, .1), .6, 1.8);
             assertNull(state.update(portal, new Vec3(0, y, -.1), .6, 1.8));
         }
-        for (double y : new double[]{-1.5, -.31}) {
+        for (double y : new double[]{-1.5, -.31, 0, .5}) {
             var state = new PortalCrossingState();
             state.update(portal, new Vec3(0, y, .1), .6, 1.8);
             assertNotNull(state.update(portal, new Vec3(0, y, -.1), .6, 1.8));
+        }
+    }
+    @Test void authoritativeArrivalAllowsImmediateReturnWithoutPingPong() {
+        var state = new PortalCrossingState();
+        for (int i = 0; i < 100; i++) {
+            double side = i % 2 == 0 ? 1 : -1;
+            state.arrive(portal, new Vec3(0, -1.5, side * .005));
+            assertNull(sample(state, 0, side * .005));
+            assertNull(sample(state, 0, side * .02));
+            assertNotNull(sample(state, 0, -side * .02));
+            assertNull(sample(state, 0, -side * .02));
+        }
+    }
+    @Test void fastAcceptedMovementAndInitialContactBandStillUseTheWholeSweep() {
+        for (double start : new double[]{.005, 5, 10}) {
+            var state = new PortalCrossingState();
+            assertNull(sample(state, 0, start));
+            assertNotNull(sample(state, 0, -start * 4));
+            assertNull(sample(state, 0, -start * 5));
         }
     }
     @Test void startingOnPlaneDoesNotInventAnEntrySide() {

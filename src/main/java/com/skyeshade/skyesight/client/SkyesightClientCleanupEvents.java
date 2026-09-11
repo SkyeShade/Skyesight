@@ -75,7 +75,10 @@ public final class SkyesightClientCleanupEvents {
     }
 
     public static void invalidateLevelBoundCaches(String reason) {
-        int viewContexts = PortalDirectStencilRenderer.invalidateLevelBoundCaches(reason);
+        var retained = reason != null && reason.startsWith("client_level_changed")
+                ? com.skyeshade.skyesight.client.transition.TraversalPortalStandby.retained()
+                : java.util.Set.<net.minecraft.resources.ResourceLocation>of();
+        int viewContexts = PortalDirectStencilRenderer.invalidateLevelBoundCaches(reason, retained);
         int visualWorlds = SkyesightVisualWorldManager.count();
 
         PortalSecondaryRenderState.SECONDARY_VIEW.close();
@@ -93,18 +96,25 @@ public final class SkyesightClientCleanupEvents {
         PortalSecondaryRenderState.remoteClientCacheExpandedRadius = -1;
         PortalRemoteChunkRuntimeState.reset();
 
-        SkyesightClientChunkRequester.reset();
+        SkyesightClientChunkRequester.resetExcept(retained);
         CrossDimPortalTerrainWarmup.clear();
         SkyesightPortalChunkStorage.clear();
-        SkyesightVisualWorldManager.closeAll();
-        SkyesightPortalEntityPool.clearAll();
+        if (retained.isEmpty()) {
+            SkyesightVisualWorldManager.closeAll();
+            SkyesightPortalEntityPool.clearAll();
+        } else {
+            var retire = new java.util.ArrayList<net.minecraft.resources.ResourceLocation>();
+            SkyesightVisualWorldManager.forEachWorld((id, world) -> { if (!retained.contains(id)) retire.add(id); });
+            retire.forEach(SkyesightVisualWorldManager::close);
+        }
         SecondarySodiumTerrainPass.clearRendererPool();
 
         Skyesight.LOGGER.info(
-                "[Skyesight] CLIENT_LEVEL_CHANGED_INVALIDATE: reason={} viewContextsCleared={} visualWorldsCleared={} remoteChunkCachesCleared=yes portalRegistryEntriesPreserved={}",
+                "[Skyesight] CLIENT_LEVEL_CHANGED_INVALIDATE: reason={} viewContextsCleared={} visualWorldsCleared={} retainedVisualWorlds={} packetChunkCacheCleared=yes portalRegistryEntriesPreserved={}",
                 reason == null || reason.isBlank() ? "-" : reason,
                 viewContexts,
-                visualWorlds,
+                visualWorlds - SkyesightVisualWorldManager.count(),
+                SkyesightVisualWorldManager.count(),
                 SkyesightPortalApi.getAllPortals().size()
         );
     }

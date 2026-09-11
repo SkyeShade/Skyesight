@@ -84,6 +84,20 @@ public final class SkyesightRemoteViewLifecycleHandler {
                 SkyesightServerRemoteViewRegistry.removePlayer(player);
         registrations.forEach(registration -> cleanup(player, registration));
     }
+    public static void dimensionChanged(ServerPlayer player) {
+        SkyesightServerRemoteViewRegistry.removeNonTraversalViews(player).forEach(registration -> cleanup(player, registration));
+    }
+    public static void releaseWatch(ServerPlayer player, net.minecraft.resources.ResourceLocation id) {
+        var registration = SkyesightServerRemoteViewRegistry.resolve(player, id).orElse(null);
+        if (registration != null) cleanup(player, registration);
+        else {
+            SkyesightServerChunkLoader.removeView(player, id, null);
+            SkyesightServerViewTracker.removeView(player, id);
+            SkyesightSecondaryWatchRegion.removeRegion(player, id);
+            SkyesightSecondaryChunkWatchRegion.removeRegion(player, id);
+            PortalSimulationCoordinator.remove(player, id);
+        }
+    }
 
     private static void cleanup(
             ServerPlayer player,

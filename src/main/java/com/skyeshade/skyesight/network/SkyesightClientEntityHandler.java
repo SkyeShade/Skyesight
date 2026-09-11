@@ -15,6 +15,8 @@ public final class SkyesightClientEntityHandler {
             return;
         }
 
+        if (com.skyeshade.skyesight.client.render.PlayerPerspectiveViews.contains(payload.viewId())
+                && !com.skyeshade.skyesight.client.world.SkyesightClientChunkRequester.hasDemand(payload.viewId())) return;
         SkyesightVisualWorld world =
                 SkyesightVisualWorldManager.getIfCurrent(payload.viewId(), payload.dimension());
 

@@ -18,7 +18,7 @@ public final class SkyesightPayloads {
         }
 
         PayloadRegistrar registrar = event.registrar(Skyesight.MODID)
-                .versioned("7");
+                .versioned("8");
 
         registrar.playToClient(SkyesightTraversalPayload.TYPE, SkyesightTraversalPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() ->

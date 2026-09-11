@@ -24,15 +24,38 @@ import java.util.*;
 public final class TraversalPortalManager {
     private record Pair(long revision, PortalEndpoint a, PortalEndpoint b) {}
     private record Sample(ResourceKey<Level> dimension, Vec3 feet) {}
-    private record Guard(UUID pair, PortalEndpoint exit) {}
     private static final Map<UUID, PortalEndpoint> SELECTIONS = new HashMap<>();
     private static final Map<UUID, Pair> PAIRS = new LinkedHashMap<>();
+    private static final Map<ResourceKey<Level>, java.util.List<com.skyeshade.skyesight.api.SkyesightPortalRaycast.Link>> LINK_CACHE = new HashMap<>();
     private static final Map<UUID, Sample> PREVIOUS = new HashMap<>();
-    private static final Map<UUID, Guard> GUARDS = new HashMap<>();
     private record SideKey(UUID owner, boolean fromA, long revision) {}
     private static final Map<UUID, Map<SideKey, com.skyeshade.skyesight.portal.PortalCrossingState>> SIDES = new HashMap<>();
     private static long revision, sequence;
+    public static boolean ownsView(net.minecraft.resources.ResourceLocation id) {
+        for (UUID owner : PAIRS.keySet()) {
+            if (id.toString().equals(SkyesightTraversalPayload.portalId(owner, true))
+                    || id.toString().equals(SkyesightTraversalPayload.portalId(owner, false))) return true;
+        }
+        return false;
+    }
     private TraversalPortalManager() {}
+    /** Immutable directional geometry snapshot; never consult the client portal registry on a server. */
+    public static java.util.List<com.skyeshade.skyesight.api.SkyesightPortalRaycast.Link> links(ResourceKey<Level> dimension) {
+        var cached = LINK_CACHE.get(dimension);
+        if (cached != null) return cached;
+        var result = new java.util.ArrayList<com.skyeshade.skyesight.api.SkyesightPortalRaycast.Link>();
+        PAIRS.forEach((owner, pair) -> {
+            for (boolean fromA : new boolean[]{true, false}) {
+                var source = fromA ? pair.a : pair.b; var target = fromA ? pair.b : pair.a;
+                if (source.dimension().equals(dimension)) result.add(com.skyeshade.skyesight.api.SkyesightPortalRaycast.Link.rectangle(
+                        net.minecraft.resources.ResourceLocation.parse(SkyesightTraversalPayload.portalId(owner, fromA)),
+                        pair.revision, source, target, true));
+            }
+        });
+        var snapshot = java.util.List.copyOf(result);
+        LINK_CACHE.put(dimension, snapshot);
+        return snapshot;
+    }
     public static void teleported(ServerPlayer player) { PREVIOUS.remove(player.getUUID()); SIDES.remove(player.getUUID()); }
 
     public static void select(ServerPlayer player, BlockPos block) {
@@ -50,15 +73,16 @@ public final class TraversalPortalManager {
         if (a == null) { SELECTIONS.put(owner, endpoint); return; }
         Pair pair = new Pair(++revision, a, endpoint);
         PAIRS.put(owner, pair);
+        LINK_CACHE.clear();
         PacketDistributor.sendToAllPlayers(definition(owner, pair));
         player.sendSystemMessage(Component.literal("Created 2x3 pair " + SkyesightTraversalPayload.portalId(owner, true)
                 + " <-> " + SkyesightTraversalPayload.portalId(owner, false) + ". Walk through either side; sneak-use to remove."));
     }
     public static void clear(ServerPlayer player) {
         UUID owner = player.getUUID(); SELECTIONS.remove(owner); Pair pair = PAIRS.remove(owner);
+        LINK_CACHE.clear();
         if (pair != null) PacketDistributor.sendToAllPlayers(new SkyesightTraversalPayload(owner, pair.revision,
                 0, SkyesightTraversalPayload.REMOVE, true, null, null));
-        GUARDS.values().removeIf(guard -> guard.pair.equals(owner));
         SIDES.values().forEach(states -> states.keySet().removeIf(key -> key.owner.equals(owner)));
         player.sendSystemMessage(Component.literal("Traversal selection/pair removed."));
     }
@@ -70,14 +94,16 @@ public final class TraversalPortalManager {
             PAIRS.forEach((owner, pair) -> PacketDistributor.sendToPlayer(player, definition(owner, pair)));
     }
     @SubscribeEvent public static void logout(PlayerEvent.PlayerLoggedOutEvent event) {
-        PREVIOUS.remove(event.getEntity().getUUID()); GUARDS.remove(event.getEntity().getUUID());
+        PREVIOUS.remove(event.getEntity().getUUID());
         SIDES.remove(event.getEntity().getUUID());
     }
     @SubscribeEvent public static void stopped(ServerStoppedEvent event) {
-        PAIRS.clear(); SELECTIONS.clear(); PREVIOUS.clear(); GUARDS.clear(); revision = sequence = 0;
+        PAIRS.clear(); SELECTIONS.clear(); PREVIOUS.clear(); revision = sequence = 0;
         SIDES.clear();
+        LINK_CACHE.clear();
     }
     @SubscribeEvent public static void tick(ServerTickEvent.Post event) {
+        com.skyeshade.skyesight.server.SkyesightServerChunkLoader.expireTraversalStandby(event.getServer());
         for (ServerPlayer player : event.getServer().getPlayerList().getPlayers()) movementAccepted(player);
     }
     /** Called after vanilla validates movement, before another movement packet can accumulate. */
@@ -86,15 +112,9 @@ public final class TraversalPortalManager {
         UUID id = player.getUUID(); Vec3 current = player.position();
         Sample previous = PREVIOUS.put(id, new Sample(player.level().dimension(), current));
         if (previous == null || !previous.dimension.equals(player.level().dimension())
-                || previous.feet.distanceToSqr(current) > 64 || !player.isAlive() || player.isPassenger()) return;
-        Guard guard = GUARDS.get(id);
-        if (guard != null && (!guard.exit.dimension().equals(player.level().dimension())
-                || PortalTraversalMath.clearedExit(guard.exit, current, player.getBbWidth()))) {
-            GUARDS.remove(id); guard = null;
-        }
+                || !player.isAlive() || player.isPassenger()) return;
         boolean traversed = false;
         for (var entry : PAIRS.entrySet()) {
-            if (guard != null && guard.pair.equals(entry.getKey())) continue;
             for (boolean fromA : new boolean[]{true, false}) {
                 Pair pair = entry.getValue(); PortalEndpoint source = fromA ? pair.a : pair.b, target = fromA ? pair.b : pair.a;
                 if (!source.dimension().equals(player.level().dimension())) continue;
@@ -110,14 +130,14 @@ public final class TraversalPortalManager {
                 var rotation = PortalTraversalMath.rotation(source.rotation(), target.rotation());
                 // ServerPlayer horizontal deltaMovement does not track client-controlled walking.
                 Vec3 incomingVelocity = current.subtract(previous.feet);
-                Vec3 velocity = PortalTraversalMath.rotate(incomingVelocity, rotation);
-                Vec3 look = PortalTraversalMath.rotate(player.getLookAngle(), rotation);
-                float yaw = PortalTraversalMath.yaw(look), pitch = PortalTraversalMath.pitch(look);
+                var pose = PortalTraversalMath.transform(source, target, current, incomingVelocity, player.getYRot(), player.getXRot());
+                Vec3 velocity = pose.velocity();
+                float yaw = pose.yaw(), pitch = pose.pitch();
                 float headYaw = PortalTraversalMath.yaw(PortalTraversalMath.rotate(Vec3.directionFromRotation(0, player.getYHeadRot()), rotation));
                 float bodyYaw = PortalTraversalMath.yaw(PortalTraversalMath.rotate(Vec3.directionFromRotation(0, player.yBodyRot), rotation));
                 // current is already strictly past the source plane; the geometric re-entry
                 // guard prevents ping-pong. An extra exit offset disagrees with the rendered eye.
-                Vec3 position = PortalTraversalMath.position(source, target, current);
+                Vec3 position = pose.position();
                 boolean wasOnGround = player.onGround();
                 float previousFallDistance = player.fallDistance;
                 long token = ++sequence;
@@ -128,8 +148,13 @@ public final class TraversalPortalManager {
                 player.yBodyRot = bodyYaw; player.yBodyRotO = bodyYaw;
                 player.setDeltaMovement(velocity);
 
-                GUARDS.put(id, new Guard(entry.getKey(), target));
                 PREVIOUS.put(id, new Sample(target.dimension(), position));
+                // Teleport reset the old samples. Seed the reverse endpoint at arrival;
+                // an actual return sweep is valid even before full-body exit clearance.
+                var arrival = new com.skyeshade.skyesight.portal.PortalCrossingState();
+                arrival.arrive(target, position);
+                SIDES.computeIfAbsent(id, ignored -> new HashMap<>()).put(
+                        new SideKey(entry.getKey(), !fromA, pair.revision), arrival);
                 if (Boolean.getBoolean("skyesight.debugTraversal")) Skyesight.LOGGER.info(
                         "[Traversal] time={} player={} portal={} token={} hit={} local={} destination={} incomingVelocity={} velocity={} yaw={} pitch={} actualPosition={} actualVelocity={} ground={}->{} fall={}->{}",
                         System.currentTimeMillis(), id, SkyesightTraversalPayload.portalId(entry.getKey(), fromA), token, hit,

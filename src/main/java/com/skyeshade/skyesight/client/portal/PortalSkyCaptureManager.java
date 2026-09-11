@@ -196,7 +196,9 @@ public final class PortalSkyCaptureManager {
     ) {
         ClientLevel level = targetLevel;
         var mainTarget = minecraft.getMainRenderTarget();
-        if (level == null || mainTarget == null || mainTarget.width <= 0 || mainTarget.height <= 0) {
+        if (level == null || (level instanceof com.skyeshade.skyesight.client.world.SkyesightVisualClientLevel visual
+                && visual.skyesightLastEnvironmentUpdateMillis() == 0)
+                || mainTarget == null || mainTarget.width <= 0 || mainTarget.height <= 0) {
             Capture capture = invalid(Mode.PORTAL_CAMERA_RENDER, key, event.getRenderTick(), "invalid level/main target");
             this.captures.put(key, capture);
             return capture;
@@ -317,6 +319,9 @@ public final class PortalSkyCaptureManager {
                 ((CameraInvoker) camera).skyesight$setPosition(truePortalCameraPosition);
                 cameraPositionAdjustedForSky = false;
             }
+            // Vanilla switches from sky fog to terrain fog before its cloud pass.
+            com.skyeshade.skyesight.client.render.fog.SkyesightFogRenderer.setupForPlayerTerrain(
+                    level, camera, partialTick, renderDistanceChunks);
             // The portal environment texture contains sky first, then first-pass clouds.
             // Clouds are background-only here and may appear behind all portal terrain;
             // depth-aware clouds would need a later separate/direct pass.
@@ -326,6 +331,7 @@ public final class PortalSkyCaptureManager {
                     level,
                     target,
                     truePortalCameraPosition,
+                    camera,
                     frustum,
                     projection,
                     partialTick,
@@ -454,6 +460,7 @@ public final class PortalSkyCaptureManager {
             ClientLevel level,
             TextureTarget target,
             Vec3 truePortalCameraPosition,
+            Camera cloudCamera,
             Matrix4f frustum,
             Matrix4f projection,
             float partialTick,
@@ -462,7 +469,6 @@ public final class PortalSkyCaptureManager {
             int renderFrame
     ) {
         CloudStatus cloudStatus = minecraft.options.getCloudsType();
-        float cloudHeight = level.effects().getCloudHeight();
         boolean shaderPackActive = SkyesightIrisCompat.isShaderPackInUse();
 
         if (!ENABLE_PORTAL_CLOUD_CAPTURE) {
@@ -474,9 +480,7 @@ public final class PortalSkyCaptureManager {
         if (cloudStatus == CloudStatus.OFF) {
             return CloudCaptureResult.skipped(cloudStatus, "minecraft clouds off");
         }
-        if (Float.isNaN(cloudHeight)) {
-            return CloudCaptureResult.skipped(cloudStatus, "dimension cloud height NaN");
-        }
+        // renderClouds invokes DimensionSpecialEffects before testing vanilla cloud height.
 
         if (target == null || target.frameBufferId <= 0) {
             return CloudCaptureResult.skipped(cloudStatus, "sky capture target unavailable");
@@ -485,7 +489,10 @@ public final class PortalSkyCaptureManager {
             return CloudCaptureResult.skipped(cloudStatus, "shaderpack active");
         }
 
-        try {
+        // Sodium's cloud replacement reads getMainCamera(), ignoring vanilla's XYZ
+        // arguments. Scope both the camera and output for that same destination draw.
+        try (var cloudScope = com.skyeshade.skyesight.client.render.SkyesightSecondaryRenderContext.push(
+                target, cloudCamera, minecraft.getMainRenderTarget())) {
             target.bindWrite(true);
             RenderSystem.viewport(0, 0, target.width, target.height);
             RenderSystem.colorMask(true, true, true, true);
@@ -907,6 +914,10 @@ public final class PortalSkyCaptureManager {
 
     public void removeCloudState(String key) {
         this.isolatedCloudRenderer.remove(key);
+        var target = this.targets.remove(key);
+        if (target != null) target.destroyBuffers();
+        this.captures.remove(key);
+        this.debugCloudReferencePatterns.remove(key);
     }
 
     private TextureTarget getOrCreate(String key, int width, int height) {

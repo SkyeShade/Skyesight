@@ -50,6 +50,7 @@ public final class SecondarySceneEnvironmentRenderer {
         return color;
     }
     public static void renderBackground(SecondarySceneFrame scene, SkyesightIsolatedCloudRenderer clouds) {
+        if (scene.visualWorld() != null && !scene.visualWorld().environmentReady()) return;
         var minecraft = Minecraft.getInstance();
         var frame = scene.view();
         var camera = frame.camera();
@@ -73,6 +74,8 @@ public final class SecondarySceneEnvironmentRenderer {
             renderSky(minecraft, level, camera, frame.modelViewMatrix(), frame.projectionMatrix(), scene.partialTick(),
                     scene.options().terrainRadius(), level == minecraft.level && level.effects().skyType() == DimensionSpecialEffects.SkyType.NORMAL);
             ((CameraInvoker) camera).skyesight$setPosition(position);
+            com.skyeshade.skyesight.client.render.fog.SkyesightFogRenderer.setupForPlayerTerrain(
+                    level, camera, scene.partialTick(), scene.options().terrainRadius());
             renderClouds(clouds, scene.viewId().toString(), minecraft, level, frame.modelViewMatrix(), frame.projectionMatrix(),
                     position, scene.partialTick(), minecraft.levelRenderer.getTicks(), scene.output().frameBufferId);
         } finally {
