@@ -23,6 +23,8 @@ import java.util.Objects;
 import java.util.Queue;
 
 public final class SecondaryViewContext {
+    private final SkyesightIsolatedCloudRenderer clouds = new SkyesightIsolatedCloudRenderer();
+    public SkyesightIsolatedCloudRenderer clouds() { return this.clouds; }
     private final SkyesightMutableCamera camera = new SkyesightMutableCamera();
     private final SecondaryRemoteEntityTracker remoteEntityTracker = new SecondaryRemoteEntityTracker();
 
@@ -435,6 +437,7 @@ public final class SecondaryViewContext {
     }
 
     public void close() {
+        this.clouds.close();
         if (this.renderTarget != null) {
             this.renderTarget.destroyBuffers();
             this.renderTarget = null;

@@ -159,6 +159,7 @@ public final class SkyesightVisualWorldManager {
     }
 
     public static void close(ResourceLocation viewId) {
+        SecondaryParticleViews.close(viewId);
         SkyesightVisualWorld world = WORLDS.remove(viewId);
 
         if (world != null) {
@@ -169,6 +170,7 @@ public final class SkyesightVisualWorldManager {
     }
 
     public static void closeAll() {
+        SecondaryParticleViews.clear();
         SkyesightPortalEntityPool.clearAll();
         for (SkyesightVisualWorld world : WORLDS.values()) {
             PortalPathProximity.unregisterVisualLevel(world.level());

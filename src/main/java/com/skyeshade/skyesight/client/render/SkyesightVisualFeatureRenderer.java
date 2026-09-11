@@ -5,21 +5,16 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexSorting;
 import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.SkyesightDebugConfig;
-import com.skyeshade.skyesight.client.render.entity.SkyesightNameTagSuppressor;
 import com.skyeshade.skyesight.client.world.SkyesightRemoteChunkReceiver;
-import com.skyeshade.skyesight.client.world.SkyesightVisualEntity;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.Sheets;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
@@ -32,64 +27,6 @@ public final class SkyesightVisualFeatureRenderer {
     private SkyesightVisualFeatureRenderer() {
     }
 
-    public static void renderEntities(
-            ClientLevel level,
-            Iterable<SkyesightVisualEntity> entities,
-            Camera camera,
-            Matrix4f modelMatrix,
-            float partialTick
-    ) {
-        Minecraft minecraft = Minecraft.getInstance();
-        if (level == null || minecraft.player == null) {
-            return;
-        }
-
-        PoseStack poseStack = new PoseStack();
-        Vec3 cameraPos = camera.getPosition();
-        MultiBufferSource.BufferSource bufferSource = minecraft.renderBuffers().bufferSource();
-        ClientLevel previousLevel = minecraft.level;
-
-        try {
-            minecraft.level = level;
-            minecraft.getEntityRenderDispatcher().prepare(
-                    level,
-                    camera,
-                    minecraft.crosshairPickEntity
-            );
-
-            try (SkyesightNameTagSuppressor.Scope ignored =
-                         SkyesightNameTagSuppressor.suppressOwner(minecraft.player.getUUID())) {
-                for (SkyesightVisualEntity visualEntity : entities) {
-                    visualEntity.applyInterpolated();
-
-                    Entity entity = visualEntity.entity();
-                    int packedLight = getPackedEntityLight(level, entity, partialTick);
-                    minecraft.getEntityRenderDispatcher().render(
-                            entity,
-                            entity.getX() - cameraPos.x(),
-                            entity.getY() - cameraPos.y(),
-                            entity.getZ() - cameraPos.z(),
-                            entity.getYRot(),
-                            partialTick,
-                            poseStack,
-                            bufferSource,
-                            packedLight
-                    );
-                }
-            }
-
-            bufferSource.endBatch();
-        } finally {
-            minecraft.level = previousLevel;
-            RenderSystem.disableBlend();
-            RenderSystem.defaultBlendFunc();
-            RenderSystem.enableDepthTest();
-            RenderSystem.depthMask(true);
-            RenderSystem.enableCull();
-            RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-        }
-    }
-
     public static void renderBlockEntities(
             ClientLevel level,
             ResourceLocation viewId,
@@ -97,10 +34,12 @@ public final class SkyesightVisualFeatureRenderer {
             Camera camera,
             Matrix4f modelMatrix,
             Matrix4f projectionMatrix,
-            float partialTick
+            float partialTick,
+            int chunkRadius,
+            net.minecraft.client.renderer.culling.Frustum frustum
     ) {
         Minecraft minecraft = Minecraft.getInstance();
-        if (level == null || minecraft.player == null) {
+        if (level == null || minecraft.player == null || chunkRadius <= 0) {
             return;
         }
 
@@ -140,6 +79,8 @@ public final class SkyesightVisualFeatureRenderer {
 
             chunkReceiver.forEachLoadedChunk(packed -> {
                 ChunkPos chunkPos = new ChunkPos(packed);
+                ChunkPos cameraChunk = new ChunkPos(BlockPos.containing(cameraPos));
+                if (Math.abs(chunkPos.x - cameraChunk.x) > chunkRadius || Math.abs(chunkPos.z - cameraChunk.z) > chunkRadius) return;
                 LevelChunk chunk = level.getChunkSource().getChunk(
                         chunkPos.x,
                         chunkPos.z,
@@ -155,6 +96,8 @@ public final class SkyesightVisualFeatureRenderer {
                         continue;
                     }
 
+                    if (!net.neoforged.neoforge.client.ClientHooks.isBlockEntityRendererVisible(
+                            minecraft.getBlockEntityRenderDispatcher(), blockEntity, frustum)) continue;
                     Vec3 renderOffset = cameraRelativeOffset(blockEntityPos, cameraPos);
                     BlockState blockState = level.getBlockState(blockEntityPos);
                     renderBlockEntity(
@@ -205,18 +148,9 @@ public final class SkyesightVisualFeatureRenderer {
                     shaderColorBefore[3]
             );
             minecraft.level = previousLevel;
+            if (previousLevel != null) minecraft.getBlockEntityRenderDispatcher().prepare(
+                    previousLevel, minecraft.gameRenderer.getMainCamera(), minecraft.hitResult);
         }
-    }
-
-    private static int getPackedEntityLight(ClientLevel level, Entity entity, float partialTick) {
-        BlockPos lightPos = BlockPos.containing(entity.getLightProbePosition(partialTick));
-        if (!level.hasChunkAt(lightPos)) {
-            return LightTexture.FULL_BRIGHT;
-        }
-
-        int blockLight = level.getBrightness(LightLayer.BLOCK, lightPos);
-        int skyLight = level.getBrightness(LightLayer.SKY, lightPos);
-        return LightTexture.pack(blockLight, skyLight);
     }
 
     private static void renderBlockEntity(

@@ -70,8 +70,7 @@ public final class SkyesightVisualWorld implements AutoCloseable {
                 viewId == null ? "-" : viewId.toString(),
                 this.dimension.location().toString()
         );
-        int visualParticlesSpawned = this.chunkReceiver.tickVisualParticles(viewId, this.particles);
-        this.particles.tick();
+        int visualParticlesSpawned = 0; // SecondaryParticleViews owns the single particle tick.
         return new TickStats(
                 entityTicks.ticked(),
                 entityTicks.skipped(),
@@ -83,15 +82,6 @@ public final class SkyesightVisualWorld implements AutoCloseable {
         );
     }
 
-    public void renderParticles(
-            Camera camera,
-            Matrix4f modelMatrix,
-            Matrix4f projectionMatrix,
-            float partialTick
-    ) {
-        // Cross-dimension particles are rendered by SecondaryParticlePass so
-        // they can share the direct portal stencil/depth slot with terrain and entities.
-    }
     public void renderTerrain(
             Camera camera,
             Frustum frustum,
@@ -123,54 +113,12 @@ public final class SkyesightVisualWorld implements AutoCloseable {
         );
     }
     public void renderBlockEntities(
-            Camera camera,
-            Matrix4f modelMatrix,
-            Matrix4f projectionMatrix,
-            float partialTick
+            ResourceLocation viewId, Camera camera, Matrix4f modelMatrix, Matrix4f projectionMatrix,
+            float partialTick, int chunkRadius, Frustum frustum
     ) {
-        renderBlockEntities(null, camera, modelMatrix, projectionMatrix, partialTick);
+        SkyesightVisualFeatureRenderer.renderBlockEntities(this.level, viewId, this.chunkReceiver,
+                camera, modelMatrix, projectionMatrix, partialTick, chunkRadius, frustum);
     }
-
-    public void renderBlockEntities(
-            ResourceLocation viewId,
-            Camera camera,
-            Matrix4f modelMatrix,
-            Matrix4f projectionMatrix,
-            float partialTick
-    ) {
-        SkyesightVisualFeatureRenderer.renderBlockEntities(
-                this.level,
-                viewId,
-                this.chunkReceiver,
-                camera,
-                modelMatrix,
-                projectionMatrix,
-                partialTick
-        );
-    }
-    public void renderEntities(
-            Camera camera,
-            Matrix4f modelMatrix,
-            float partialTick
-    ) {
-        renderEntities(this.entityStore.entities(), camera, modelMatrix, partialTick);
-    }
-
-    public void renderEntities(
-            Iterable<SkyesightVisualEntity> entities,
-            Camera camera,
-            Matrix4f modelMatrix,
-            float partialTick
-    ) {
-        SkyesightVisualFeatureRenderer.renderEntities(
-                this.level,
-                entities,
-                camera,
-                modelMatrix,
-                partialTick
-        );
-    }
-
     public ResourceKey<Level> dimension() {
         return dimension;
     }

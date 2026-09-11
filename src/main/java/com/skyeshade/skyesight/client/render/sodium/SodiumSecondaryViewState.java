@@ -4,6 +4,7 @@ import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.client.render.SecondaryViewContext;
 import com.skyeshade.skyesight.client.world.SameLevelSkyesightChunkSource;
 import net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer;
+import net.caffeinemc.mods.sodium.client.gl.device.RenderDevice;
 import net.caffeinemc.mods.sodium.client.render.chunk.map.ChunkTracker;
 import net.minecraft.client.multiplayer.ClientLevel;
 
@@ -66,10 +67,13 @@ public final class SodiumSecondaryViewState {
 
     private void close() {
         if (this.renderer != null) {
+            RenderDevice.enterManagedCode();
             try {
                 this.renderer.setLevel(null);
             } catch (RuntimeException exception) {
                 Skyesight.LOGGER.warn("[Skyesight] Failed to release secondary Sodium renderer during context close", exception);
+            } finally {
+                RenderDevice.exitManagedCode();
             }
             this.renderer = null;
             this.rendererLevel = null;

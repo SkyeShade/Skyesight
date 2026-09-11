@@ -18,7 +18,13 @@ public final class SkyesightPayloads {
         }
 
         PayloadRegistrar registrar = event.registrar(Skyesight.MODID)
-                .versioned("4");
+                .versioned("5");
+
+        registrar.playToServer(SkyesightParticleWatchPayload.TYPE, SkyesightParticleWatchPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player)
+                        com.skyeshade.skyesight.server.SkyesightParticleWatches.update(player, payload);
+                }));
 
         registrar.playToServer(
                 SkyesightChunkRequestPayload.TYPE,

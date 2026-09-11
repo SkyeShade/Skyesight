@@ -14,10 +14,8 @@ import com.skyeshade.skyesight.SkyesightClientConfig;
 import com.skyeshade.skyesight.SkyesightDebugConfig;
 import com.skyeshade.skyesight.client.compat.iris.SkyesightIrisCompat;
 import com.skyeshade.skyesight.client.render.PortalCloudTerrainFrameDiagnostics;
-import com.skyeshade.skyesight.client.render.SkyesightClonedSkyRenderer;
 import com.skyeshade.skyesight.client.render.SkyesightIsolatedCloudRenderer;
 import com.skyeshade.skyesight.mixin.client.CameraInvoker;
-import com.skyeshade.skyesight.mixin.client.LevelRendererSkyInvoker;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.CloudStatus;
 import net.minecraft.client.Camera;
@@ -177,7 +175,7 @@ public final class PortalSkyCaptureManager {
                 terrainFov,
                 targetWidth,
                 targetHeight,
-                null
+                null, minecraft.options.getEffectiveRenderDistance()
         );
     }
 
@@ -194,7 +192,7 @@ public final class PortalSkyCaptureManager {
             double terrainFov,
             int targetWidth,
             int targetHeight,
-            ResourceLocation diagnosticViewId
+            ResourceLocation diagnosticViewId, int renderDistanceChunks
     ) {
         ClientLevel level = targetLevel;
         var mainTarget = minecraft.getMainRenderTarget();
@@ -260,7 +258,7 @@ public final class PortalSkyCaptureManager {
             boolean cameraYAdjusted = false;
             double effectiveCameraY = originalCameraY;
             if (FORCE_SKY_CAMERA_ABOVE_HORIZON && originalBelowHorizon) {
-                effectiveCameraY = horizon + 8.0D;
+                effectiveCameraY = com.skyeshade.skyesight.client.render.SecondarySceneEnvironmentRenderer.skyPosition(level, truePortalCameraPosition).y;
                 ((CameraInvoker) camera).skyesight$setPosition(new Vec3(
                         truePortalCameraPosition.x(),
                         effectiveCameraY,
@@ -281,7 +279,7 @@ public final class PortalSkyCaptureManager {
                 targetFogMode = "FIXED_NETHER_FALLBACK";
                 vanillaCallerClearColor = PORTAL_E_FIXED_NETHER_FALLBACK_COLOR;
             } else if (MATCH_VANILLA_SKY_CALLER_PRECONDITIONS) {
-                vanillaCallerClearColor = setupVanillaCallerClearState(minecraft, level, camera, partialTick);
+                vanillaCallerClearColor = setupVanillaCallerClearState(minecraft, level, camera, partialTick, renderDistanceChunks);
             } else {
                 targetFogMode = "MATCH_VANILLA_CALLER_DISABLED";
                 Vec3 skyColor = level.getSkyColor(camera.getPosition(), partialTick);
@@ -302,12 +300,12 @@ public final class PortalSkyCaptureManager {
             String renderer;
             String skyRenderer;
             if (targetIsPhysicalLevel && normalSkyType) {
-                renderer = renderVanillaSkyCapture(minecraft, level, camera, frustum, projection, partialTick);
+                renderer = renderVanillaSkyCapture(minecraft, level, camera, frustum, projection, partialTick, renderDistanceChunks);
                 skyRenderer = renderer.startsWith("clonedFallbackAfterVanillaFailure")
                         ? "clonedTargetLevel"
                         : "vanillaLevelRenderer";
             } else {
-                renderer = renderClonedTargetLevelSkyCapture(minecraft, level, camera, frustum, projection, partialTick);
+                renderer = renderClonedTargetLevelSkyCapture(minecraft, level, camera, frustum, projection, partialTick, renderDistanceChunks);
                 skyRenderer = "clonedTargetLevel";
                 skippedVanillaSkyReason = targetIsPhysicalLevel
                         ? "skyType " + skyType + " is not NORMAL"
@@ -438,101 +436,17 @@ public final class PortalSkyCaptureManager {
         }
     }
 
-    private static String renderVanillaSkyCapture(
-            Minecraft minecraft,
-            ClientLevel level,
-            Camera camera,
-            Matrix4f frustum,
-            Matrix4f projection,
-            float partialTick
-    ) {
-        FogRenderer.setupColor(
-                camera,
-                partialTick,
-                level,
-                minecraft.options.getEffectiveRenderDistance(),
-                minecraft.gameRenderer.getDarkenWorldAmount(partialTick)
-        );
-        FogRenderer.levelFogColor();
-
-        float renderDistance = minecraft.gameRenderer.getRenderDistance();
-        boolean foggy = level.effects().isFoggyAt(
-                Mth.floor(camera.getPosition().x()),
-                Mth.floor(camera.getPosition().y())
-        ) || minecraft.gui.getBossOverlay().shouldCreateWorldFog();
-
-        Runnable skyFogSetup = () -> {
-            FogRenderer.setupFog(
-                    camera,
-                    FogRenderer.FogMode.FOG_SKY,
-                    renderDistance,
-                    foggy,
-                    partialTick
-            );
-            RenderSystem.setShader(GameRenderer::getPositionShader);
-        };
-
-        try {
-            skyFogSetup.run();
-            RenderSystem.setShader(GameRenderer::getPositionShader);
-            ((LevelRendererSkyInvoker) minecraft.levelRenderer).skyesight$renderSky(
-                    frustum,
-                    projection,
-                    partialTick,
-                    camera,
-                    foggy,
-                    skyFogSetup
-            );
-            return "vanillaLevelRenderer";
-        } catch (RuntimeException exception) {
-            SkyesightClonedSkyRenderer.renderSky(level, camera, frustum, projection, partialTick, skyFogSetup);
-            return "clonedFallbackAfterVanillaFailure:" + exception.getClass().getSimpleName();
-        }
+    private static String renderVanillaSkyCapture(Minecraft minecraft, ClientLevel level, Camera camera,
+            Matrix4f frustum, Matrix4f projection, float partialTick, int renderDistanceChunks) {
+        return com.skyeshade.skyesight.client.render.SecondarySceneEnvironmentRenderer.renderSky(
+                minecraft, level, camera, frustum, projection, partialTick, renderDistanceChunks, true);
     }
 
-    private static String renderClonedTargetLevelSkyCapture(
-            Minecraft minecraft,
-            ClientLevel level,
-            Camera camera,
-            Matrix4f frustum,
-            Matrix4f projection,
-            float partialTick
-    ) {
-        FogRenderer.setupColor(
-                camera,
-                partialTick,
-                level,
-                minecraft.options.getEffectiveRenderDistance(),
-                minecraft.gameRenderer.getDarkenWorldAmount(partialTick)
-        );
-        FogRenderer.levelFogColor();
-
-        float renderDistance = minecraft.gameRenderer.getRenderDistance();
-        boolean foggy = level.effects().isFoggyAt(
-                Mth.floor(camera.getPosition().x()),
-                Mth.floor(camera.getPosition().y())
-        ) || minecraft.gui.getBossOverlay().shouldCreateWorldFog();
-
-        Runnable skyFogSetup = () -> {
-            FogRenderer.setupFog(
-                    camera,
-                    FogRenderer.FogMode.FOG_SKY,
-                    renderDistance,
-                    foggy,
-                    partialTick
-            );
-            RenderSystem.setShader(GameRenderer::getPositionShader);
-        };
-
-        try {
-            skyFogSetup.run();
-            SkyesightClonedSkyRenderer.renderSky(level, camera, frustum, projection, partialTick, skyFogSetup);
-            return "clonedTargetLevel";
-        } catch (RuntimeException exception) {
-            return "clonedTargetLevelFailed:" + exception.getClass().getSimpleName();
-        }
+    private static String renderClonedTargetLevelSkyCapture(Minecraft minecraft, ClientLevel level, Camera camera,
+            Matrix4f frustum, Matrix4f projection, float partialTick, int renderDistanceChunks) {
+        return com.skyeshade.skyesight.client.render.SecondarySceneEnvironmentRenderer.renderSky(
+                minecraft, level, camera, frustum, projection, partialTick, renderDistanceChunks, false);
     }
-
     private CloudCaptureResult capturePortalClouds(
             String cacheKey,
             Minecraft minecraft,
@@ -562,10 +476,8 @@ public final class PortalSkyCaptureManager {
         if (Float.isNaN(cloudHeight)) {
             return CloudCaptureResult.skipped(cloudStatus, "dimension cloud height NaN");
         }
-        if (!targetIsPhysicalLevel) {
-            return CloudCaptureResult.skipped(cloudStatus, "cross-dim-levelrenderer-level-mismatch");
-        }
-        if (!vanillaSkyCaptureSucceeded || target == null || target.frameBufferId <= 0) {
+
+        if (target == null || target.frameBufferId <= 0) {
             return CloudCaptureResult.skipped(cloudStatus, "sky capture target unavailable");
         }
         if (shaderPackActive) {
@@ -588,20 +500,10 @@ public final class PortalSkyCaptureManager {
             FogRenderer.levelFogColor();
 
             PoseStack poseStack = new PoseStack();
-            SkyesightIsolatedCloudRenderer.RenderResult renderResult = this.isolatedCloudRenderer.render(
-                    cacheKey,
-                    minecraft.levelRenderer,
-                    poseStack,
-                    frustum,
-                    projection,
-                    partialTick,
-                    truePortalCameraPosition.x(),
-                    truePortalCameraPosition.y(),
-                    truePortalCameraPosition.z(),
-                    renderFrame,
-                    target.frameBufferId
-            );
-
+            SkyesightIsolatedCloudRenderer.RenderResult renderResult =
+                    com.skyeshade.skyesight.client.render.SecondarySceneEnvironmentRenderer.renderClouds(
+                            this.isolatedCloudRenderer, cacheKey, minecraft, level, frustum, projection,
+                            truePortalCameraPosition, partialTick, renderFrame, target.frameBufferId);
             return CloudCaptureResult.succeeded(
                     cloudStatus,
                     renderResult.ticks()
@@ -616,32 +518,12 @@ public final class PortalSkyCaptureManager {
         }
     }
 
-    private static RgbaSample setupVanillaCallerClearState(
-            Minecraft minecraft,
-            ClientLevel level,
-            Camera camera,
-            float partialTick
-    ) {
-        // Match LevelRenderer.renderLevel's pre-renderSky setup. LevelRenderer.renderSky
-        // does not own every background pixel; the caller's fog/clear color remains
-        // visible wherever skyBuffer/darkBuffer geometry does not cover the target.
-        RenderSystem.colorMask(true, true, true, true);
-        RenderSystem.depthMask(true);
-        RenderSystem.disableBlend();
-        RenderSystem.enableDepthTest();
-        RenderSystem.enableCull();
-        RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-        FogRenderer.setupColor(
-                camera,
-                partialTick,
-                level,
-                minecraft.options.getEffectiveRenderDistance(),
-                minecraft.gameRenderer.getDarkenWorldAmount(partialTick)
-        );
-        FogRenderer.levelFogColor();
-        return currentClearColor();
+    private static RgbaSample setupVanillaCallerClearState(Minecraft minecraft, ClientLevel level, Camera camera,
+            float partialTick, int radius) {
+        float[] color = com.skyeshade.skyesight.client.render.SecondarySceneEnvironmentRenderer.prepareBackground(
+                minecraft, level, camera, partialTick, radius);
+        return RgbaSample.fromUnit(color[0], color[1], color[2], 1);
     }
-
     private static FogRestoreResult restoreMainWorldFogState(
             Minecraft minecraft,
             RenderLevelStageEvent event,

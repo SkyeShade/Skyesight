@@ -248,7 +248,6 @@ public final class SecondaryParticlePass {
         Vec3 cameraPos = frame.camera().getPosition();
         ParticleEngine engine = minecraft.particleEngine;
         ParticleEngineAccessor engineAccessor = (ParticleEngineAccessor) engine;
-        ClientLevel previousEngineLevel = engineAccessor.skyesight$getLevel();
         int framebufferBefore = GL30.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
         String depthBefore = captureDepthState();
         Matrix4f projectionBefore = new Matrix4f(RenderSystem.getProjectionMatrix());
@@ -300,13 +299,12 @@ public final class SecondaryParticlePass {
             RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
             RenderSystem.activeTexture(org.lwjgl.opengl.GL13.GL_TEXTURE2);
             RenderSystem.activeTexture(org.lwjgl.opengl.GL13.GL_TEXTURE0);
-            engineAccessor.skyesight$setLevel(visualLevel);
 
             for (SkyesightVisualParticleManager.VisualParticle particle : particleManager.particles()) {
                 totalParticles++;
 
                 ParticleOptions particleOptions = particle.particleOptions();
-                if (particleOptions == null) {
+                if (particleOptions == null && particle.clientParticle() == null) {
                     logWatchRenderFlow(frame, particle, null, false, false, "null-particle-options");
                     skippedRenderType++;
                     continue;
@@ -334,24 +332,7 @@ public final class SecondaryParticlePass {
 
                 inRange++;
 
-                if (renderParticle == null) {
-                    renderParticle = engineAccessor.skyesight$makeParticle(
-                            particleOptions,
-                            position.x(),
-                            position.y(),
-                            position.z(),
-                            particle.velocity().x(),
-                            particle.velocity().y(),
-                            particle.velocity().z()
-                    );
-                    createdThisFrame = true;
-                    if (renderParticle != null) {
-                        particle.attachClientParticle(renderParticle);
-                        instancesCreated++;
-                    }
-                } else {
-                    instancesReused++;
-                }
+                instancesReused++;
 
                 if (renderParticle == null) {
                     logWatchRenderFlow(frame, particle, null, false, false, "provider-missing");
@@ -388,7 +369,7 @@ public final class SecondaryParticlePass {
                 }
             }
 
-        for (ParticleRenderType particleRenderType : VANILLA_PARTICLE_RENDER_ORDER) {
+        for (ParticleRenderType particleRenderType : orderedRenderTypes(particlesByRenderType)) {
                 List<Particle> renderParticles = particlesByRenderType.get(particleRenderType);
                 if (renderParticles == null || renderParticles.isEmpty()) {
                     continue;
@@ -426,7 +407,6 @@ public final class SecondaryParticlePass {
         } catch (RuntimeException runtimeException) {
             exception = runtimeException.getClass().getSimpleName() + ": " + runtimeException.getMessage();
         } finally {
-            engineAccessor.skyesight$setLevel(previousEngineLevel);
             if (lightLayerOn) {
                 lightTexture.turnOffLightLayer();
             }
@@ -828,13 +808,16 @@ public final class SecondaryParticlePass {
         return String.format(Locale.ROOT, "%.2f,%.2f,%.2f", value.x(), value.y(), value.z());
     }
 
-    private static boolean supportedRenderType(ParticleRenderType renderType) {
-        return renderType == ParticleRenderType.PARTICLE_SHEET_OPAQUE
-                || renderType == ParticleRenderType.PARTICLE_SHEET_TRANSLUCENT
-                || renderType == ParticleRenderType.PARTICLE_SHEET_LIT
-                || renderType == ParticleRenderType.TERRAIN_SHEET;
+    private static boolean supportedRenderType(ParticleRenderType type) {
+        return type != ParticleRenderType.NO_RENDER;
     }
 
+    private static List<ParticleRenderType> orderedRenderTypes(Map<ParticleRenderType, ?> particles) {
+        var result = new ArrayList<ParticleRenderType>();
+        for (var type : VANILLA_PARTICLE_RENDER_ORDER) if (particles.containsKey(type)) result.add(type);
+        for (var type : particles.keySet()) if (!result.contains(type)) result.add(type);
+        return result;
+    }
     private static void appendRenderType(StringBuilder builder, ParticleRenderType type, int total, int rendered) {
         if (builder.length() > 0) {
             builder.append(";");

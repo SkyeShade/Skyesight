@@ -136,6 +136,7 @@ public final class SkyesightVisualEntity {
 
     public void clientTick() {
         applyInterpolated();
+        SecondaryEntityParticles.tick(this.entity);
         PortalVisualEntityAnimationUpdater.updateForRender(this.entity, 0.0F, "visual_snapshot_client_tick");
     }
 

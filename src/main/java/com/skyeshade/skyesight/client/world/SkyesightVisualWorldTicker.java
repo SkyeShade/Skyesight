@@ -15,8 +15,10 @@ public final class SkyesightVisualWorldTicker {
 
     @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Post event) {
+        if (net.minecraft.client.Minecraft.getInstance().isPaused()) return;
         CrossDimPortalTerrainWarmup.tick();
         SkyesightVisualWorldManager.tickAll();
+        SecondaryParticleViews.tick();
         SkyesightEntityDimensionContextReporter.tick();
     }
 }

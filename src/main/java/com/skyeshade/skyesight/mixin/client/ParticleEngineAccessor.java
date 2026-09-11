@@ -15,6 +15,8 @@ import java.util.Queue;
 
 @Mixin(ParticleEngine.class)
 public interface ParticleEngineAccessor {
+    @Accessor("providers")
+    Map<net.minecraft.resources.ResourceLocation, net.minecraft.client.particle.ParticleProvider<?>> skyesight$getProviders();
     @Accessor("particles")
     Map<ParticleRenderType, Queue<Particle>> skyesight$getParticles();
 

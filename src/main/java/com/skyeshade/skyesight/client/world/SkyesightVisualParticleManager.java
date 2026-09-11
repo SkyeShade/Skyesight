@@ -28,7 +28,6 @@ public final class SkyesightVisualParticleManager {
     private long nextParticleSequence;
     private long lastProofSpawnMillis;
     private long lastUpdateMillis;
-    private boolean campfireSmokeSeen;
     private String lastSource = "never";
     private String lastSample = "-";
     private int lastSourceCaptured;
@@ -38,6 +37,17 @@ public final class SkyesightVisualParticleManager {
     private int captureAuditCount;
     private final Map<String, Integer> totalCaptureTypes = new LinkedHashMap<>();
     private int totalCaptureCount;
+    private net.minecraft.client.multiplayer.ClientLevel level;
+    private boolean active;
+    private Vec3 center = Vec3.ZERO;
+    private int radius;
+    private int missingProviders;
+
+    public void bindLevel(net.minecraft.client.multiplayer.ClientLevel level) { this.level = level; }
+    public boolean isActive() { return this.active; }
+    public void setActive(boolean active, Vec3 center, int radius) {
+        this.active = active; this.center = center; this.radius = radius;
+    }
 
     public SkyesightVisualParticleManager(ResourceKey<Level> dimension) {
         this.dimension = dimension;
@@ -63,16 +73,14 @@ public final class SkyesightVisualParticleManager {
                 x += this.random.nextGaussian() * payload.xDist();
                 y += this.random.nextGaussian() * payload.yDist();
                 z += this.random.nextGaussian() * payload.zDist();
-                xd *= this.random.nextGaussian();
-                yd *= this.random.nextGaussian();
-                zd *= this.random.nextGaussian();
+                xd = this.random.nextGaussian();
+                yd = this.random.nextGaussian();
+                zd = this.random.nextGaussian();
             }
 
-            if (payload.maxSpeed() != 0.0D) {
-                xd *= payload.maxSpeed();
-                yd *= payload.maxSpeed();
-                zd *= payload.maxSpeed();
-            }
+            xd *= payload.maxSpeed();
+            yd *= payload.maxSpeed();
+            zd *= payload.maxSpeed();
 
             add(new VisualParticle(
                     this.nextParticleSequence++,
@@ -80,18 +88,14 @@ public final class SkyesightVisualParticleManager {
                     new Vec3(xd, yd, zd),
                     payload.particle(),
                     particleId,
-                    colorFor(particleId, this.dimension),
-                    sizeFor(particleId),
-                    lifetimeFor(particleId),
+                    new ParticleColor(1, 1, 1, 1),
+                    0.2F,
+                    1,
                     true,
                     false
             ));
         }
 
-        if (particleId.contains("smoke")) {
-            this.campfireSmokeSeen = true;
-        }
-        recordCaptureAuditType(particleId, count);
         this.lastUpdateMillis = System.currentTimeMillis();
         this.lastSource = "payload";
         this.lastSourceCaptured = count;
@@ -136,17 +140,13 @@ public final class SkyesightVisualParticleManager {
                 new Vec3(xSpeed, ySpeed, zSpeed),
                 particleOptions,
                 particleId,
-                colorFor(particleId, this.dimension),
-                sizeFor(particleId),
-                lifetimeFor(particleId),
+                new ParticleColor(1, 1, 1, 1),
+                0.2F,
+                1,
                 true,
                 watched
         ));
 
-        if (particleId.contains("smoke")) {
-            this.campfireSmokeSeen = true;
-        }
-        recordCaptureAuditType(particleId, 1);
         this.lastUpdateMillis = System.currentTimeMillis();
         this.lastSource = source == null || source.isBlank() ? "visual-addParticle" : source;
         this.lastSourceCaptured = 1;
@@ -179,7 +179,7 @@ public final class SkyesightVisualParticleManager {
                     vel,
                     particleOptions,
                     type,
-                    colorFor(type, this.dimension),
+                    new ParticleColor(1, 1, 1, 1),
                     Level.END.equals(this.dimension) ? 0.18F : 0.22F,
                     36,
                     true,
@@ -190,15 +190,14 @@ public final class SkyesightVisualParticleManager {
         this.lastUpdateMillis = now;
         this.lastSource = "proof_spawn";
         this.lastSourceCaptured = 8;
-        recordCaptureAuditType(type, 8);
         this.lastSample = type + " center=" + format(center.x()) + "," + format(center.y()) + "," + format(center.z());
     }
 
     public void tick() {
+        if (!this.active || this.level == null) return;
         this.lastPendingAddsDrained = drainPendingAdds();
-
-        for (VisualParticle particle : this.particles) {
-            particle.tick();
+        try (var ignored = SecondaryParticleCapture.push(this.level, this)) {
+            for (VisualParticle particle : this.particles) particle.tick();
         }
 
         int beforeRemove = this.particles.size();
@@ -225,7 +224,6 @@ public final class SkyesightVisualParticleManager {
                 + " lastSource=" + this.lastSource
                 + " lastSourceCaptured=" + this.lastSourceCaptured
                 + " lastUpdateMs=" + this.lastUpdateMillis
-                + " campfireSmokeSeen=" + yesNo(this.campfireSmokeSeen)
                 + " sample=" + this.lastSample;
     }
 
@@ -289,10 +287,6 @@ public final class SkyesightVisualParticleManager {
         return mapSummary(delta);
     }
 
-    public boolean campfireSmokeSeen() {
-        return this.campfireSmokeSeen;
-    }
-
     public String lastSource() {
         return this.lastSource;
     }
@@ -307,7 +301,41 @@ public final class SkyesightVisualParticleManager {
     }
 
     private void add(VisualParticle particle) {
+        if (!this.active || this.level == null || !com.skyeshade.skyesight.remote.SecondaryParticlePolicy.contains(
+                this.center, this.radius, particle.position.x, particle.position.y, particle.position.z)
+                || size() >= MAX_PARTICLES) return;
+        Particle instance = createParticle(particle);
+        if (instance == null) { this.missingProviders++; return; }
+        particle.attachClientParticle(instance);
+        if (size() >= MAX_PARTICLES) return;
         this.pendingAdds.add(particle);
+        recordCaptureAuditType(particle.particleId, 1);
+    }
+
+    public void addClientParticle(Particle instance) {
+        var position = instance.getPos();
+        if (!this.active || size() >= MAX_PARTICLES
+                || !com.skyeshade.skyesight.remote.SecondaryParticlePolicy.contains(this.center, this.radius, position.x, position.y, position.z)) return;
+        String id = instance.getClass().getSimpleName();
+        var particle = new VisualParticle(this.nextParticleSequence++, position, Vec3.ZERO, null, id,
+                new ParticleColor(1, 1, 1, 1), .2F, 1, true, false);
+        particle.attachClientParticle(instance);
+        this.pendingAdds.add(particle);
+        recordCaptureAuditType(id, 1);
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    private Particle createParticle(VisualParticle particle) {
+        var engine = (com.skyeshade.skyesight.mixin.client.ParticleEngineAccessor)
+                net.minecraft.client.Minecraft.getInstance().particleEngine;
+        net.minecraft.client.particle.ParticleProvider provider = engine.skyesight$getProviders().get(
+                BuiltInRegistries.PARTICLE_TYPE.getKey(particle.particleOptions.getType()));
+        if (provider == null) return null;
+        try (var ignored = SecondaryParticleCapture.push(this.level, this)) {
+            return provider.createParticle(particle.particleOptions, this.level,
+                    particle.position.x, particle.position.y, particle.position.z,
+                    particle.velocity.x, particle.velocity.y, particle.velocity.z);
+        }
     }
 
     private void recordCaptureAuditType(String particleId, int count) {
@@ -348,36 +376,6 @@ public final class SkyesightVisualParticleManager {
     private static String particleId(ParticleOptions particle) {
         ResourceLocation id = particle == null ? null : BuiltInRegistries.PARTICLE_TYPE.getKey(particle.getType());
         return id == null ? "unknown" : id.toString();
-    }
-
-    private static int lifetimeFor(String particleId) {
-        if (particleId.contains("smoke")) {
-            return 50;
-        }
-        if (particleId.contains("dragon_breath") || particleId.contains("portal")) {
-            return 60;
-        }
-        return 36;
-    }
-
-    private static float sizeFor(String particleId) {
-        if (particleId.contains("smoke") || particleId.contains("dragon_breath")) {
-            return 0.35F;
-        }
-        return 0.22F;
-    }
-
-    private static ParticleColor colorFor(String particleId, ResourceKey<Level> dimension) {
-        if (particleId.contains("smoke")) {
-            return new ParticleColor(0.45F, 0.43F, 0.40F, 0.55F);
-        }
-        if (particleId.contains("portal") || particleId.contains("dragon_breath")) {
-            return new ParticleColor(0.62F, 0.22F, 0.95F, 0.70F);
-        }
-        if (particleId.contains("end_rod") || Level.END.equals(dimension)) {
-            return new ParticleColor(0.72F, 0.64F, 1.0F, 0.72F);
-        }
-        return new ParticleColor(1.0F, 0.38F, 0.08F, 0.72F);
     }
 
     private static String format(double value) {
@@ -459,10 +457,7 @@ public final class SkyesightVisualParticleManager {
                 return;
             }
 
-            this.previousPosition = this.position;
-            this.position = this.position.add(this.velocity);
-            this.velocity = this.velocity.scale(0.92D).add(0.0D, 0.002D, 0.0D);
-            this.age++;
+            throw new IllegalStateException("Stored secondary particle has no native instance");
         }
 
         public Vec3 renderPosition(float partialTick) {
