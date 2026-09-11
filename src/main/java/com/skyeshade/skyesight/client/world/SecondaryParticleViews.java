@@ -101,8 +101,14 @@ public final class SecondaryParticleViews {
 
     public static View get(ResourceLocation id) { return VIEWS.get(id); }
     public static void close(ResourceLocation id) {
-        var view = VIEWS.remove(id);
+        close(VIEWS.get(id));
+    }
+    private static void close(View view) {
         if (view == null) return;
+        // Keep the selected live scene's particles ticking across physical level replacement.
+        // Capture identity so deferred cleanup cannot close a newer view with the same ID.
+        if (com.skyeshade.skyesight.client.transition.SecondaryTransition.deferClose(view.particles, () -> close(view))) return;
+        VIEWS.remove(view.id, view);
         send(view, false);
         view.particles.setActive(false, view.center, view.radius);
         view.particles.close();

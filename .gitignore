@@ -13,7 +13,8 @@ out/
 !**/src/**/out/
 
 .run/
-
+### personal notes
+.docs/
 ### Eclipse ###
 .apt_generated
 .classpath

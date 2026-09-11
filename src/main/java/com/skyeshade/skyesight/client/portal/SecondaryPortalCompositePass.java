@@ -285,7 +285,15 @@ public final class SecondaryPortalCompositePass {
             RenderSystem.setShader(GameRenderer::getPositionColorShader);
             RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
 
-            drawPortalMask(poseStack, camera, portal, stencilMask, viewId);
+            boolean depthClamp = GL11.glIsEnabled(org.lwjgl.opengl.GL32.GL_DEPTH_CLAMP);
+            try {
+                // The aperture must survive the eye's near plane. This is only stencil
+                // coverage; finite destination geometry keeps its ordinary/exit clipping.
+                GL11.glEnable(org.lwjgl.opengl.GL32.GL_DEPTH_CLAMP);
+                drawPortalMask(poseStack, camera, portal, stencilMask, viewId);
+            } finally {
+                if (!depthClamp) GL11.glDisable(org.lwjgl.opengl.GL32.GL_DEPTH_CLAMP);
+            }
 
             GL11.glDisable(GL11.GL_STENCIL_TEST);
             RenderSystem.stencilMask(0xFF);

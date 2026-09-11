@@ -43,6 +43,13 @@ public final class SecondarySodiumTerrainPass {
         return true;
     }
 
+    /** Conservative prewarm check; never allocates or adopts a renderer. */
+    public static boolean hasRenderedTerrain(SecondaryViewContext context, net.minecraft.client.multiplayer.ClientLevel level) {
+        if (SkyesightSodiumCompat.isLoaded()) return SodiumMethods.hasRenderedTerrain(context);
+        return context.vanillaState() instanceof VanillaSecondaryViewState state
+                && state.hasRenderedTerrain(level);
+    }
+
     public static MainTerrainStateSnapshot captureMainTerrainState(Minecraft minecraft) {
         if (!SkyesightSodiumCompat.isLoaded()) {
             return MainTerrainStateSnapshot.unavailable();
@@ -101,6 +108,11 @@ public final class SecondarySodiumTerrainPass {
 
     private static final class SodiumMethods {
         private SodiumMethods() {}
+
+        private static boolean hasRenderedTerrain(SecondaryViewContext context) {
+            var state = com.skyeshade.skyesight.client.render.sodium.SodiumSecondaryViewState.get(context);
+            return state != null && state.renderer() != null && state.renderer().getVisibleChunkCount() > 0;
+        }
 
         private static boolean render(
                 SecondaryViewFrame frame,

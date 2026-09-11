@@ -7,6 +7,7 @@ public final class DirectStencilPortalRenderPipeline {
     private DirectStencilPortalRenderPipeline() {}
 
     public static void onRenderLevelStage(RenderLevelStageEvent event) {
+        if (com.skyeshade.skyesight.client.transition.SecondaryTransition.warmingPhysicalTerrain()) return;
         PortalDirectStencilRenderer.onRenderLevelStage(event);
     }
 

@@ -37,33 +37,13 @@ public final class DirectStencilPortalMath {
             PortalFrame entrancePortal,
             PortalFrame exitPortal
     ) {
-        Quaternionf inverseEntranceRotation = new Quaternionf(entrancePortal.rotation()).conjugate();
-        Quaternionf yawFlip = new Quaternionf().rotateY((float) Math.PI);
-
-        Vector3f localPosition = new Vector3f(
-                (float) (sourcePosition.x() - entrancePortal.position().x()),
-                (float) (sourcePosition.y() - entrancePortal.position().y()),
-                (float) (sourcePosition.z() - entrancePortal.position().z())
-        );
-        localPosition.rotate(inverseEntranceRotation);
-        localPosition.rotate(yawFlip);
-        localPosition.rotate(exitPortal.rotation());
-
+        Quaternionf transform = com.skyeshade.skyesight.portal.PortalTraversalMath.rotation(
+                entrancePortal.rotation(), exitPortal.rotation());
         Vec3 transformedPosition = exitPortal.position().add(
-                localPosition.x(),
-                localPosition.y(),
-                localPosition.z()
-        );
-
-        Quaternionf transformedRotation = new Quaternionf(exitPortal.rotation())
-                .mul(yawFlip)
-                .mul(inverseEntranceRotation)
-                .mul(new Quaternionf(sourceRotation))
-                .normalize();
-
-        return new PortalCameraPose(transformedPosition, transformedRotation);
+                com.skyeshade.skyesight.portal.PortalTraversalMath.rotate(
+                        sourcePosition.subtract(entrancePortal.position()), transform));
+        return new PortalCameraPose(transformedPosition, transform.mul(new Quaternionf(sourceRotation)).normalize());
     }
-
     public static SkyesightClipPlane exitClipPlane(PortalFrame exitPortal) {
         return exitClipPlane(exitPortal, 1);
     }

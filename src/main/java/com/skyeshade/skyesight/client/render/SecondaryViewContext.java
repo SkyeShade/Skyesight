@@ -437,6 +437,7 @@ public final class SecondaryViewContext {
     }
 
     public void close() {
+        if (com.skyeshade.skyesight.client.transition.SecondaryTransition.deferClose(this, this::close)) return;
         this.clouds.close();
         if (this.renderTarget != null) {
             this.renderTarget.destroyBuffers();

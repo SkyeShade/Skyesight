@@ -63,6 +63,10 @@ final class VanillaSecondaryViewState implements AutoCloseable {
         return this.levelRenderer;
     }
 
+    boolean hasRenderedTerrain(ClientLevel level) {
+        return this.boundLevel == level && this.levelRenderer.countRenderedSections() > 0;
+    }
+
     BootstrapResult bootstrapLoadedChunks(
             ClientLevel level,
             Vec3 cameraPosition,
