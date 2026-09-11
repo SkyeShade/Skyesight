@@ -13,6 +13,7 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
+import net.neoforged.fml.event.config.ModConfigEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.RegisterCommandsEvent;
 import com.skyeshade.skyesight.command.SkyesightCommandRegistrar;
@@ -26,8 +27,8 @@ public final class Skyesight {
 
     public Skyesight(IEventBus modBus, ModContainer modContainer) {
         modContainer.registerConfig(ModConfig.Type.CLIENT, SkyesightClientConfig.SPEC);
+        modBus.addListener(Skyesight::onConfigLoading);
         SkyesightItems.register(modBus);
-        SkyesightDebugPortalRegistrations.registerDefaults();
         PortalServerViewCacheInvalidator.register();
         modBus.addListener(SkyesightPayloads::register);
         NeoForge.EVENT_BUS.register(this);
@@ -41,6 +42,14 @@ public final class Skyesight {
             PortalPlayerQueryMixinTargetAudit.logStartupAudit();
         }
     }
+
+    private static void onConfigLoading(ModConfigEvent.Loading event) {
+        if (event.getConfig().getSpec() == SkyesightClientConfig.SPEC
+                && SkyesightClientConfig.registerStartupDebugPortals()) {
+            SkyesightDebugPortalRegistrations.registerDefaults();
+        }
+    }
+
     private static final SkyesightApi API = new SkyesightClientApi();
 
 

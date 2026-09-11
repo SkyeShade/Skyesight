@@ -6,6 +6,10 @@ package com.skyeshade.skyesight.api;
  * <p>The default options render a normal world view. These options describe
  * visible scene contents only; debug, Sodium, stencil, and portal internals are
  * intentionally not exposed through this API.
+ *
+ * <p>Same-dimension cameras reuse available client chunks by default. Enabling
+ * {@code publishWatchRegion} also requests integrated-server chunk watching.
+ * Cross-dimension cameras use their own remote chunk requests independently.
  */
 public record SkyesightViewRenderOptions(
         boolean sky,

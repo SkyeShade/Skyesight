@@ -1,6 +1,7 @@
 package com.skyeshade.skyesight.mixin.client.sodium;
 
 import com.skyeshade.skyesight.client.render.PortalSecondaryWorldRenderer;
+import com.skyeshade.skyesight.client.render.SkyesightViewDistanceScope;
 import com.skyeshade.skyesight.client.render.sodium.SkyesightSodiumRenderContext;
 import it.unimi.dsi.fastutil.longs.Long2ReferenceMap;
 import net.caffeinemc.mods.sodium.client.render.chunk.RenderSection;
@@ -46,7 +47,8 @@ public abstract class RenderSectionManagerRenderLayerDebugMixin {
 
     private void forceRemoteRenderList(Viewport viewport, int frame) {
         SectionPos center = viewport.getChunkCoord();
-        int radius = PortalSecondaryWorldRenderer.sodiumForceRemoteRenderListRadius();
+        int radius = SkyesightViewDistanceScope.resolve(
+                PortalSecondaryWorldRenderer.sodiumForceRemoteRenderListRadius());
         int forcedFrame = frame + 1_000_000;
         VisibleChunkCollector collector = new VisibleChunkCollector(forcedFrame);
 

@@ -10,6 +10,11 @@ public final class SkyesightClientLightDataHandler {
     private SkyesightClientLightDataHandler() {}
 
     public static void handle(SkyesightLightDataPayload payload) {
+        if (!com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry.accepts(
+                payload.viewId(), payload.generation(), payload.dimension())) {
+            return;
+        }
+
         SkyesightVisualWorld world =
                 SkyesightVisualWorldManager.getIfCurrent(payload.viewId(), payload.dimension());
 

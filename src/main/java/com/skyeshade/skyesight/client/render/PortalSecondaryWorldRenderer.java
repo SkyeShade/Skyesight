@@ -2,6 +2,7 @@ package com.skyeshade.skyesight.client.render;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
+import com.mojang.blaze3d.shaders.FogShape;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexSorting;
@@ -314,6 +315,9 @@ public final class PortalSecondaryWorldRenderer {
     ) {
         int targetWidth = Math.max(1, width);
         int targetHeight = Math.max(1, height);
+        float previousFogStart = RenderSystem.getShaderFogStart();
+        float previousFogEnd = RenderSystem.getShaderFogEnd();
+        var previousFogShape = RenderSystem.getShaderFogShape();
         PortalTargetRenderState renderState = PortalTargetRenderState.capture();
         TextureTarget output;
         try {
@@ -330,9 +334,14 @@ public final class PortalSecondaryWorldRenderer {
         try {
             output.bindWrite(true);
             RenderSystem.viewport(0, 0, output.width, output.height);
-            RenderSystem.clearColor(0.0F, 0.0F, 0.0F, 1.0F);
+            output.setClearColor(0.0F, 0.0F, 0.0F, 1.0F);
             output.clear(Minecraft.ON_OSX);
             output.bindWrite(true);
+            // Sodium bounds section traversal by min(backend distance, fog end).
+            // Inheriting the physical camera's fog silently caps a larger view.
+            RenderSystem.setShaderFogStart(renderDistanceChunks * 16.0F * 0.65F);
+            RenderSystem.setShaderFogEnd(renderDistanceChunks * 16.0F);
+            RenderSystem.setShaderFogShape(FogShape.CYLINDER);
 
             SecondaryViewFrame frame = createSecondaryViewFrameFromPose(
                     context,
@@ -357,6 +366,7 @@ public final class PortalSecondaryWorldRenderer {
                     renderDistanceChunks
             );
             frame.diagnostics().setRenderSkyInCurrentTarget(renderSky);
+            frame.diagnostics().setCameraView(true);
             frame.diagnostics().setTerrainChunkRadius(renderDistanceChunks);
             frame.diagnostics().setPortalOwnedRenderRadiusChunks(renderDistanceChunks);
             frame.diagnostics().setSameDimPlayerLoadedReuseRadiusChunks(renderDistanceChunks);
@@ -377,8 +387,12 @@ public final class PortalSecondaryWorldRenderer {
                 renderPostTerrainFeatures(frame, context, minecraft, partialTick);
             }
 
+            SkyesightCameraOutput.makeOpaque(output);
             return output;
         } finally {
+            RenderSystem.setShaderFogStart(previousFogStart);
+            RenderSystem.setShaderFogEnd(previousFogEnd);
+            RenderSystem.setShaderFogShape(previousFogShape);
             PortalSecondaryRenderState.renderingSecondaryView = false;
 
             modelViewStack.popMatrix();
@@ -454,6 +468,14 @@ public final class PortalSecondaryWorldRenderer {
                     mainProjection,
                     portalInstanceId,
                     portalStencilRef
+            );
+            PortalCloudTerrainFrameDiagnostics.compareTerrainFrame(
+                    entityWatchRegionId,
+                    event.getRenderTick(),
+                    frame.camera().getPosition(),
+                    frame.camera().rotation(),
+                    frame.modelViewMatrix(),
+                    frame.projectionMatrix()
             );
             frame.diagnostics().setPublishEntityWatchRegion(publishEntityWatchRegion);
             frame.diagnostics().setEntityWatchRegionId(entityWatchRegionId);

@@ -27,6 +27,7 @@ public final class SkyesightServerBlockEventBroadcaster {
                     player,
                     new SkyesightBlockEventPayload(
                             watched.watch().viewId(),
+                            watched.watch().generation(),
                             level.dimension(),
                             pos.immutable(),
                             type,

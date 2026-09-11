@@ -11,6 +11,11 @@ public final class SkyesightClientParticleHandler {
     private SkyesightClientParticleHandler() {}
 
     public static void handle(SkyesightParticlePayload payload) {
+        if (!com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry.accepts(
+                payload.viewId(), payload.generation(), payload.dimension())) {
+            return;
+        }
+
         SkyesightVisualWorld world =
                 SkyesightVisualWorldManager.getIfCurrent(payload.viewId(), payload.dimension());
 

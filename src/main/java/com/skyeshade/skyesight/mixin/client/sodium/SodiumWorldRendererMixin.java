@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.Redirect;
 @Mixin(value = SodiumWorldRenderer.class, remap = false)
 public abstract class SodiumWorldRendererMixin {
     @Redirect(
-            method = "processChunkEvents",
+            method = {"processChunkEvents", "initRenderer"},
             at = @At(
                     value = "INVOKE",
                     target = "Lnet/caffeinemc/mods/sodium/client/render/chunk/map/ChunkTrackerHolder;get(Lnet/minecraft/client/multiplayer/ClientLevel;)Lnet/caffeinemc/mods/sodium/client/render/chunk/map/ChunkTracker;"

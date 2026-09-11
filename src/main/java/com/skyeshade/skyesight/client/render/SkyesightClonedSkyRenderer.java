@@ -197,6 +197,9 @@ public final class SkyesightClonedSkyRenderer {
         RenderSystem.enableBlend();
 
         beforeSkyPiece.run();
+        // The previous dimension/custom sky may leave additive blending selected.
+        // The sunrise fan fades through vertex alpha, including alpha-zero rim vertices.
+        RenderSystem.defaultBlendFunc();
         renderSunrise(level, poseStack, tesselator, partialTick);
         beforeSkyPiece.run();
         lastSunMoonAttempted = true;

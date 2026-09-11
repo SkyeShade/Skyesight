@@ -66,6 +66,8 @@ public final class SkyesightRemoteChunkReceiver {
         cache.updateViewRadius(radius);
     }
 
+    public ChunkPos viewCenter() { return new ChunkPos(viewCenterChunkX, viewCenterChunkZ); }
+
     public boolean hasChunk(int chunkX, int chunkZ) {
         return this.loadedChunks.contains(ChunkPos.asLong(chunkX, chunkZ));
     }

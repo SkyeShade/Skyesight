@@ -34,7 +34,18 @@ public interface SkyesightCameraView extends AutoCloseable {
 
     int renderDistanceChunks();
 
+    /**
+     * Sets the secondary terrain draw distance for available chunks (minimum 1).
+     * Applied on the next render, including growth and shrink; chunk loading is asynchronous.
+     * Does not change the player's render-distance option.
+     */
     void setRenderDistance(int renderDistanceChunks);
+
+    /**
+     * Caps this camera's remote load radius, including its preload ring. Minimum 1.
+     * Defaults to unlimited; does not change other views or the terrain draw distance.
+     */
+    void setRemoteLoadRadiusLimit(int radiusChunks);
 
     float fov();
 

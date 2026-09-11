@@ -20,9 +20,10 @@ public final class SkyesightVisualWorld implements AutoCloseable {
     private final SkyesightRemoteChunkReceiver chunkReceiver;
     private final SkyesightVisualEntityStore entityStore;
     private final SkyesightVisualParticleManager particles;
+    @org.jetbrains.annotations.Nullable
     public static SkyesightVisualWorld create(ResourceKey<Level> dimension) {
         SkyesightVisualClientLevel level = SkyesightClientLevelFactory.create(dimension);
-        return new SkyesightVisualWorld(dimension, level);
+        return level == null ? null : new SkyesightVisualWorld(dimension, level);
     }
     public SkyesightVisualWorld(
             ResourceKey<Level> dimension,
@@ -63,6 +64,7 @@ public final class SkyesightVisualWorld implements AutoCloseable {
         return this.entityStore;
     }
     public TickStats tick(ResourceLocation viewId) {
+        this.level.tickSkyesightEnvironment();
         SkyesightRemoteChunkReceiver.TickStats blockEntityTicks = this.chunkReceiver.tickBlockEntities(viewId);
         SkyesightVisualEntityStore.TickStats entityTicks = this.entityStore.tickVisualEntities(
                 viewId == null ? "-" : viewId.toString(),
@@ -200,6 +202,11 @@ public final class SkyesightVisualWorld implements AutoCloseable {
             return 0;
         }
         return this.terrainBackend.visibleChunkCount();
+    }
+    public String terrainBackendName() {
+        return this.terrainBackend == null
+                ? "none"
+                : this.terrainBackend.getClass().getSimpleName();
     }
     public boolean isClosed() {
         return this.closed;

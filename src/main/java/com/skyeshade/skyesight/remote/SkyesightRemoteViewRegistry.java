@@ -57,6 +57,16 @@ public final class SkyesightRemoteViewRegistry {
         }
     }
 
+    public static synchronized void unregister(
+            ResourceLocation viewId,
+            long generation
+    ) {
+        SkyesightRemoteViewRegistration registration = REGISTRATIONS.get(viewId);
+        if (registration != null && registration.generation() == generation) {
+            REGISTRATIONS.remove(viewId);
+        }
+    }
+
     public static synchronized void clear() {
         REGISTRATIONS.clear();
     }

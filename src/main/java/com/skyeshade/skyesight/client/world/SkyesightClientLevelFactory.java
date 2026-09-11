@@ -4,17 +4,17 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.core.Holder;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.Difficulty;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.dimension.DimensionType;
 
-import java.util.Optional;
+import org.jetbrains.annotations.Nullable;
 
 public final class SkyesightClientLevelFactory {
     private SkyesightClientLevelFactory() {}
 
+    @Nullable
     public static SkyesightVisualClientLevel create(ResourceKey<Level> dimension) {
         Minecraft minecraft = Minecraft.getInstance();
         ClientPacketListener connection = minecraft.getConnection();
@@ -26,7 +26,7 @@ public final class SkyesightClientLevelFactory {
         Holder<DimensionType> dimensionType =
                 resolveDimensionType(connection, minecraft.level, dimension);
 
-        return create(dimension, dimensionType);
+        return dimensionType == null ? null : create(dimension, dimensionType);
     }
 
     public static SkyesightVisualClientLevel create(
@@ -65,6 +65,7 @@ public final class SkyesightClientLevelFactory {
         );
     }
 
+    @Nullable
     private static Holder<DimensionType> resolveDimensionType(
             ClientPacketListener connection,
             ClientLevel fallbackLevel,
@@ -74,20 +75,6 @@ public final class SkyesightClientLevelFactory {
             return fallbackLevel.dimensionTypeRegistration();
         }
 
-        ResourceKey<DimensionType> typeKey = ResourceKey.create(
-                Registries.DIMENSION_TYPE,
-                dimension.location()
-        );
-
-        var registry = connection.registryAccess()
-                .registryOrThrow(Registries.DIMENSION_TYPE);
-
-        Optional<Holder.Reference<DimensionType>> holder = registry.getHolder(typeKey);
-
-        if (holder.isPresent()) {
-            return holder.get();
-        }
-
-        return fallbackLevel.dimensionTypeRegistration();
+        return SkyesightClientDimensionMetadata.resolve(connection, dimension);
     }
 }

@@ -23,6 +23,7 @@ public final class SkyesightServerViewTracker {
     public static void updateWatch(
             ServerPlayer player,
             ResourceLocation viewId,
+            long generation,
             ResourceKey<Level> dimension,
             int centerChunkX,
             int centerChunkZ,
@@ -36,6 +37,7 @@ public final class SkyesightServerViewTracker {
                 viewId,
                 new ViewWatch(
                         viewId,
+                        generation,
                         dimension,
                         centerChunkX,
                         centerChunkZ,
@@ -128,6 +130,20 @@ public final class SkyesightServerViewTracker {
         WATCHES.remove(player.getUUID());
     }
 
+    public static void removeView(ServerPlayer player, ResourceLocation viewId) {
+        if (player == null || viewId == null) {
+            return;
+        }
+        Map<ResourceLocation, ViewWatch> playerWatches = WATCHES.get(player.getUUID());
+        if (playerWatches == null) {
+            return;
+        }
+        playerWatches.remove(viewId);
+        if (playerWatches.isEmpty()) {
+            WATCHES.remove(player.getUUID());
+        }
+    }
+
     public static void removeView(ResourceLocation viewId) {
         if (viewId == null) {
             return;
@@ -165,6 +181,7 @@ public final class SkyesightServerViewTracker {
 
     public record ViewWatch(
             ResourceLocation viewId,
+            long generation,
             ResourceKey<Level> dimension,
             int centerChunkX,
             int centerChunkZ,

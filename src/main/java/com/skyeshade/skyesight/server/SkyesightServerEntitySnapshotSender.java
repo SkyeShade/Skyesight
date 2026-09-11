@@ -85,6 +85,7 @@ public final class SkyesightServerEntitySnapshotSender {
                 receivingPlayer,
                 new SkyesightEntitySnapshotPayload(
                         watch.viewId(),
+                        watch.generation(),
                         level.dimension(),
                         entries
                 )

@@ -152,25 +152,27 @@ public final class SameLevelSkyesightChunkSource implements SkyesightClientChunk
             }
         }
 
-        if (scanned >= totalCandidateChunks) {
-            LongSet removed = new LongOpenHashSet();
+        // A budgeted scan may never cover the whole region in one frame. Still
+        // retire chunks outside the new bounds immediately on shrink or movement.
+        LongSet removed = new LongOpenHashSet();
 
-            for (long packed : this.trackedChunks) {
-                if (!wanted.contains(packed)) {
-                    removed.add(packed);
-                }
+        for (long packed : this.trackedChunks) {
+            if (Math.abs(ChunkPos.getX(packed) - centerChunkX) > reuseRadius
+                    || Math.abs(ChunkPos.getZ(packed) - centerChunkZ) > reuseRadius
+                    || (scanned >= totalCandidateChunks && !wanted.contains(packed))) {
+                removed.add(packed);
             }
+        }
 
-            for (long packed : removed) {
-                this.trackedChunks.remove(packed);
-                this.lastRemovedChunkCount++;
+        for (long packed : removed) {
+            this.trackedChunks.remove(packed);
+            this.lastRemovedChunkCount++;
 
-                tracker.onChunkStatusRemoved(
-                        ChunkPos.getX(packed),
-                        ChunkPos.getZ(packed),
-                        3
-                );
-            }
+            tracker.onChunkStatusRemoved(
+                    ChunkPos.getX(packed),
+                    ChunkPos.getZ(packed),
+                    3
+            );
         }
         this.lastReadyChunkCount = this.trackedChunks.size();
         recomputeTrackedChunkSignature();

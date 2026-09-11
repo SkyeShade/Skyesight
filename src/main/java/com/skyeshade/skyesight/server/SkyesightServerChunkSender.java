@@ -1,11 +1,11 @@
 package com.skyeshade.skyesight.server;
 
 import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics;
 import com.skyeshade.skyesight.SkyesightDebugConfig;
 import com.skyeshade.skyesight.network.SkyesightChunkDataPayload;
 import com.skyeshade.skyesight.network.SkyesightChunkRequestPayload;
 import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistration;
-import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkPacketData;
 import net.minecraft.network.protocol.game.ClientboundLightUpdatePacketData;
 import net.minecraft.server.level.ServerLevel;
@@ -33,24 +33,32 @@ public final class SkyesightServerChunkSender {
             }
 
             SkyesightRemoteViewRegistration registration =
-                    SkyesightRemoteViewRegistry.get(payload.viewId()).orElse(null);
+                    SkyesightServerRemoteViewRegistry.resolve(player, payload.viewId()).orElse(null);
+            String reason = registration == null ? "unregistered"
+                    : registration.generation() != payload.viewGeneration() ? "generation_mismatch"
+                    : !registration.targetDimension().equals(payload.dimension()) ? "dimension_mismatch" : "accepted";
+            SkyesightRemoteCenterDiagnostics.trace("SERVER_REQUEST_RECEIVED",payload.viewId(),payload.viewGeneration(),payload.requestSequence(),
+                    "player="+player.getUUID()+" payloadCenter="+payload.centerChunkX()+","+payload.centerChunkZ()
+                    +" registered="+(registration!=null)+" accepted="+reason.equals("accepted")+" reason="+reason
+                    +" currentGeneration="+(registration==null?0:registration.generation()));
             if (registration == null
                     || registration.generation() != payload.viewGeneration()
                     || !registration.targetDimension().equals(payload.dimension())) {
+                if (com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics.due("server-rejected-"+player.getUUID(),payload.viewId(),payload.viewGeneration()))
+                    com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics.log("server-rejected",payload.viewId(),payload.viewGeneration(),"player="+player.getUUID()+" current="+registration+" payloadCenter="+payload.centerChunkX()+","+payload.centerChunkZ());
                 return;
             }
 
             ServerLevel level = player.server.getLevel(payload.dimension());
-            int loadRadius = payload.radius();
+            // ChunkMap clamps normal server view distance to 2..32; mirror its upper bound.
+            int serverMaximum = Math.max(0, Math.min(32, player.server.getPlayerList().getViewDistance()));
+            int loadRadius = com.skyeshade.skyesight.remote.SkyesightRemoteRadiusPolicy.accepted(payload.radius(),serverMaximum);
+            if (SkyesightRemoteCenterDiagnostics.due("radius-"+player.getUUID(),payload.viewId(),payload.viewGeneration()))
+                Skyesight.LOGGER.info("REMOTE_RADIUS_ACCEPTED player={} view={} requested={} serverMax={} accepted={}",
+                        player.getUUID(),payload.viewId(),payload.radius(),serverMaximum,loadRadius);
+            var request = new SkyesightChunkRequestPayload(payload.viewId(),payload.viewGeneration(),payload.requestSequence(),
+                    payload.dimension(),payload.centerChunkX(),payload.centerChunkZ(),loadRadius,payload.chunks());
 
-            SkyesightServerChunkLoader.updateLoadedView(
-                    player,
-                    payload.viewId(),
-                    level,
-                    payload.centerChunkX(),
-                    payload.centerChunkZ(),
-                    loadRadius
-            );
             if (level == null) {
                 Skyesight.LOGGER.warn(
                         "[Skyesight] Ignoring chunk request for missing dimension {}",
@@ -59,23 +67,37 @@ public final class SkyesightServerChunkSender {
                 return;
             }
 
+            try (var timing = SkyesightRemoteLoadDiagnostics.begin(player, level, request)) {
+            long phase = System.nanoTime();
+            SkyesightServerChunkLoader.updateLoadedView(
+                    player,
+                    request.viewId(),
+                    level,
+                    request.centerChunkX(),
+                    request.centerChunkZ(),
+                    loadRadius, request.viewGeneration(), request.requestSequence()
+            );
+            if (timing != null) timing.forceNanos += System.nanoTime() - phase;
             int sent = 0;
 
-            for (ChunkPos pos : payload.chunks()) {
+            for (ChunkPos pos : request.chunks()) {
                 if (sent >= MAX_CHUNKS_PER_REQUEST) {
                     break;
                 }
 
                 if (!isWithinRequestRadius(
                         pos,
-                        payload.centerChunkX(),
-                        payload.centerChunkZ(),
-                        payload.radius()
+                        request.centerChunkX(),
+                        request.centerChunkZ(),
+                        request.radius()
                 )) {
                     continue;
                 }
 
+                phase = System.nanoTime();
                 LevelChunk chunk = level.getChunk(pos.x, pos.z);
+                if (timing != null) timing.acquireNanos += System.nanoTime() - phase;
+                phase = System.nanoTime();
 
                 ClientboundLevelChunkPacketData chunkData =
                         new ClientboundLevelChunkPacketData(chunk);
@@ -91,12 +113,13 @@ public final class SkyesightServerChunkSender {
                 PacketDistributor.sendToPlayer(
                         player,
                         new SkyesightChunkDataPayload(
-                                payload.viewId(),
-                                payload.viewGeneration(),
-                                payload.dimension(),
-                                payload.centerChunkX(),
-                                payload.centerChunkZ(),
-                                payload.radius(),
+                                request.viewId(),
+                                request.viewGeneration(),
+                                request.requestSequence(),
+                                request.dimension(),
+                                request.centerChunkX(),
+                                request.centerChunkZ(),
+                                request.radius(),
                                 pos.x,
                                 pos.z,
                                 chunkData,
@@ -107,7 +130,7 @@ public final class SkyesightServerChunkSender {
                         && !player.serverLevel().dimension().equals(level.dimension())) {
                     Skyesight.LOGGER.info(
                             "[Skyesight] SKYESIGHT_CROSS_DIM_INITIAL_BLOCK_ENTITY_SEND: viewId={} cameraDimension={} chunkPos={},{} blockEntityCount={}",
-                            payload.viewId(),
+                            request.viewId(),
                             level.dimension().location(),
                             pos.x,
                             pos.z,
@@ -115,28 +138,40 @@ public final class SkyesightServerChunkSender {
                     );
                 }
 
+                if (timing != null) timing.serializeNanos += System.nanoTime() - phase;
                 sent++;
             }
 
+            if (timing != null) timing.sent = sent;
+            phase = System.nanoTime();
             List<ChunkPos> watchedChunks = buildWatchedChunks(
-                    payload.centerChunkX(),
-                    payload.centerChunkZ(),
-                    payload.radius()
+                    request.centerChunkX(),
+                    request.centerChunkZ(),
+                    request.radius()
             );
 
+            var oldWatch = SkyesightServerViewTracker.getWatch(player, request.viewId());
             SkyesightServerViewTracker.updateWatch(
                     player,
-                    payload.viewId(),
-                    payload.dimension(),
-                    payload.centerChunkX(),
-                    payload.centerChunkZ(),
-                    payload.radius(),
+                    request.viewId(),
+                    request.viewGeneration(),
+                    request.dimension(),
+                    request.centerChunkX(),
+                    request.centerChunkZ(),
+                    request.radius(),
                     watchedChunks
             );
             SkyesightServerViewTracker.ViewWatch watch =
-                    SkyesightServerViewTracker.getWatch(player, payload.viewId());
+                    SkyesightServerViewTracker.getWatch(player, request.viewId());
 
+            if (com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics.due("server-accepted-"+player.getUUID(),request.viewId(),request.viewGeneration()))
+                com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics.log("server-accepted",request.viewId(),request.viewGeneration(),"player="+player.getUUID()+" requestCenter="+request.centerChunkX()+","+request.centerChunkZ()+" serverWatchCenter="+(watch==null?"none":watch.centerChunkX()+","+watch.centerChunkZ())+" sent="+sent);
+            SkyesightRemoteCenterDiagnostics.trace("SERVER_WATCH_UPDATE",request.viewId(),request.viewGeneration(),request.requestSequence(),
+                    "player="+player.getUUID()+" oldCenter="+(oldWatch==null?"none":oldWatch.centerChunkX()+","+oldWatch.centerChunkZ())
+                    +" newCenter="+(watch==null?"none":watch.centerChunkX()+","+watch.centerChunkZ())+" watchChunks="+watchedChunks.size()
+                    +" sent="+sent+" registeredAfter="+SkyesightServerRemoteViewRegistry.get(player,request.viewId()));
             if (watch != null) {
+                SkyesightServerEnvironmentSender.send(player, watch, level);
                 SkyesightServerEntitySnapshotSender.sendSnapshot(player, watch, level);
             }
             if (SkyesightDebugConfig.WATCH_DEBUG
@@ -144,12 +179,12 @@ public final class SkyesightServerChunkSender {
                     && !player.serverLevel().dimension().equals(level.dimension())) {
                 Skyesight.LOGGER.info(
                         "[Skyesight] SKYESIGHT_CROSS_DIM_WATCH_REGION: viewId={} displayDimension={} cameraDimension={} centerChunk={},{} radius={} chunksSent={}",
-                        payload.viewId(),
+                        request.viewId(),
                         player.serverLevel().dimension().location(),
                         level.dimension().location(),
-                        payload.centerChunkX(),
-                        payload.centerChunkZ(),
-                        payload.radius(),
+                        request.centerChunkX(),
+                        request.centerChunkZ(),
+                        request.radius(),
                         sent
                 );
             }
@@ -157,11 +192,13 @@ public final class SkyesightServerChunkSender {
                 Skyesight.LOGGER.info(
                         "[Skyesight] Sent {} chunks for view {} and watching {} chunks around {}, {}",
                         sent,
-                        payload.viewId(),
+                        request.viewId(),
                         watchedChunks.size(),
-                        payload.centerChunkX(),
-                        payload.centerChunkZ()
+                        request.centerChunkX(),
+                        request.centerChunkZ()
                 );
+            }
+            if (timing != null) timing.watchNanos += System.nanoTime() - phase;
             }
         });
     }
@@ -188,7 +225,7 @@ public final class SkyesightServerChunkSender {
             int centerChunkZ,
             int radius
     ) {
-        return Math.abs(pos.x - centerChunkX) <= radius
-                && Math.abs(pos.z - centerChunkZ) <= radius;
+        return Math.abs((long) pos.x - centerChunkX) <= radius
+                && Math.abs((long) pos.z - centerChunkZ) <= radius;
     }
 }

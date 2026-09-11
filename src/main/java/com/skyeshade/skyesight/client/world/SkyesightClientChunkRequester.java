@@ -1,9 +1,8 @@
 package com.skyeshade.skyesight.client.world;
 
 import com.skyeshade.skyesight.network.SkyesightChunkRequestPayload;
-import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistration;
 import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry;
-import it.unimi.dsi.fastutil.objects.ObjectOpenHashSet;
+import com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceKey;
@@ -12,197 +11,87 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.network.PacketDistributor;
-
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public final class SkyesightClientChunkRequester {
-    private static final Map<ResourceLocation, ViewRequestState> STATES = new HashMap<>();
-
+    private static final Map<ResourceLocation, SkyesightChunkDemand> STATES = new HashMap<>();
     private SkyesightClientChunkRequester() {}
 
-    public static void requestChunksFor(
-            ResourceLocation viewId,
-            ResourceKey<Level> dimension,
-            Camera camera,
-            int radius
-    ) {
+    public static void requestChunksFor(ResourceLocation viewId, ResourceKey<Level> dimension, Camera camera, int radius) {
         Minecraft minecraft = Minecraft.getInstance();
-
-        if (minecraft.level == null || minecraft.player == null || minecraft.getConnection() == null) {
-            return;
+        if (minecraft.level == null || minecraft.player == null || minecraft.getConnection() == null) return;
+        var registration = SkyesightRemoteViewRegistry.get(viewId).orElse(null);
+        if (registration == null || !registration.targets(dimension)) return;
+        var world = SkyesightVisualWorldManager.getOrCreate(viewId, dimension);
+        if (world == null) return;
+        var state = stateFor(viewId,registration.generation(),dimension);
+        ChunkPos center = new ChunkPos(Mth.floor(camera.getPosition().x()) >> 4, Mth.floor(camera.getPosition().z()) >> 4);
+        ChunkPos previous = state.center;
+        world.chunkReceiver().setViewCenter(center.x,center.z,radius+3);
+        world.chunkReceiver().pruneOutside(center.x,center.z,radius+3);
+        var missing = state.update(center,radius,System.nanoTime(),world.chunkReceiver()::hasChunk);
+        long sequence = missing == null ? 0L : SkyesightRemoteCenterDiagnostics.nextSequence();
+        if (SkyesightRemoteCenterDiagnostics.enabled() && (missing != null
+                || SkyesightRemoteCenterDiagnostics.due("client",viewId,registration.generation()))) {
+            SkyesightRemoteCenterDiagnostics.trace("CLIENT_CAMERA_CENTER",viewId,registration.generation(),sequence,
+                    "cameraChunk="+center+" desiredCenter="+state.center+" previousCenter="+previous
+                    +" missingCount="+(missing==null?0:missing.size())+" pendingCount="+state.pending.size());
+            SkyesightRemoteCenterDiagnostics.trace("VISUAL_CENTER",viewId,registration.generation(),sequence,
+                    "receiverCenter="+world.chunkReceiver().viewCenter());
         }
-
-        SkyesightRemoteViewRegistration registration =
-                SkyesightRemoteViewRegistry.get(viewId).orElse(null);
-        if (registration == null || !registration.targets(dimension)) {
-            reset(viewId);
-            return;
-        }
-
-        SkyesightVisualWorld world =
-                SkyesightVisualWorldManager.getOrCreate(viewId, dimension);
-
-        if (world == null) {
-            return;
-        }
-
-        ViewRequestState state = STATES.computeIfAbsent(viewId, ignored -> new ViewRequestState());
-
-        int centerChunkX = Mth.floor(camera.getPosition().x()) >> 4;
-        int centerChunkZ = Mth.floor(camera.getPosition().z()) >> 4;
-
-        int cacheRadius = radius + 3;
-
-        world.chunkReceiver().setViewCenter(centerChunkX, centerChunkZ, cacheRadius);
-        world.chunkReceiver().pruneOutside(centerChunkX, centerChunkZ, cacheRadius);
-        prunePendingOutside(state, dimension, centerChunkX, centerChunkZ, cacheRadius);
-
-        List<ChunkPos> missing = collectMissingChunks(
-                state,
-                world,
-                dimension,
-                centerChunkX,
-                centerChunkZ,
-                radius
-        );
-
-        ChunkPos center = new ChunkPos(centerChunkX, centerChunkZ);
-
-        boolean centerChanged = state.lastRequestedCenter == null
-                || !state.lastRequestedCenter.equals(center)
-                || state.lastRequestedDimension == null
-                || !state.lastRequestedDimension.equals(dimension);
-
-        if (missing.isEmpty() && !centerChanged) {
-            return;
-        }
-
-        state.lastRequestedCenter = center;
-        state.lastRequestedDimension = dimension;
-
-        missing.sort((a, b) -> {
-            int da = Math.abs(a.x - centerChunkX) + Math.abs(a.z - centerChunkZ);
-            int db = Math.abs(b.x - centerChunkX) + Math.abs(b.z - centerChunkZ);
-            return Integer.compare(da, db);
-        });
-
-        for (ChunkPos pos : missing) {
-            state.pendingChunks.add(packPending(dimension, pos.x, pos.z));
-        }
-
-        PacketDistributor.sendToServer(
-                new SkyesightChunkRequestPayload(
-                        viewId,
-                        registration.generation(),
-                        dimension,
-                        centerChunkX,
-                        centerChunkZ,
-                        radius,
-                        missing
-                )
-        );
+        if (missing == null) return;
+        PacketDistributor.sendToServer(new SkyesightChunkRequestPayload(viewId,registration.generation(),sequence,dimension,
+                center.x,center.z,radius,missing));
+        SkyesightRemoteCenterDiagnostics.trace("CLIENT_REQUEST_SENT",viewId,registration.generation(),sequence,
+                "payloadCenter="+center+" requestedCount="+missing.size());
     }
 
-    public static void markChunkReceived(
-            ResourceLocation viewId,
-            ResourceKey<Level> dimension,
-            int chunkX,
-            int chunkZ
-    ) {
-        ViewRequestState state = STATES.get(viewId);
+    static SkyesightChunkDemand stateFor(ResourceLocation id,long generation,ResourceKey<Level> dimension) {
+        var state = STATES.get(id);
+        if (state == null || !state.matches(generation,dimension)) {
+            state = new SkyesightChunkDemand(generation,dimension);
+            STATES.put(id,state);
+        }
+        return state;
+    }
 
+    /** Apply response data inside the current camera region, never recenter on an old response. */
+    public static boolean prepareResponse(ResourceLocation id,long generation,ResourceKey<Level> dimension,
+            SkyesightRemoteChunkReceiver receiver,int packetCenterX,int packetCenterZ,int packetRadius,int chunkX,int chunkZ) {
+        var state = STATES.get(id);
         if (state == null) {
-            return;
+            // Portal-only callers publish their center in the packet and have no camera requester.
+            receiver.setViewCenter(packetCenterX,packetCenterZ,packetRadius+3);
+            receiver.pruneOutside(packetCenterX,packetCenterZ,packetRadius+3);
+            return true;
         }
-
-        state.pendingChunks.remove(packPending(dimension, chunkX, chunkZ));
-    }
-
-    public static void reset(ResourceLocation viewId) {
-        STATES.remove(viewId);
-    }
-
-    public static void reset() {
-        STATES.clear();
-    }
-
-    private static void prunePendingOutside(
-            ViewRequestState state,
-            ResourceKey<Level> dimension,
-            int centerChunkX,
-            int centerChunkZ,
-            int radius
-    ) {
-        ObjectOpenHashSet<PendingChunkKey> toRemove = new ObjectOpenHashSet<>();
-
-        for (PendingChunkKey key : state.pendingChunks) {
-            if (!key.dimension().equals(dimension)) {
-                continue;
-            }
-
-            if (Math.abs(key.chunkX() - centerChunkX) > radius || Math.abs(key.chunkZ() - centerChunkZ) > radius) {
-                toRemove.add(key);
-            }
+        if (!state.matches(generation,dimension)) return false;
+        state.acknowledge(generation,dimension,chunkX,chunkZ);
+        receiver.setViewCenter(state.center.x,state.center.z,state.radius+3);
+        receiver.pruneOutside(state.center.x,state.center.z,state.radius+3);
+        if (SkyesightRemoteCenterDiagnostics.due("response",id,generation)) {
+            SkyesightRemoteCenterDiagnostics.log("response",id,generation,
+                    "payloadCenter="+new ChunkPos(packetCenterX,packetCenterZ)+" receiverCenter="+receiver.viewCenter()
+                    +" chunk="+new ChunkPos(chunkX,chunkZ));
         }
-
-        for (PendingChunkKey key : toRemove) {
-            state.pendingChunks.remove(key);
-        }
+        return state.contains(new ChunkPos(chunkX,chunkZ),state.radius+3);
     }
 
-    private static List<ChunkPos> collectMissingChunks(
-            ViewRequestState state,
-            SkyesightVisualWorld world,
-            ResourceKey<Level> dimension,
-            int centerChunkX,
-            int centerChunkZ,
-            int radius
-    ) {
-        List<ChunkPos> missing = new ArrayList<>();
-
-        for (int dz = -radius; dz <= radius; dz++) {
-            for (int dx = -radius; dx <= radius; dx++) {
-                int chunkX = centerChunkX + dx;
-                int chunkZ = centerChunkZ + dz;
-
-                PendingChunkKey key = packPending(dimension, chunkX, chunkZ);
-
-                if (world.chunkReceiver().hasChunk(chunkX, chunkZ)) {
-                    state.pendingChunks.remove(key);
-                    continue;
-                }
-
-                if (state.pendingChunks.contains(key)) {
-                    continue;
-                }
-
-                missing.add(new ChunkPos(chunkX, chunkZ));
-            }
-        }
-
-        return missing;
+    public static void markChunkReceived(ResourceLocation id, long generation, ResourceKey<Level> dimension, int x,int z) {
+        var state = STATES.get(id);
+        if (state != null) state.acknowledge(generation,dimension,x,z);
     }
-
-    private static PendingChunkKey packPending(
-            ResourceKey<Level> dimension,
-            int chunkX,
-            int chunkZ
-    ) {
-        return new PendingChunkKey(dimension, chunkX, chunkZ);
+    public static void reset(ResourceLocation id,long generation) {
+        var state = STATES.get(id);
+        if (state != null && state.generation==generation) STATES.remove(id);
     }
-
-    private static final class ViewRequestState {
-        private ChunkPos lastRequestedCenter;
-        private ResourceKey<Level> lastRequestedDimension;
-        private final ObjectOpenHashSet<PendingChunkKey> pendingChunks = new ObjectOpenHashSet<>();
+    public static void reset(ResourceLocation id) { STATES.remove(id); }
+    public static void reset() { STATES.clear(); }
+    public static ViewRequestDiagnostics diagnostics(ResourceLocation id) {
+        var state = STATES.get(id);
+        return state==null ? new ViewRequestDiagnostics(null,0,0)
+                : new ViewRequestDiagnostics(state.center,state.lastRequestedCount,state.pending.size());
     }
-
-    private record PendingChunkKey(
-            ResourceKey<Level> dimension,
-            int chunkX,
-            int chunkZ
-    ) {}
+    public record ViewRequestDiagnostics(ChunkPos center,int lastRequestedChunks,int pendingChunks) {}
 }

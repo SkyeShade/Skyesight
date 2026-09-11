@@ -1,6 +1,7 @@
 package com.skyeshade.skyesight.network;
 
 import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics;
 import com.skyeshade.skyesight.SkyesightDebugConfig;
 import com.skyeshade.skyesight.client.chunk.SkyesightPortalChunkStorage;
 import com.skyeshade.skyesight.client.world.SkyesightClientChunkRequester;
@@ -50,6 +51,9 @@ public final class SkyesightClientChunkHandler {
     public static void handleChunkDataOnClient(SkyesightChunkDataPayload payload) {
         Minecraft minecraft = Minecraft.getInstance();
         SkyesightRemoteViewRegistration registration = currentViewForPayload(payload);
+        boolean traceResponse = SkyesightRemoteCenterDiagnostics.firstResponse(payload.viewId(),payload.viewGeneration(),payload.requestSequence());
+        if (traceResponse) SkyesightRemoteCenterDiagnostics.trace("CLIENT_CHUNK_RESPONSE",payload.viewId(),payload.viewGeneration(),payload.requestSequence(),
+                "responseCenter="+payload.centerChunkX()+","+payload.centerChunkZ()+" chunks=1 sample=first_packet accepted="+(registration!=null));
         if (registration == null) {
             return;
         }
@@ -93,12 +97,15 @@ public final class SkyesightClientChunkHandler {
             if (visualWorldRoute.inserted()) {
                 SkyesightClientChunkRequester.markChunkReceived(
                         payload.viewId(),
+                        payload.viewGeneration(),
                         payload.dimension(),
                         payload.chunkX(),
                         payload.chunkZ()
                 );
             }
             SkyesightVisualWorld visualWorld = SkyesightVisualWorldManager.get(payload.viewId());
+            if (traceResponse) SkyesightRemoteCenterDiagnostics.trace("VISUAL_CENTER",payload.viewId(),payload.viewGeneration(),payload.requestSequence(),
+                    "receiverCenter="+(visualWorld==null?"none":visualWorld.chunkReceiver().viewCenter())+" inserted="+visualWorldRoute.inserted());
             if (SkyesightDebugConfig.WATCH_DEBUG && visualWorld != null && !visualWorld.isClosed()) {
                 LevelChunk chunk = visualWorld.level().getChunkSource().getChunk(
                         payload.chunkX(),
@@ -151,17 +158,10 @@ public final class SkyesightClientChunkHandler {
             return;
         }
 
-        world.chunkReceiver().setViewCenter(
-                payload.centerChunkX(),
-                payload.centerChunkZ(),
-                payload.radius() + 3
-        );
-
-        world.chunkReceiver().pruneOutside(
-                payload.centerChunkX(),
-                payload.centerChunkZ(),
-                payload.radius() + 3
-        );
+        if (!SkyesightClientChunkRequester.prepareResponse(payload.viewId(),payload.viewGeneration(),payload.dimension(),
+                world.chunkReceiver(),payload.centerChunkX(),payload.centerChunkZ(),payload.radius(),payload.chunkX(),payload.chunkZ())) {
+            return;
+        }
 
         boolean inserted = world.chunkReceiver().receiveChunkWithLight(
                 payload.chunkX(),
@@ -174,6 +174,7 @@ public final class SkyesightClientChunkHandler {
         if (inserted) {
             SkyesightClientChunkRequester.markChunkReceived(
                     payload.viewId(),
+                    payload.viewGeneration(),
                     payload.dimension(),
                     payload.chunkX(),
                     payload.chunkZ()
@@ -205,18 +206,14 @@ public final class SkyesightClientChunkHandler {
                 SkyesightRemoteViewRegistry.get(payload.viewId()).orElse(null);
         if (current == null) {
             warnDroppedStalePayload(payload, -1L, null, "missing-current-view");
-            SkyesightClientChunkRequester.reset(payload.viewId());
             return null;
         }
         if (current.generation() != payload.viewGeneration()) {
             warnDroppedStalePayload(payload, current.generation(), current.targetDimension(), "packet_generation_mismatch");
-            SkyesightClientChunkRequester.reset(payload.viewId());
             return null;
         }
         if (!current.targetDimension().equals(payload.dimension())) {
             warnDroppedStalePayload(payload, current.generation(), current.targetDimension(), "target_dimension_mismatch");
-            SkyesightClientChunkRequester.reset(payload.viewId());
-            SkyesightVisualWorldManager.close(payload.viewId());
             return null;
         }
         SkyesightVisualWorld world = SkyesightVisualWorldManager.get(payload.viewId());
@@ -307,17 +304,10 @@ public final class SkyesightClientChunkHandler {
             return VisualWorldRouteResult.skipped("visual world unavailable");
         }
 
-        world.chunkReceiver().setViewCenter(
-                payload.centerChunkX(),
-                payload.centerChunkZ(),
-                payload.radius() + 3
-        );
-
-        world.chunkReceiver().pruneOutside(
-                payload.centerChunkX(),
-                payload.centerChunkZ(),
-                payload.radius() + 3
-        );
+        if (!SkyesightClientChunkRequester.prepareResponse(payload.viewId(),payload.viewGeneration(),payload.dimension(),
+                world.chunkReceiver(),payload.centerChunkX(),payload.centerChunkZ(),payload.radius(),payload.chunkX(),payload.chunkZ())) {
+            return VisualWorldRouteResult.skipped("outside current camera demand or stale generation");
+        }
 
         boolean inserted = world.chunkReceiver().receiveChunkWithLight(
                 payload.chunkX(),

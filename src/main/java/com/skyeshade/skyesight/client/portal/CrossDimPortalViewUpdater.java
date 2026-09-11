@@ -5,6 +5,8 @@ import com.skyeshade.skyesight.api.RegisteredPortalView;
 import com.skyeshade.skyesight.api.PortalEndpoint;
 import com.skyeshade.skyesight.server.SkyesightSecondaryWatchRegion;
 import com.skyeshade.skyesight.server.SkyesightServerViewTracker;
+import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistration;
+import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
@@ -149,6 +151,11 @@ public final class CrossDimPortalViewUpdater {
         }
 
         UUID playerId = minecraft.player.getUUID();
+        SkyesightRemoteViewRegistration registration =
+                SkyesightRemoteViewRegistry.get(regionId).orElse(null);
+        if (registration == null || !registration.targets(dimension)) {
+            return;
+        }
         BlockPos centerBlock = BlockPos.containing(center);
         ChunkPos centerChunk = new ChunkPos(centerBlock);
         List<ChunkPos> watchedChunks = buildSquareChunkList(centerChunk, radiusChunks);
@@ -169,6 +176,7 @@ public final class CrossDimPortalViewUpdater {
             SkyesightServerViewTracker.updateWatch(
                     player,
                     regionId,
+                    registration.generation(),
                     dimension,
                     centerChunk.x,
                     centerChunk.z,

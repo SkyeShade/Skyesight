@@ -11,6 +11,11 @@ public final class SkyesightClientBlockUpdateHandler {
     private SkyesightClientBlockUpdateHandler() {}
 
     public static void handle(SkyesightBlockUpdatesPayload payload) {
+        if (!com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry.accepts(
+                payload.viewId(), payload.generation(), payload.dimension())) {
+            return;
+        }
+
         SkyesightVisualWorld world =
                 SkyesightVisualWorldManager.getIfCurrent(payload.viewId(), payload.dimension());
 

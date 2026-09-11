@@ -179,7 +179,7 @@ final class PortalSecondarySodiumTerrainRenderer {
             return false;
         }
         long sodiumAcquireStart = PortalRenderCostAudit.start();
-        SodiumWorldRenderer renderer = frame.diagnostics().renderToCurrentTarget()
+        SodiumWorldRenderer renderer = frame.diagnostics().renderToCurrentTarget() || frame.diagnostics().cameraView()
                 ? getOrCreateSodiumRenderer(minecraft, minecraft.level, context, viewId)
                 : getSodiumRendererForSecondaryDebug(minecraft, minecraft.level, context, viewId);
         PortalRenderCostAudit.record(viewId, "sodiumAcquire", sodiumAcquireStart);
@@ -202,7 +202,7 @@ final class PortalSecondarySodiumTerrainRenderer {
 
         int clampedReuseRadius = Math.clamp(
                 effectiveReuseRadius,
-                PortalSodiumRenderConfig.DEFAULT_SAME_DIM_MAIN_SECTION_PRIMER_RADIUS_CHUNKS,
+                Math.min(targetReuseRadius, PortalSodiumRenderConfig.DEFAULT_SAME_DIM_MAIN_SECTION_PRIMER_RADIUS_CHUNKS),
                 targetReuseRadius
         );
         SameDimPortalTerrainPrimer.primeFromMainCompiledSections(
@@ -258,17 +258,26 @@ final class PortalSecondarySodiumTerrainRenderer {
                     );
             SecondaryViewContext.TerrainSetupReuseDecision setupReuseDecision =
                     context.terrainSetupReuseDecision(setupReuseKey);
-            boolean setupTerrainReused = context.setupTerrainCalled() && setupReuseDecision.reuse();
+            // Camera poses commonly stay fixed. setupTerrain also uploads asynchronous
+            // mesh builds after a distance reload; pose equality cannot skip that work.
+            boolean setupTerrainReused = !frame.diagnostics().cameraView()
+                    && context.setupTerrainCalled() && setupReuseDecision.reuse();
             long setupTerrainStart = 0L;
             long setupTerrainDurationMs = 0L;
             if (!setupTerrainReused) {
                 setupTerrainStart = PortalRenderCostAudit.start();
-                renderer.setupTerrain(
-                        camera,
-                        viewport,
-                        minecraft.player.isSpectator(),
-                        false
-                );
+                // Only the dedicated renderer may observe the secondary distance.
+                // Sodium reloads its section manager when this effective distance changes.
+                try (var distance = usingMainSodiumRenderer || !frame.diagnostics().cameraView()
+                        ? null : new SkyesightViewDistanceScope(
+                        PortalSecondaryWorldRenderer.configuredSameDimRenderChunkRadius(frame))) {
+                    renderer.setupTerrain(
+                            camera,
+                            viewport,
+                            minecraft.player.isSpectator(),
+                            false
+                    );
+                }
                 context.markSetupTerrainCalled();
                 context.recordTerrainSetupReuseKey(setupReuseKey);
                 setupTerrainDurationMs = (System.nanoTime() - setupTerrainStart) / 1_000_000L;

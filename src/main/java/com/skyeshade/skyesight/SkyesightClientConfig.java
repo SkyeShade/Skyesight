@@ -7,6 +7,10 @@ public final class SkyesightClientConfig {
 
     private static final ModConfigSpec.Builder BUILDER = new ModConfigSpec.Builder();
 
+    public static final ModConfigSpec.BooleanValue REGISTER_STARTUP_DEBUG_PORTALS = BUILDER
+            .comment("Registers Skyesight's built-in startup portals for development/demo testing. Disabled by default for library use.")
+            .define("registerStartupDebugPortals", false);
+
     public static final ModConfigSpec.BooleanValue ENABLE_BOUNDS_SCALED_PORTAL_RESOLUTION = BUILDER
             .comment("When true, Skyesight may use screen-space portal bounds for render target sizing. Currently experimental and may be internally disabled for stability.")
             .define("enableBoundsScaledPortalResolution", false);
@@ -27,6 +31,10 @@ public final class SkyesightClientConfig {
 
     private SkyesightClientConfig() {}
 
+    public static boolean registerStartupDebugPortals() {
+        return REGISTER_STARTUP_DEBUG_PORTALS.get();
+    }
+
     public static boolean enableBoundsScaledPortalResolution() {
         return ENABLE_BOUNDS_SCALED_PORTAL_RESOLUTION.get();
     }
@@ -44,7 +52,8 @@ public final class SkyesightClientConfig {
     }
 
     public static String status() {
-        return "enableBoundsScaledPortalResolution=" + enableBoundsScaledPortalResolution()
+        return "registerStartupDebugPortals=" + registerStartupDebugPortals()
+                + " enableBoundsScaledPortalResolution=" + enableBoundsScaledPortalResolution()
                 + " enablePortalFrustumCulling=" + enablePortalFrustumCulling()
                 + " enablePortalEntityFrustumCulling=" + enablePortalEntityFrustumCulling()
                 + " portalRenderDistanceBlocks=" + portalRenderDistanceBlocks();

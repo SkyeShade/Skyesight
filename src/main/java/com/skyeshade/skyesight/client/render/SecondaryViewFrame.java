@@ -74,6 +74,7 @@ public final class SecondaryViewFrame {
     }
 
     public static final class Diagnostics {
+        private boolean cameraView;
         private String backend = "n/a";
         private boolean publishEntityWatchRegion = true;
         private boolean runEntityPass;
@@ -103,6 +104,14 @@ public final class SecondaryViewFrame {
         private boolean renderParticles = true;
         private boolean renderBackface;
         private String viewPhysicalSide = "unknown";
+
+        public boolean cameraView() {
+            return this.cameraView;
+        }
+
+        public void setCameraView(boolean cameraView) {
+            this.cameraView = cameraView;
+        }
 
         public String backend() {
             return this.backend;
