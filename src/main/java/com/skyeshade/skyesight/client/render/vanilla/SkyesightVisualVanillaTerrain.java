@@ -22,6 +22,9 @@ import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
 
 public final class SkyesightVisualVanillaTerrain implements SkyesightVisualTerrainBackend {
+    @Override public java.util.Set<BlockPos> visibleTerrainSections() {
+        return com.skyeshade.skyesight.client.render.SecondaryTerrainCoverage.visibleVanilla(levelRenderer);
+    }
     private static final int SECONDARY_RENDER_BUFFER_PACKS = 1;
     private static boolean failureLogged;
     private static long lastBootstrapSummaryMillis;

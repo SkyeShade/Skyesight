@@ -66,7 +66,8 @@ public final class SecondarySceneEnvironmentRenderer {
             RenderSystem.colorMask(true, true, true, true);
             RenderSystem.depthMask(true);
             // Match the established secondary sky horizon policy without changing terrain's eye.
-            ((CameraInvoker) camera).skyesight$setPosition(skyPosition(level, position));
+            if (!PlayerPerspectiveViews.contains(scene.viewId()))
+                ((CameraInvoker) camera).skyesight$setPosition(skyPosition(level, position));
             prepareBackground(minecraft, level, camera, scene.partialTick(), scene.options().terrainRadius());
             RenderSystem.clear(org.lwjgl.opengl.GL11.GL_COLOR_BUFFER_BIT | org.lwjgl.opengl.GL11.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
             renderSky(minecraft, level, camera, frame.modelViewMatrix(), frame.projectionMatrix(), scene.partialTick(),

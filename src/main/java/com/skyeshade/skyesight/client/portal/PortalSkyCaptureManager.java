@@ -257,7 +257,8 @@ public final class PortalSkyCaptureManager {
             boolean originalBelowHorizon = originalCameraY - horizon < 0.0D;
             boolean cameraYAdjusted = false;
             double effectiveCameraY = originalCameraY;
-            if (FORCE_SKY_CAMERA_ABOVE_HORIZON && originalBelowHorizon) {
+            if (FORCE_SKY_CAMERA_ABOVE_HORIZON && originalBelowHorizon
+                    && !com.skyeshade.skyesight.client.render.PlayerPerspectiveViews.contains(diagnosticViewId)) {
                 effectiveCameraY = com.skyeshade.skyesight.client.render.SecondarySceneEnvironmentRenderer.skyPosition(level, truePortalCameraPosition).y;
                 ((CameraInvoker) camera).skyesight$setPosition(new Vec3(
                         truePortalCameraPosition.x(),

@@ -362,7 +362,7 @@ public final class PortalDirectStencilRenderer {
             PORTAL_VIEW_CONTEXTS.put(view.id(), context);
         }
         context.setViewId(view.id());
-        DebugPortalRenderConfig config = renderConfigFromSettings(view.renderSettings());
+        DebugPortalRenderConfig config = renderConfigFromSettings(view);
         PortalRenderView renderView = new PortalRenderView(
                 portalFrame(view.source()),
                 portalFrame(view.target()),
@@ -411,13 +411,14 @@ public final class PortalDirectStencilRenderer {
         return PortalStickSkyWarmup.shouldSkip(viewId, frame);
     }
 
-    private static DebugPortalRenderConfig renderConfigFromSettings(PortalRenderSettings settings) {
+    private static DebugPortalRenderConfig renderConfigFromSettings(RegisteredPortalView view) {
+        var settings = view.renderSettings();
         return new DebugPortalRenderConfig(
                 settings.enabled(),
                 settings.rendersView(),
                 settings.stencilRef(),
-                settings.terrainChunkRadius(),
-                settings.portalOwnedRenderRadiusChunks(),
+                com.skyeshade.skyesight.client.render.PlayerPerspectiveViews.radius(view.id(), settings.terrainChunkRadius()),
+                com.skyeshade.skyesight.client.render.PlayerPerspectiveViews.radius(view.id(), settings.portalOwnedRenderRadiusChunks()),
                 settings.sameDimPlayerLoadedReuseRadiusChunks(),
                 settings.reusePlayerLoadedChunksForSameDim(),
                 settings.entityChunkRadius(),

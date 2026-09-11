@@ -151,6 +151,9 @@ public final class SkyesightVisualWorld implements AutoCloseable {
         }
         return this.terrainBackend.visibleChunkCount();
     }
+    public java.util.Set<BlockPos> visibleTerrainSections() {
+        return terrainBackend == null ? java.util.Set.of() : terrainBackend.visibleTerrainSections();
+    }
     public String terrainBackendName() {
         return this.terrainBackend == null
                 ? "none"
@@ -173,6 +176,7 @@ public final class SkyesightVisualWorld implements AutoCloseable {
 
     @Override
     public void close() {
+        if (com.skyeshade.skyesight.client.transition.SecondaryTransition.deferClose(this, this::close)) return;
         if (this.closed) {
             return;
         }

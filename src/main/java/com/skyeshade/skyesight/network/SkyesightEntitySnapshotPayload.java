@@ -49,6 +49,7 @@ public record SkyesightEntitySnapshotPayload(
 
         for (int i = 0; i < count; i++) {
             UUID uuid = buffer.readUUID();
+            int entityId = buffer.readVarInt();
             EntityType<?> type = ENTITY_TYPE_CODEC.decode(buffer);
             String profileName = buffer.readUtf();
 
@@ -96,6 +97,7 @@ public record SkyesightEntitySnapshotPayload(
             List<EquipmentEntry> equipment = readEquipment(buffer);
             entities.add(new Entry(
                     uuid,
+                    entityId,
                     type,
                     profileName,
                     position,
@@ -149,6 +151,7 @@ public record SkyesightEntitySnapshotPayload(
                     : entity.swingingArm();
 
             buffer.writeUUID(entity.uuid());
+            buffer.writeVarInt(entity.entityId());
             ENTITY_TYPE_CODEC.encode(buffer, entity.type());
             buffer.writeUtf(profileName);
 
@@ -258,6 +261,7 @@ public record SkyesightEntitySnapshotPayload(
     }
     public record Entry(
             UUID uuid,
+            int entityId,
             EntityType<?> type,
             String profileName,
             Vec3 position,

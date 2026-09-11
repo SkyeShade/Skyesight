@@ -17,7 +17,8 @@ import java.util.List;
 public final class SecondarySceneRenderer {
     private SecondarySceneRenderer() {}
 
-    public static void renderContents(SecondarySceneFrame scene) {
+    public static boolean renderContents(SecondarySceneFrame scene) {
+        boolean terrainRendered = true;
         var minecraft = Minecraft.getInstance();
         var frame = scene.view();
         var options = scene.options();
@@ -28,7 +29,10 @@ public final class SecondarySceneRenderer {
         var fogShape = RenderSystem.getShaderFogShape();
         float[] fogColor = RenderSystem.getShaderFogColor().clone();
         try (var ignored = SkyesightSecondaryRenderContext.push(scene.output(), frame.camera(), minecraft.getMainRenderTarget())) {
-            SkyesightFogRenderer.setupForTerrain(scene.level(), frame.camera(), partialTick, options.terrainRadius());
+            if (PlayerPerspectiveViews.contains(scene.viewId())) {
+                SkyesightFogRenderer.setupForPlayerTerrain(scene.level(), frame.camera(), partialTick,
+                        PlayerPerspectiveViews.radius(scene.viewId(), options.terrainRadius()));
+            } else SkyesightFogRenderer.setupForTerrain(scene.level(), frame.camera(), partialTick, options.terrainRadius());
             SkyesightLightTextureUpdater.updateFor(scene.level(), frame.camera(), partialTick);
             minecraft.gameRenderer.lightTexture().turnOnLightLayer();
             for (var pass : options.contentPasses()) {
@@ -39,7 +43,7 @@ public final class SecondarySceneRenderer {
                             scene.visualWorld().renderTerrain(frame.camera(), frame.frustum(), frame.modelViewMatrix(),
                                     frame.projectionMatrix(), options.terrainRadius(), options.translucent());
                         } else {
-                            SecondarySodiumTerrainPass.render(frame, scene.context(), minecraft, partialTick);
+                            terrainRendered = SecondarySodiumTerrainPass.render(frame, scene.context(), minecraft, partialTick);
                         }
                     }
                     // Preserve the established direct secondary order: terrain (including translucent),
@@ -83,6 +87,8 @@ public final class SecondarySceneRenderer {
             RenderSystem.setShaderFogShape(fogShape);
             RenderSystem.setShaderFogColor(fogColor[0], fogColor[1], fogColor[2], fogColor[3]);
         }
+        if (terrainRendered) com.skyeshade.skyesight.client.transition.SecondaryTransition.capture(scene);
+        return terrainRendered;
     }
 
     private static void prepare(SecondarySceneFrame scene) {
@@ -110,6 +116,8 @@ public final class SecondarySceneRenderer {
             entities = PortalDimensionEntitySources.renderableVisualEntitiesForDimension(scene.viewId(), scene.visualWorld(),
                     scene.level().dimension(), bounds, frame.frustum());
         }
+        if (com.skyeshade.skyesight.client.transition.SecondaryTransition.renderingPrimaryPresentation() && Minecraft.getInstance().player != null)
+            entities = entities.stream().filter(entry -> !entry.entity().getUUID().equals(Minecraft.getInstance().player.getUUID())).toList();
         SecondaryEntityPass.renderSceneEntities(frame, Minecraft.getInstance(), scene.level(), entities,
                 scene.options().entityRadius(), scene.partialTick(), false, false, false, scene.output().frameBufferId);
     }

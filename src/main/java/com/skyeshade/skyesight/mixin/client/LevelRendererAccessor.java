@@ -10,6 +10,8 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 
 @Mixin(LevelRenderer.class)
 public interface LevelRendererAccessor {
+    @Accessor("visibleSections")
+    it.unimi.dsi.fastutil.objects.ObjectArrayList<net.minecraft.client.renderer.chunk.SectionRenderDispatcher.RenderSection> skyesight$getVisibleSections();
     @Accessor("level")
     ClientLevel skyesight$getLevel();
 

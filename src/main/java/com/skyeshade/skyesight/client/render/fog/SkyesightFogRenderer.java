@@ -9,6 +9,15 @@ import net.minecraft.client.renderer.FogRenderer;
 public final class SkyesightFogRenderer {
     private SkyesightFogRenderer() {}
 
+    public static void setupForPlayerTerrain(ClientLevel level, Camera camera, float partialTick, int radius) {
+        var mc = net.minecraft.client.Minecraft.getInstance();
+        FogRenderer.setupColor(camera, partialTick, level, radius, mc.gameRenderer.getDarkenWorldAmount(partialTick));
+        FogRenderer.levelFogColor();
+        boolean foggy = level.effects().isFoggyAt(net.minecraft.util.Mth.floor(camera.getPosition().x),
+                net.minecraft.util.Mth.floor(camera.getPosition().y)) || mc.gui.getBossOverlay().shouldCreateWorldFog();
+        FogRenderer.setupFog(camera, FogRenderer.FogMode.FOG_TERRAIN, radius * 16F, foggy, partialTick);
+    }
+
     public static void setupForTerrain(
             ClientLevel level,
             Camera camera,

@@ -54,6 +54,7 @@ public final class SkyesightServerEntitySnapshotSender {
         );
 
         List<SkyesightEntitySnapshotPayload.Entry> entries = new ArrayList<>();
+        var included = new java.util.HashSet<java.util.UUID>();
         List<Entity> candidates = level.getEntities((Entity) null, area, entity -> true);
 
         for (Entity entity : candidates) {
@@ -66,7 +67,7 @@ public final class SkyesightServerEntitySnapshotSender {
                 continue;
             }
 
-            entries.add(createEntry(entity));
+            if (!entity.isRemoved() && included.add(entity.getUUID())) entries.add(createEntry(entity));
         }
 
         for (ServerPlayer player : level.players()) {
@@ -78,7 +79,7 @@ public final class SkyesightServerEntitySnapshotSender {
                 continue;
             }
 
-            entries.add(createEntry(player));
+            if (!player.isRemoved() && included.add(player.getUUID())) entries.add(createEntry(player));
         }
 
         PacketDistributor.sendToPlayer(
@@ -191,6 +192,7 @@ public final class SkyesightServerEntitySnapshotSender {
                 collectEquipment(entity);
         return new SkyesightEntitySnapshotPayload.Entry(
                 entity.getUUID(),
+                entity.getId(),
                 entity.getType(),
                 profileName,
                 entity.position(),

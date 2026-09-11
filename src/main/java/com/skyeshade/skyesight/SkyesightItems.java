@@ -20,6 +20,8 @@ public final class SkyesightItems {
             () -> new MaskedPortalDebugStickItem(new Item.Properties().stacksTo(1))
     );
 
+    public static final DeferredItem<Item> TRAVERSAL_PORTAL_STICK = ITEMS.register("traversal_portal_stick", () -> new com.skyeshade.skyesight.item.TraversalPortalStickItem(new Item.Properties().stacksTo(1)));
+
     private SkyesightItems() {
     }
 

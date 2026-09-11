@@ -19,7 +19,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -27,23 +26,25 @@ import java.util.Set;
 import java.util.UUID;
 
 public final class SkyesightVisualEntityStore {
-    private static final int PORTAL_ENTITY_STALE_GRACE_TICKS = 60;
-    private static final long STALE_GRACE_MILLIS = PORTAL_ENTITY_STALE_GRACE_TICKS * 50L;
     private static final int PORTAL_ENTITY_STORE_CAP = 128;
     private static final Set<String> WARNED_ENTITY_DATA_MISMATCHES = new HashSet<>();
     private static final Map<String, EntityDataSummary> ENTITY_DATA_SUMMARIES = new HashMap<>();
     private final ClientLevel level;
     private final Map<UUID, SkyesightVisualEntity> entities = new HashMap<>();
     private final Map<UUID, Long> lastSeenMillis = new HashMap<>();
+    private net.minecraft.resources.ResourceLocation viewId;
+    private long generation;
 
     public SkyesightVisualEntityStore(ClientLevel level) {
         this.level = level;
     }
     public SkyesightVisualEntity get(UUID uuid) {
+        retireIfStale();
         return this.entities.get(uuid);
     }
 
     public SkyesightVisualEntity getByEntityId(int entityId) {
+        retireIfStale();
         for (SkyesightVisualEntity visualEntity : this.entities.values()) {
             if (visualEntity != null && visualEntity.entity() != null && visualEntity.entity().getId() == entityId) {
                 return visualEntity;
@@ -52,6 +53,9 @@ public final class SkyesightVisualEntityStore {
         return null;
     }
     public void applySnapshot(SkyesightEntitySnapshotPayload payload) {
+        if (this.viewId != null && (!this.viewId.equals(payload.viewId()) || this.generation != payload.generation())) clear();
+        this.viewId = payload.viewId();
+        this.generation = payload.generation();
         Set<UUID> seen = new HashSet<>();
         long now = System.currentTimeMillis();
 
@@ -61,6 +65,12 @@ public final class SkyesightVisualEntityStore {
                 this.lastSeenMillis.put(entry.uuid(), now);
 
                 SkyesightVisualEntity visualEntity = this.entities.get(entry.uuid());
+                if (visualEntity != null && (visualEntity.entity().getId() != entry.entityId()
+                        || visualEntity.entity().getType() != entry.type())) {
+                    visualEntity.entity().remove(Entity.RemovalReason.DISCARDED);
+                    this.entities.remove(entry.uuid());
+                    visualEntity = null;
+                }
                 if (visualEntity != null
                         && PortalMultipartEntityUtil.shouldSkipStandaloneVisualEntity(visualEntity.entity())) {
                     PortalMultipartEntityUtil.warnSkippedStandalonePart(visualEntity.entity(), "visual_snapshot_store_existing");
@@ -81,6 +91,7 @@ public final class SkyesightVisualEntityStore {
                     }
 
                     ((SkyesightEntityDimensionContext) entity).skyesight$setExplicitDimension(payload.dimension());
+                    entity.setId(entry.entityId());
                     applyEntityData(entity, entry.entityData());
                     applyEquipment(entity, entry.equipment());
 
@@ -98,15 +109,24 @@ public final class SkyesightVisualEntityStore {
             }
         }
 
-        removeStale(now);
+        // A snapshot is the complete bounded render roster, including an empty roster.
+        // Absence is authoritative; interpolation must not keep a departed body alive.
+        this.entities.entrySet().removeIf(entry -> {
+            if (seen.contains(entry.getKey())) return false;
+            entry.getValue().entity().remove(Entity.RemovalReason.DISCARDED);
+            this.lastSeenMillis.remove(entry.getKey());
+            return true;
+        });
         enforceCap();
     }
 
     public Iterable<SkyesightVisualEntity> entities() {
+        retireIfStale();
         return this.entities.values();
     }
 
     public TickStats tickVisualEntities(String viewId, String cameraDimension) {
+        retireIfStale();
         int ticked = 0;
         int skipped = 0;
         String skippedReason = "-";
@@ -136,24 +156,16 @@ public final class SkyesightVisualEntityStore {
     }
 
     public void clear() {
+        this.entities.values().forEach(visual -> visual.entity().remove(Entity.RemovalReason.DISCARDED));
         this.entities.clear();
         this.lastSeenMillis.clear();
+        this.viewId = null;
+        this.generation = 0;
     }
 
-    private int removeStale(long now) {
-        int removed = 0;
-        Iterator<Map.Entry<UUID, SkyesightVisualEntity>> iterator = this.entities.entrySet().iterator();
-        while (iterator.hasNext()) {
-            Map.Entry<UUID, SkyesightVisualEntity> entry = iterator.next();
-            long lastSeen = this.lastSeenMillis.getOrDefault(entry.getKey(), now);
-            if (now - lastSeen <= STALE_GRACE_MILLIS) {
-                continue;
-            }
-            iterator.remove();
-            this.lastSeenMillis.remove(entry.getKey());
-            removed++;
-        }
-        return removed;
+    private void retireIfStale() {
+        if (this.viewId != null && !com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry.accepts(
+                this.viewId, this.generation, this.level.dimension())) clear();
     }
 
     private int enforceCap() {

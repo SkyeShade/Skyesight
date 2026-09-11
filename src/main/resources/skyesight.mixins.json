@@ -4,6 +4,7 @@
   "plugin": "com.skyeshade.skyesight.mixin.SkyesightMixinPlugin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "server.ServerPlayerTraversalTeleportMixin",
     "common.EntityApparentPlayerPositionMixin",
     "common.ClientboundEntityEventPacketAccessor",
     "common.ClientboundRotateHeadPacketAccessor",
@@ -29,6 +30,10 @@
     "server.spawn.ServerChunkCachePortalSimulationMixin"
   ],
   "client": [
+    "client.LocalPlayerTransitionCollisionMixin",
+    "client.MinecraftLiveTransitionScreenMixin",
+    "client.GameRendererTransitionMixin",
+    "client.ClientPacketListenerTransitionMixin",
     "client.CameraInvoker",
     "client.OptionsSecondaryViewDistanceMixin",
     "client.ClientLevelParticleCaptureMixin",

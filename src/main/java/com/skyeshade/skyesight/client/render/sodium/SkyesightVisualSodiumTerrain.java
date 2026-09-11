@@ -10,6 +10,7 @@ import net.minecraft.core.BlockPos;
 import org.joml.Matrix4f;
 
 public final class SkyesightVisualSodiumTerrain implements SkyesightVisualTerrainBackend {
+    @Override public java.util.Set<BlockPos> visibleTerrainSections() { return SodiumTerrainCoverage.visible(renderer.renderer()); }
     private final ChunkTracker chunkTracker;
     private final SkyesightSodiumWorldRenderer renderer;
 

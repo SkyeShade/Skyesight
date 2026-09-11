@@ -26,6 +26,7 @@ public interface SkyesightVisualTerrainBackend extends AutoCloseable {
     );
 
     int visibleChunkCount();
+    java.util.Set<BlockPos> visibleTerrainSections();
 
     @Override
     void close();
