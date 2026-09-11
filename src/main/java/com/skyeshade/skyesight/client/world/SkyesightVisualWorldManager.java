@@ -136,6 +136,7 @@ public final class SkyesightVisualWorldManager {
         if (skyesightLevel == null) {
             return null; // Retry creation on a later frame after authoritative identity arrives.
         }
+        com.skyeshade.skyesight.network.SkyesightClientEnvironmentHandler.initialize(viewId, skyesightLevel);
         SkyesightVisualWorld world = new SkyesightVisualWorld(dimension, skyesightLevel);
         PortalPathProximity.registerVisualLevel(
                 skyesightLevel,
@@ -159,6 +160,7 @@ public final class SkyesightVisualWorldManager {
     }
 
     public static void close(ResourceLocation viewId) {
+        com.skyeshade.skyesight.network.SkyesightClientEnvironmentHandler.remove(viewId);
         SecondaryParticleViews.close(viewId);
         SkyesightVisualWorld world = WORLDS.remove(viewId);
 
@@ -170,6 +172,7 @@ public final class SkyesightVisualWorldManager {
     }
 
     public static void closeAll() {
+        com.skyeshade.skyesight.network.SkyesightClientEnvironmentHandler.clear();
         SecondaryParticleViews.clear();
         SkyesightPortalEntityPool.clearAll();
         for (SkyesightVisualWorld world : WORLDS.values()) {

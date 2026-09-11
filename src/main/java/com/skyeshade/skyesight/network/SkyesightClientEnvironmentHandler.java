@@ -8,7 +8,16 @@ import com.skyeshade.skyesight.client.world.SkyesightVisualWorldManager;
 import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry;
 
 public final class SkyesightClientEnvironmentHandler {
+    private static final SkyesightEnvironmentCache LATEST = new SkyesightEnvironmentCache();
     private SkyesightClientEnvironmentHandler() {}
+
+    public static void initialize(net.minecraft.resources.ResourceLocation id, SkyesightVisualClientLevel level) {
+        var payload = LATEST.get(net.minecraft.client.Minecraft.getInstance().getConnection(), id, level.dimension());
+        if (payload != null)
+            level.applySkyesightEnvironment(payload);
+    }
+    public static void remove(net.minecraft.resources.ResourceLocation id) { LATEST.remove(id); }
+    public static void clear() { LATEST.clear(); }
 
     public static void handle(SkyesightEnvironmentPayload payload) {
         if (payload.viewId() == null
@@ -21,6 +30,8 @@ public final class SkyesightClientEnvironmentHandler {
             return;
         }
 
+        // Environment can precede chunk-driven world creation on the same ordered connection.
+        LATEST.put(net.minecraft.client.Minecraft.getInstance().getConnection(), payload);
         SkyesightVisualWorld world = SkyesightVisualWorldManager.get(payload.viewId());
         if (world == null
                 || world.isClosed()

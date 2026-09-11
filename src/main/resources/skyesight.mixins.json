@@ -4,6 +4,7 @@
   "plugin": "com.skyeshade.skyesight.mixin.SkyesightMixinPlugin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "common.ProjectileTraversalInvoker",
     "server.ServerPlayerTraversalTeleportMixin",
     "common.EntityApparentPlayerPositionMixin",
     "common.ClientboundEntityEventPacketAccessor",

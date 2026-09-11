@@ -350,6 +350,7 @@ public final class SkyesightView implements SkyesightViewHandle {
             if (visualWorld == null || visualWorld.isClosed()) return;
             SkyesightClientChunkRequester.requestChunksFor(this.id, this.dimension, this.camera.minecraftCamera(),
                     com.skyeshade.skyesight.remote.SkyesightRemoteRadiusPolicy.loadRadius(this.renderDistanceChunks, this.remoteLoadRadiusLimit));
+            if (!visualWorld.environmentReady()) return;
             logRemoteDiagnostics(visualWorld);
         }
         var level = visualWorld == null ? minecraft.level : visualWorld.level();

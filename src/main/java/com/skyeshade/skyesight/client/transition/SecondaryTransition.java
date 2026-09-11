@@ -21,6 +21,7 @@ import java.util.function.BooleanSupplier;
 /** Bounded secondary-scene presentation; never promotes a level or transfers chunk ownership. */
 public final class SecondaryTransition implements SkyesightTransition {
     private static SecondaryTransition active;
+    private static SecondaryTransition successor;
     private static boolean capturing;
     private final ResourceLocation viewId;
     private final ResourceKey<Level> source;
@@ -31,6 +32,7 @@ public final class SecondaryTransition implements SkyesightTransition {
     private TextureTarget image;
     private long deadline = Util.getMillis() + 10_000;
     private boolean authoritative, renderedDestination;
+    private boolean awaitingDestinationPosition;
     private long presentationStarted;
     private boolean live;
     private SecondarySceneFrame retainedScene;
@@ -126,9 +128,6 @@ public final class SecondaryTransition implements SkyesightTransition {
         active.suppressedLoadingScreen = screen;
         return true;
     }
-    public static void presentBeforeGui() {
-        if (active != null && active.live && Minecraft.getInstance().screen == null) present();
-    }
     @Override public boolean beginLive() {
         RenderSystem.assertOnRenderThread();
         if (status == Status.PREDICTING) {
@@ -159,11 +158,22 @@ public final class SecondaryTransition implements SkyesightTransition {
     }
     public static SkyesightTransition prepare(ResourceLocation id, BooleanSupplier validView) {
         RenderSystem.assertOnRenderThread();
-        if (active != null) active.close();
+        boolean retainPresentation = canPrepareSuccessor();
+        if (successor != null) successor.close();
+        if (active != null && !retainPresentation) active.close();
         var prepared = new SecondaryTransition(id, validView);
-        active = prepared;
+        if (retainPresentation) successor = prepared;
+        else active = prepared;
         if (prepared.source == null || !validView.getAsBoolean()) prepared.finish(Status.FALLBACK);
         return prepared;
+    }
+    public static boolean canPrepareSuccessor() {
+        return active != null && active.presenting() && active.authoritative && !active.awaitingDestinationPosition;
+    }
+    public static boolean preparingSuccessor() { return successor != null && successor.status == Status.PREPARING; }
+    public static void closeAll() {
+        if (successor != null) successor.close();
+        if (active != null) active.close();
     }
     @Override public Status status() { return status; }
     @Override public Destination destination() { return destination; }
@@ -183,6 +193,11 @@ public final class SecondaryTransition implements SkyesightTransition {
             destination = new Destination(portal.target().dimension(),
                     com.skyeshade.skyesight.portal.PortalTraversalMath.position(portal.source(), portal.target(), mc.player.getEyePosition()),
                     rotation.mul(new org.joml.Quaternionf(camera.rotation())), destination.projection());
+        }
+        if (active != this) {
+            if (active != null) active.finish(Status.COMPLETE);
+            active = this;
+            if (successor == this) successor = null;
         }
         status = Status.PRESENTING;
         if (live && retainedScene != null) {
@@ -208,6 +223,7 @@ public final class SecondaryTransition implements SkyesightTransition {
         status = result;
         if (image != null) { image.destroyBuffers(); image = null; }
         if (active == this) active = null;
+        if (successor == this) successor = null;
         retainedScene = null;
         collisionChunks.clear();
         visibleTerrain = java.util.Set.of();
@@ -232,9 +248,16 @@ public final class SecondaryTransition implements SkyesightTransition {
         return false;
     }
 
+    /** A prepared reverse view can become ready before its aperture enters the frustum. */
+    public static void captureStandby(SecondarySceneFrame scene) {
+        // Bootstrap a newly selected reverse transition without waiting for stencil visibility.
+        // Once a real portal frame is ready, never overwrite its pose with the standby pose.
+        if (successor != null && successor.status == Status.PREPARING
+                || active != null && active.status == Status.PREPARING) capture(scene);
+    }
     /** Called only after the selected shared scene has successfully rendered. */
     public static void capture(SecondarySceneFrame original) {
-        var transition = active;
+        var transition = successor != null && successor.viewId.equals(original.viewId()) ? successor : active;
         if (capturing || transition == null || (transition.status != Status.PREPARING && transition.status != Status.READY)
                 || !transition.viewId.equals(original.viewId()) || transition.expired()) return;
         var mc = Minecraft.getInstance();
@@ -254,7 +277,10 @@ public final class SecondaryTransition implements SkyesightTransition {
         capturing = true;
         try {
             int width = mc.getWindow().getWidth(), height = mc.getWindow().getHeight();
-            if (transition.image == null) transition.image = new TextureTarget(width, height, true, Minecraft.ON_OSX);
+            if (transition.image == null) {
+                transition.image = new TextureTarget(width, height, true, Minecraft.ON_OSX);
+                if (transition.portal != null) transition.image.enableStencil();
+            }
             else if (transition.image.width != width || transition.image.height != height) transition.image.resize(width, height, Minecraft.ON_OSX);
             transition.image.bindWrite(true);
             RenderSystem.disableScissor();
@@ -294,6 +320,8 @@ public final class SecondaryTransition implements SkyesightTransition {
             if (!SecondarySceneRenderer.renderContents(scene)) {
                 transition.finish(Status.FALLBACK); return;
             }
+            if (transition.portal != null && transition.presenting() && transition.authoritative)
+                com.skyeshade.skyesight.client.portal.PortalDirectStencilRenderer.renderPrimaryPresentation(scene);
             SkyesightCameraOutput.makeOpaque(transition.image);
             if (transition.live) transition.visibleTerrain = SecondaryTerrainCoverage.visible(scene);
             transition.destination = new Destination(original.level().dimension(), camera.position(), camera.rotation(), projection);
@@ -313,6 +341,7 @@ public final class SecondaryTransition implements SkyesightTransition {
         trace("incomingDimension");
         if (active != null && active.presenting() && !active.destination.dimension().equals(dimension))
             active.finish(Status.FALLBACK);
+        else if (active != null && active.presenting()) active.awaitingDestinationPosition = true;
     }
     public static void authoritativePosition() {
         var t = active;
@@ -324,6 +353,7 @@ public final class SecondaryTransition implements SkyesightTransition {
             return;
         }
         t.authoritative = true;
+        t.awaitingDestinationPosition = false;
         trace("authoritativePosition");
     }
     public static void afterWorldFrame() {
@@ -416,7 +446,7 @@ public final class SecondaryTransition implements SkyesightTransition {
         t.renderedDestination = true;
         trace("matchingPhysicalFrame");
     }
-    /** Last draw of GameRenderer.render: presents the secondary scene into the main output. */
+    /** Replaces world color before GameRenderer's normal hand and GUI composition. */
     public static void present() {
         if (presentedThisFrame) return;
         var t = active;
@@ -448,7 +478,11 @@ public final class SecondaryTransition implements SkyesightTransition {
             camera.setRotationPublic(mc.player.getViewYRot(partialTick), mc.player.getViewXRot(partialTick), 0);
             var position = camera.getPosition();
             var rotation = new org.joml.Quaternionf(camera.rotation());
-            if (!t.authoritative && t.portal != null) {
+            if (!t.authoritative && t.awaitingDestinationPosition) {
+                // Respawn may be processed a frame before the position packet. The new
+                // LocalPlayer is at its default spawn, not another source movement sample.
+                position = t.destination.eyePosition(); rotation = t.destination.rotation();
+            } else if (!t.authoritative && t.portal != null) {
                 position = com.skyeshade.skyesight.portal.PortalTraversalMath.position(t.portal.source(), t.portal.target(), position);
                 rotation = com.skyeshade.skyesight.portal.PortalTraversalMath.rotation(t.portal.source().rotation(), t.portal.target().rotation()).mul(rotation);
             } else if (!t.authoritative) {

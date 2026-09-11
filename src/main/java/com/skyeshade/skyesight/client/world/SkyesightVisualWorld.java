@@ -119,6 +119,9 @@ public final class SkyesightVisualWorld implements AutoCloseable {
         SkyesightVisualFeatureRenderer.renderBlockEntities(this.level, viewId, this.chunkReceiver,
                 camera, modelMatrix, projectionMatrix, partialTick, chunkRadius, frustum);
     }
+    public boolean environmentReady() {
+        return !closed && level.skyesightLastEnvironmentUpdateMillis() != 0;
+    }
     public ResourceKey<Level> dimension() {
         return dimension;
     }

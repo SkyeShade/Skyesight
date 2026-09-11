@@ -136,6 +136,17 @@ public final class SkyesightServerRemoteViewRegistry {
                 REGISTRATIONS.remove(player.getUUID());
         return removed == null ? List.of() : List.copyOf(removed.values());
     }
+    public static synchronized Collection<SkyesightRemoteViewRegistration> removeNonTraversalViews(ServerPlayer player) {
+        var views = REGISTRATIONS.get(player.getUUID());
+        if (views == null) return List.of();
+        var removed = new java.util.ArrayList<SkyesightRemoteViewRegistration>();
+        views.values().removeIf(view -> {
+            if (com.skyeshade.skyesight.server.portal.TraversalPortalManager.ownsView(view.viewId())) return false;
+            removed.add(view); return true;
+        });
+        if (views.isEmpty()) REGISTRATIONS.remove(player.getUUID());
+        return removed;
+    }
 
     public static synchronized void forget(ServerPlayer player) {
         REGISTRATIONS.remove(player.getUUID());

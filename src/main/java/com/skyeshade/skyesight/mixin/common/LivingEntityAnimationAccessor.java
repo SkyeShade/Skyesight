@@ -7,6 +7,10 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 
 @Mixin(LivingEntity.class)
 public interface LivingEntityAnimationAccessor {
+    @Accessor("attackStrengthTicker")
+    int skyesight$getAttackStrengthTicker();
+    @Accessor("attackStrengthTicker")
+    void skyesight$setAttackStrengthTicker(int ticks);
     @Accessor("attackAnim")
     float skyesight$getAttackAnim();
 

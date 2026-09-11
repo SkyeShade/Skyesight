@@ -15,7 +15,7 @@ public final class SecondaryEntityClock {
         if (!Minecraft.getInstance().isPaused()) ticks++;
     }
     public static double now() {
-        return ticks + Minecraft.getInstance().getTimer().getGameTimeDeltaPartialTick(true);
+        return (double) ticks + Minecraft.getInstance().getTimer().getGameTimeDeltaPartialTick(true);
     }
     public static double tickTime() { return ticks; }
 }

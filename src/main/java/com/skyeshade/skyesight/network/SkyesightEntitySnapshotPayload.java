@@ -24,8 +24,12 @@ public record SkyesightEntitySnapshotPayload(
         ResourceLocation viewId,
         long generation,
         ResourceKey<Level> dimension,
+        int sampleTick,
         List<Entry> entities
 ) implements CustomPacketPayload {
+    public SkyesightEntitySnapshotPayload(ResourceLocation viewId, long generation, ResourceKey<Level> dimension, List<Entry> entities) {
+        this(viewId, generation, dimension, Integer.MIN_VALUE, entities);
+    }
 
     public static final Type<SkyesightEntitySnapshotPayload> TYPE =
             new Type<>(ResourceLocation.fromNamespaceAndPath(Skyesight.MODID, "entity_snapshot"));
@@ -43,6 +47,7 @@ public record SkyesightEntitySnapshotPayload(
         ResourceLocation viewId = buffer.readResourceLocation();
         long generation = buffer.readVarLong();
         ResourceLocation dimensionId = buffer.readResourceLocation();
+        int sampleTick = buffer.readVarInt();
 
         int count = buffer.readVarInt();
         List<Entry> entities = new ArrayList<>(count);
@@ -131,6 +136,7 @@ public record SkyesightEntitySnapshotPayload(
                 viewId,
                 generation,
                 ResourceKey.create(Registries.DIMENSION, dimensionId),
+                sampleTick,
                 entities
         );
     }
@@ -139,6 +145,7 @@ public record SkyesightEntitySnapshotPayload(
         buffer.writeResourceLocation(payload.viewId());
         buffer.writeVarLong(payload.generation());
         buffer.writeResourceLocation(payload.dimension().location());
+        buffer.writeVarInt(payload.sampleTick());
 
         buffer.writeVarInt(payload.entities().size());
 

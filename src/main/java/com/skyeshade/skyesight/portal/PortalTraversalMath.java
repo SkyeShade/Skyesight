@@ -38,6 +38,25 @@ public final class PortalTraversalMath {
     public static Vec3 position(PortalEndpoint source, PortalEndpoint target, Vec3 point) {
         return target.center().add(rotate(point.subtract(source.center()), rotation(source.rotation(), target.rotation())));
     }
+    public record Pose(Vec3 position, Vec3 velocity, float yaw, float pitch) {}
+    public static Pose transform(PortalEndpoint source, PortalEndpoint target, Vec3 position,
+                                 Vec3 velocity, float yaw, float pitch) {
+        var rotation = rotation(source.rotation(), target.rotation());
+        double y = Math.toRadians(yaw), p = Math.toRadians(pitch);
+        var look = rotate(new Vec3(-Math.sin(y) * Math.cos(p), -Math.sin(p), Math.cos(y) * Math.cos(p)), rotation);
+        return new Pose(position(source, target, position), rotate(velocity, rotation), yaw(look), pitch(look));
+    }
+    /** Conservative full AABB containment projected into the aperture basis. */
+    public static boolean fitsBody(PortalEndpoint source, net.minecraft.world.phys.AABB box) {
+        for (double x : new double[]{box.minX, box.maxX})
+            for (double y : new double[]{box.minY, box.maxY})
+                for (double z : new double[]{box.minZ, box.maxZ}) {
+                    var p = local(source, new Vec3(x, y, z));
+                    if (Math.abs(p.x) > source.width() / 2 + 1e-6
+                            || Math.abs(p.y) > source.height() / 2 + 1e-6) return false;
+                }
+        return true;
+    }
     /** Upright aperture: segment follows feet; the entire player's width and height must fit. */
     public static Vec3 crossing(PortalEndpoint source, Vec3 previous, Vec3 current, double width, double height) {
         Vec3 a = local(source, previous), b = local(source, current);

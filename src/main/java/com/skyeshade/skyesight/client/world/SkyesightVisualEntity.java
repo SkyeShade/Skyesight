@@ -59,11 +59,14 @@ public final class SkyesightVisualEntity {
             Entity entity,
             SkyesightEntitySnapshotPayload.Entry entry
     ) {
+        this(entity, entry, entry.tickCount());
+    }
+    public SkyesightVisualEntity(Entity entity, SkyesightEntitySnapshotPayload.Entry entry, int sampleTick) {
         long now = animationTimeMillis();
 
         this.entity = entity;
         this.playerBody = new RemotePlayerBody(entry.position(), entry.yBodyRot());
-        acceptPose(entry);
+        acceptPose(entry, sampleTick);
 
         this.previousPosition = entry.position();
         this.currentPosition = entry.position();
@@ -119,11 +122,14 @@ public final class SkyesightVisualEntity {
 
     private static long animationTimeMillis() { return (long)(SecondaryEntityClock.now() * 50); }
 
-    private void acceptPose(SkyesightEntitySnapshotPayload.Entry entry) {
-        this.timeline.accept(new RemoteEntityTimeline.Sample(entry.tickCount(), entry.position(),
+    private void acceptPose(SkyesightEntitySnapshotPayload.Entry entry, int sampleTick) {
+        this.timeline.accept(new RemoteEntityTimeline.Sample(sampleTick, entry.position(),
                 entry.yRot(), entry.xRot(), entry.yBodyRot(), entry.yHeadRot()), SecondaryEntityClock.now());
     }
     public void acceptSnapshot(SkyesightEntitySnapshotPayload.Entry entry) {
+        acceptSnapshot(entry, entry.tickCount());
+    }
+    public void acceptSnapshot(SkyesightEntitySnapshotPayload.Entry entry, int sampleTick) {
         long now = animationTimeMillis();
         this.previousPosition = this.currentPosition;
         this.currentPosition = entry.position();
@@ -136,7 +142,7 @@ public final class SkyesightVisualEntity {
         if (this.previousPosition.distanceToSqr(entry.position()) > 256)
             this.playerBody.reset(entry.position(), entry.yBodyRot());
         updatePlayerMovementAnimation(this.previousPosition, entry.position());
-        acceptPose(entry);
+        acceptPose(entry, sampleTick);
         acceptAnimation(entry);
     }
     public void applyInterpolated() {

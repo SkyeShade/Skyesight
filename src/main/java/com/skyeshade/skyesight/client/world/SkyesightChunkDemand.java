@@ -13,6 +13,7 @@ final class SkyesightChunkDemand {
     final ResourceKey<Level> dimension;
     ChunkPos center;
     int radius = -1, lastRequestedCount;
+    long lastRequestNanos;
     final Map<ChunkPos, Long> pending = new HashMap<>();
 
     SkyesightChunkDemand(long generation, ResourceKey<Level> dimension) {

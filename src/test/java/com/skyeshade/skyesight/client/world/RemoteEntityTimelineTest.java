@@ -5,6 +5,20 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class RemoteEntityTimelineTest {
+    @Test void movingSamplesUseServerClockEvenWhenEntityAgeDoesNotAdvance() {
+        var timeline = new RemoteEntityTimeline();
+        // Entity age is deliberately absent: a command can move an entity outside its
+        // simulation range without ticking it. Snapshot time still advances normally.
+        for (int tick = 100; tick <= 106; tick += 2)
+            timeline.accept(sample(tick, tick - 100, 0), tick - 100);
+        double previous = timeline.sample(4).position().x;
+        for (int frame = 1; frame <= 6; frame++) {
+            double x = timeline.sample(4 + frame / 6.0).position().x;
+            assertTrue(x > previous);
+            assertEquals(1.0 / 6, x - previous, 1e-6);
+            previous = x;
+        }
+    }
     private static RemoteEntityTimeline.Sample sample(int tick, double x, float body) {
         return new RemoteEntityTimeline.Sample(tick, new Vec3(x, 0, 0), 179, 10, body, -179);
     }

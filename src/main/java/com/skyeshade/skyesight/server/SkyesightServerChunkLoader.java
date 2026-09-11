@@ -44,7 +44,8 @@ public final class SkyesightServerChunkLoader {
                 }
             }
         }
-        LOADED_VIEWS.put(key, new LoadedView(level.dimension(), next));
+        LOADED_VIEWS.put(key, new LoadedView(level.dimension(), next, player.server.getTickCount(),
+                com.skyeshade.skyesight.server.portal.TraversalPortalManager.ownsView(viewId)));
         com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics.trace("SERVER_LOAD_UPDATE",viewId,generation,sequence,
                 "player="+player.getUUID()+" center="+centerChunkX+","+centerChunkZ
                 +" newlyOwned="+newlyOwned+" released="+released+" ownedChunks="+next.size());
@@ -87,5 +88,16 @@ public final class SkyesightServerChunkLoader {
     }
 
     private record ViewKey(UUID playerId, ResourceLocation viewId) {}
-    private record LoadedView(ResourceKey<Level> dimension, LongSet chunks) {}
+    /** Standby demand is leased, unlike an explicit camera's open/close lifecycle. */
+    public static void expireTraversalStandby(MinecraftServer server) {
+        var expired = LOADED_VIEWS.entrySet().stream()
+                .filter(e -> e.getValue().traversal && server.getTickCount() - e.getValue().lastRequestTick > 100)
+                .map(Map.Entry::getKey).toList();
+        for (var key : expired) {
+            var player = server.getPlayerList().getPlayer(key.playerId());
+            if (player != null) SkyesightRemoteViewLifecycleHandler.releaseWatch(player, key.viewId());
+            else { var view = LOADED_VIEWS.remove(key); if (view != null) release(server, key, view); }
+        }
+    }
+    private record LoadedView(ResourceKey<Level> dimension, LongSet chunks, int lastRequestTick, boolean traversal) {}
 }

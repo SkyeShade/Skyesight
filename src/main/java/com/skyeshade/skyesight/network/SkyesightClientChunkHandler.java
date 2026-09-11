@@ -57,6 +57,9 @@ public final class SkyesightClientChunkHandler {
         if (registration == null) {
             return;
         }
+        // A retired standby lease must not recreate GPU/world resources from an in-flight response.
+        if (com.skyeshade.skyesight.client.render.PlayerPerspectiveViews.contains(payload.viewId())
+                && !com.skyeshade.skyesight.client.world.SkyesightClientChunkRequester.hasDemand(payload.viewId())) return;
         boolean sameAsClientDimension = minecraft.level != null
                 && minecraft.level.dimension().equals(payload.dimension());
         boolean mainPlayerChunkStillExistsBefore = playerChunkStillExists(minecraft);

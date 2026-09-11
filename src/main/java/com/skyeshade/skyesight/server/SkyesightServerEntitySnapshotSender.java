@@ -88,6 +88,7 @@ public final class SkyesightServerEntitySnapshotSender {
                         watch.viewId(),
                         watch.generation(),
                         level.dimension(),
+                        level.getServer().getTickCount(),
                         entries
                 )
         );

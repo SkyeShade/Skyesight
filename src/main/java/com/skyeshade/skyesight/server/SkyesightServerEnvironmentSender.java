@@ -20,9 +20,6 @@ public final class SkyesightServerEnvironmentSender {
         if (player == null || watch == null || targetLevel == null) {
             return;
         }
-        if (player.serverLevel().dimension().equals(targetLevel.dimension())) {
-            return;
-        }
 
         SkyesightRemoteViewRegistration registration =
                 SkyesightServerRemoteViewRegistry.resolve(player, watch.viewId()).orElse(null);

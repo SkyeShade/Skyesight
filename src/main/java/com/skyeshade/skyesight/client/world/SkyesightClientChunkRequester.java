@@ -46,6 +46,7 @@ public final class SkyesightClientChunkRequester {
                     "receiverCenter="+world.chunkReceiver().viewCenter());
         }
         if (missing == null) return;
+        state.lastRequestNanos = System.nanoTime();
         PacketDistributor.sendToServer(new SkyesightChunkRequestPayload(viewId,registration.generation(),sequence,dimension,
                 center.x,center.z,radius,missing));
         SkyesightRemoteCenterDiagnostics.trace("CLIENT_REQUEST_SENT",viewId,registration.generation(),sequence,
@@ -92,7 +93,20 @@ public final class SkyesightClientChunkRequester {
         if (state != null && state.generation==generation) STATES.remove(id);
     }
     public static void reset(ResourceLocation id) { STATES.remove(id); }
+    public static boolean hasDemand(ResourceLocation id) { return STATES.containsKey(id); }
     public static void reset() { STATES.clear(); }
+    public static void resetExcept(java.util.Set<ResourceLocation> retained) {
+        STATES.keySet().removeIf(id -> !retained.contains(id));
+    }
+    /** Renew a standby watch without retransmitting its already received chunks. */
+    public static void keepAlive(ResourceLocation id) {
+        var state = STATES.get(id);
+        long now = System.nanoTime();
+        if (state == null || state.center == null || now - state.lastRequestNanos < 2_000_000_000L) return;
+        state.lastRequestNanos = now;
+        PacketDistributor.sendToServer(new SkyesightChunkRequestPayload(id, state.generation, 0, state.dimension,
+                state.center.x, state.center.z, state.radius, java.util.List.of()));
+    }
     public static ViewRequestDiagnostics diagnostics(ResourceLocation id) {
         var state = STATES.get(id);
         return state==null ? new ViewRequestDiagnostics(null,0,0)
