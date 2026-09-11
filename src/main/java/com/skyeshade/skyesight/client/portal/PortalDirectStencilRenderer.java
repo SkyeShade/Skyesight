@@ -1,63 +1,35 @@
 package com.skyeshade.skyesight.client.portal;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexSorting;
-import com.mojang.math.Axis;
 import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.SkyesightClientConfig;
-import com.skyeshade.skyesight.SkyesightDebugConfig;
-import com.skyeshade.skyesight.SkyesightPortalEntityPoolConfig;
 import com.skyeshade.skyesight.api.PortalEndpoint;
 import com.skyeshade.skyesight.api.PortalRenderSettings;
 import com.skyeshade.skyesight.api.RegisteredPortalView;
 import com.skyeshade.skyesight.api.SkyesightClipPlane;
 import com.skyeshade.skyesight.api.SkyesightPortalApi;
-import com.skyeshade.skyesight.client.chunk.SkyesightPortalChunkStorage;
-import com.skyeshade.skyesight.client.chunk.SkyesightPortalRenderLevelView;
 import com.skyeshade.skyesight.client.render.MainTerrainStateSnapshot;
 import com.skyeshade.skyesight.client.render.PortalSecondaryWorldRenderer;
-import com.skyeshade.skyesight.client.render.PortalVisualDisplayTickDriver;
-import com.skyeshade.skyesight.client.render.SecondaryEntityPass;
 import com.skyeshade.skyesight.client.render.SecondaryParticlePass;
 import com.skyeshade.skyesight.client.render.SecondarySodiumTerrainPass;
 import com.skyeshade.skyesight.client.render.SecondaryViewContext;
 import com.skyeshade.skyesight.client.render.SecondaryViewFrame;
 import com.skyeshade.skyesight.client.render.SkyesightSecondaryRenderContext;
-import com.skyeshade.skyesight.client.render.entity.PortalDimensionEntitySources;
-import com.skyeshade.skyesight.client.render.entity.PortalRenderableEntity;
-import com.skyeshade.skyesight.client.render.light.SkyesightLightTextureUpdater;
-import com.skyeshade.skyesight.client.world.SkyesightPortalEntityPool;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorld;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorldManager;
-import com.skyeshade.skyesight.mixin.client.EntityRenderDispatcherAccessor;
-import com.skyeshade.skyesight.mixin.client.LevelRendererSkyBufferAccessor;
-import com.skyeshade.skyesight.server.SkyesightSecondaryChunkWatchRegion;
-import com.skyeshade.skyesight.server.SkyesightSecondaryWatchRegion;
-import com.skyeshade.skyesight.server.SkyesightServerViewTracker;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.renderer.DimensionSpecialEffects;
 import net.minecraft.client.renderer.GameRenderer;
-import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.LightLayer;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.util.Mth;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.levelgen.Heightmap;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import org.joml.Matrix4f;
@@ -77,7 +49,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 
 import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.CROSS_DIM_PORTAL_PARTICLES_ENABLED;
 import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.DIRECT_DISABLE_ALL_PORTAL_SUBPASSES_AFTER_MASK;
@@ -153,7 +124,6 @@ public final class PortalDirectStencilRenderer {
         PortalStickSkyWarmup.clear(viewId);
         PortalRenderTargetBounds.clear(viewId);
         PORTAL_SKY_CAPTURE_MANAGER.removeCloudState(skyCaptureKey(viewId));
-        clearCrossDimEntitySourceLog(viewId);
     }
 
     public static int invalidateLevelBoundCaches(String reason) {
@@ -170,7 +140,7 @@ public final class PortalDirectStencilRenderer {
         invalidPortalStencilRefWarnings.clear();
         PortalStickSkyWarmup.clearAll();
         PortalRenderTargetBounds.clearAll();
-        CROSS_DIM_ENTITY_SOURCE_LOGGED.clear();
+
         PORTAL_SKY_CAPTURE_MANAGER.close();
         return contextCount;
     }
@@ -187,7 +157,6 @@ public final class PortalDirectStencilRenderer {
         invalidPortalStencilRefWarnings.remove(viewId);
         PortalRenderTargetBounds.clear(viewId);
         PORTAL_SKY_CAPTURE_MANAGER.removeCloudState(skyCaptureKey(viewId));
-        clearCrossDimEntitySourceLog(viewId);
     }
 
     private static List<RegisteredRenderView> activeRenderViews(ResourceKey<Level> displayDimension, Camera camera, String stage) {
@@ -793,7 +762,7 @@ public final class PortalDirectStencilRenderer {
                 PortalSecondaryWorldRenderer.directPortalProjectionFov(),
                 mainTarget == null ? 0 : mainTarget.width,
                 mainTarget == null ? 0 : mainTarget.height,
-                viewId
+                viewId, instance.renderConfig().terrainChunkRadius()
         );
     }
 
@@ -1048,69 +1017,25 @@ public final class PortalDirectStencilRenderer {
         }
 
         float partialTick = event.getPartialTick().getGameTimeDeltaPartialTick(true);
-        int portalContentFramebufferBeforeTerrain = GL30.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
-
-        if (instance.renderConfig().renderTerrain()) {
-            renderCrossDimPortalTerrain(
-                    portalName,
-                    regionId,
-                    targetDimension,
-                    instance,
-                    frame,
-                    partialTick,
-                    beforeTerrainState,
-                    instance.renderConfig().renderTranslucent()
-            );
-        }
-
-        int portalContentFramebufferAfterTerrain = GL30.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
-        if (portalContentFramebufferAfterTerrain != portalContentFramebufferBeforeTerrain) {
-            Skyesight.LOGGER.error(
-                    "[Skyesight] Cross-dim portal terrain left wrong framebuffer bound viewId={} expected={} actual={} rebinding visible portal framebuffer",
-                    regionId,
-                    portalContentFramebufferBeforeTerrain,
-                    portalContentFramebufferAfterTerrain
-            );
-            GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, portalContentFramebufferBeforeTerrain);
-        }
-
-        if (instance.renderConfig().renderBlockEntities()) {
-            beginPortalStencilReadOrThrow(directStencilBits, stencilRef);
-            renderCrossDimPortalVisualBlockEntities(
-                    portalName,
-                    regionId,
-                    targetDimension,
-                    frame,
-                    partialTick
-            );
-        }
-
-        if (instance.renderConfig().renderEntities()) {
-            beginPortalStencilReadOrThrow(directStencilBits, stencilRef);
-            renderCrossDimPortalVisualEntities(
-                    portalName,
-                    regionId,
-                    targetDimension,
-                    instance,
-                    frame,
-                    partialTick,
-                    portalContentFramebufferBeforeTerrain
-            );
-        }
-
-        if (instance.renderConfig().renderParticles()) {
-            renderCrossDimPortalParticlesIfEnabled(
-                    portalName,
-                    regionId,
-                    targetDimension,
-                    frame,
-                    partialTick,
-                    portalContentFramebufferBeforeTerrain,
-                    stencilRef
-            );
-        }
+        var world = SkyesightVisualWorldManager.getOrCreate(regionId, targetDimension);
+        if (world == null || world.isClosed()) return;
+        var options = frame.diagnostics();
+        options.setEntityWatchRegionId(regionId);
+        options.setPortalInstanceId(regionId.toString());
+        options.setRenderToCurrentTarget(true);
+        options.setTerrainChunkRadius(instance.renderConfig().terrainChunkRadius());
+        options.setEntityChunkRadius(instance.renderConfig().entityChunkRadius());
+        options.setBlockEntityChunkRadius(instance.renderConfig().blockEntityChunkRadius());
+        options.setRenderTerrain(instance.renderConfig().renderTerrain());
+        options.setRenderTranslucent(instance.renderConfig().renderTranslucent());
+        options.setRenderEntities(instance.renderConfig().renderEntities());
+        options.setRenderBlockEntities(instance.renderConfig().renderBlockEntities());
+        options.setRenderParticles(instance.renderConfig().renderParticles() && CROSS_DIM_PORTAL_PARTICLES_ENABLED);
+        com.skyeshade.skyesight.client.render.SecondarySceneRenderer.renderContents(
+                new com.skyeshade.skyesight.client.render.SecondarySceneFrame(regionId, world.level(), world,
+                        frame, instance.viewContext(), partialTick, minecraft.getMainRenderTarget(),
+                        () -> beginPortalStencilReadOrThrow(directStencilBits, stencilRef)));
     }
-
     private static void renderPortalInstanceDirect(
             RenderLevelStageEvent event,
             Camera mainCamera,
@@ -1338,7 +1263,9 @@ public final class PortalDirectStencilRenderer {
                         directTerrainEnabledForRender(behaviorViewId, instance),
                         instance.renderConfig().renderTranslucent() && !DIRECT_DISABLE_PORTAL_TRANSPARENT,
                         instance.renderConfig().renderEntities() && !DIRECT_DISABLE_PORTAL_ENTITIES,
-                        instance.renderConfig().renderBlockEntities() && !DIRECT_DISABLE_PORTAL_BLOCK_ENTITIES
+                        instance.renderConfig().renderBlockEntities() && !DIRECT_DISABLE_PORTAL_BLOCK_ENTITIES,
+                        instance.renderConfig().renderParticles(),
+                        () -> beginPortalStencilReadOrThrow(directStencilBits, stencilRef)
                     );
                     renderMainForegroundParticlesOverPortalIfEnabled(
                             event,
@@ -1374,251 +1301,6 @@ public final class PortalDirectStencilRenderer {
             restoreMainStateAfterDirect(minecraft, state);
             restorePortalViewportState(state);
         }
-    }
-
-    private static boolean renderCrossDimPortalTerrain(
-            String portalName,
-            ResourceLocation regionId,
-            ResourceKey<Level> dimension,
-            PortalRenderView instance,
-            SecondaryViewFrame frame,
-            float partialTick,
-            String beforeTerrainDepthState,
-            boolean renderTranslucent
-    ) {
-        SkyesightVisualWorld visualWorld = SkyesightVisualWorldManager.getOrCreate(regionId, dimension);
-
-        if (visualWorld == null || visualWorld.isClosed()) {
-            return false;
-        }
-
-        DirectSkyFillStateScope scope = DirectSkyFillStateScope.capture();
-        int glBefore = GL11.glGetError();
-        int framebufferBeforeTerrain = GL30.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
-        try {
-            RenderSystem.enableDepthTest();
-            RenderSystem.depthFunc(GL11.GL_LEQUAL);
-            RenderSystem.depthMask(true);
-            RenderSystem.colorMask(true, true, true, true);
-            SkyesightLightTextureUpdater.updateFor(visualWorld.level(), frame.camera(), partialTick);
-            visualWorld.renderTerrain(
-                    frame.camera(),
-                    frame.frustum(),
-                    frame.modelViewMatrix(),
-                    frame.projectionMatrix(),
-                    instance.renderConfig().terrainChunkRadius(),
-                    renderTranslucent
-            );
-        } finally {
-            SkyesightLightTextureUpdater.restoreMain(partialTick);
-            scope.restore();
-        }
-
-        int glAfter = GL11.glGetError();
-        int loadedChunks = visualWorld.level().getChunkSource().getLoadedChunksCount();
-        int visibleSections = visualWorld.visibleChunkCount();
-        return loadedChunks > 0 && (visibleSections > 0 || glAfter == GL11.GL_NO_ERROR);
-    }
-
-    private static void renderCrossDimPortalVisualBlockEntities(
-            String portalName,
-            ResourceLocation regionId,
-            ResourceKey<Level> dimension,
-            SecondaryViewFrame frame,
-            float partialTick
-    ) {
-        SkyesightVisualWorld visualWorld = SkyesightVisualWorldManager.get(regionId);
-        if (visualWorld == null || visualWorld.isClosed()) {
-            return;
-        }
-
-        int storedCount = visualWorld.chunkReceiver().countBlockEntities();
-
-        if (storedCount <= 0) {
-            return;
-        }
-
-        try {
-            SkyesightLightTextureUpdater.updateFor(visualWorld.level(), frame.camera(), partialTick);
-            visualWorld.renderBlockEntities(
-                    regionId,
-                    frame.camera(),
-                    frame.modelViewMatrix(),
-                    frame.projectionMatrix(),
-                    partialTick
-            );
-        } catch (RuntimeException exception) {
-            throw exception;
-        } finally {
-            SkyesightLightTextureUpdater.restoreMain(partialTick);
-        }
-    }
-
-    private static void renderCrossDimPortalVisualEntities(
-            String portalName,
-            ResourceLocation regionId,
-            ResourceKey<Level> dimension,
-            PortalRenderView instance,
-            SecondaryViewFrame frame,
-            float partialTick,
-            int expectedFramebufferId
-    ) {
-        SkyesightVisualWorld visualWorld = SkyesightVisualWorldManager.get(regionId);
-
-        if (visualWorld == null || visualWorld.isClosed()) {
-            return;
-        }
-
-        Vec3 cameraPos = frame.camera().getPosition();
-        double radiusBlocks = instance.renderConfig().entityChunkRadius() * 16.0D;
-        AABB renderBounds = new AABB(
-                cameraPos.x() - radiusBlocks,
-                visualWorld.level().getMinBuildHeight(),
-                cameraPos.z() - radiusBlocks,
-                cameraPos.x() + radiusBlocks,
-                visualWorld.level().getMaxBuildHeight(),
-                cameraPos.z() + radiusBlocks
-        );
-        List<PortalRenderableEntity> renderableEntities;
-        int poolEntityCount = (ENABLE_PORTAL_ENTITY_POOL_RENDERING || SkyesightDebugConfig.SOURCE_MAP)
-                ? SkyesightPortalEntityPool.count(regionId, dimension)
-                : 0;
-        int snapshotEntityCount = SkyesightDebugConfig.SOURCE_MAP ? visualWorld.entityStore().size() : 0;
-        String renderSource;
-        String renderSourceReason;
-        boolean snapshotSuppressed = false;
-        if (ENABLE_PORTAL_ENTITY_POOL_RENDERING) {
-            renderableEntities = PortalDimensionEntitySources.renderablePortalEntityPoolForDimension(
-                    regionId,
-                    dimension,
-                    renderBounds,
-                    frame.frustum(),
-                    visualWorld
-            );
-            if (renderableEntities.isEmpty()) {
-                renderSource = "snapshot";
-                renderSourceReason = "pool_empty_or_ineligible";
-                renderableEntities = PortalDimensionEntitySources.renderableVisualEntitiesForDimension(
-                        regionId,
-                        visualWorld,
-                        dimension,
-                        renderBounds,
-                        frame.frustum()
-                );
-            } else {
-                renderSource = "portal_entity_pool";
-                renderSourceReason = "pool_enabled_and_eligible";
-                snapshotSuppressed = true;
-            }
-        } else {
-            renderSource = "snapshot";
-            renderSourceReason = "pool_rendering_disabled";
-            renderableEntities = PortalDimensionEntitySources.renderableVisualEntitiesForDimension(
-                    regionId,
-                    visualWorld,
-                    dimension,
-                    renderBounds,
-                    frame.frustum()
-            );
-        }
-        logCrossDimEntityRenderSource(
-                regionId,
-                renderSource,
-                renderSourceReason,
-                snapshotSuppressed,
-                poolEntityCount,
-                snapshotEntityCount
-        );
-
-        SecondaryEntityPass.renderPortalEntities(
-                frame,
-                Minecraft.getInstance(),
-                visualWorld.level(),
-                renderableEntities,
-                instance.renderConfig().entityChunkRadius(),
-                partialTick,
-                false,
-                true,
-                false,
-                expectedFramebufferId
-        );
-    }
-
-    private static final Set<String> CROSS_DIM_ENTITY_SOURCE_LOGGED = new HashSet<>();
-
-    private static void clearCrossDimEntitySourceLog(ResourceLocation viewId) {
-        if (viewId == null) {
-            return;
-        }
-        String prefix = viewId + ":";
-        CROSS_DIM_ENTITY_SOURCE_LOGGED.removeIf(key -> key.startsWith(prefix));
-    }
-
-    private static void logCrossDimEntityRenderSource(
-            ResourceLocation regionId,
-            String renderSource,
-            String reason,
-            boolean snapshotSuppressed,
-            int poolEntityCount,
-            int snapshotEntityCount
-    ) {
-        if (!SkyesightDebugConfig.SOURCE_MAP) {
-            return;
-        }
-        String key = regionId + ":" + renderSource + ":" + reason + ":" + snapshotSuppressed + ":" + ENABLE_PORTAL_ENTITY_POOL_RENDERING;
-        if (!CROSS_DIM_ENTITY_SOURCE_LOGGED.add(key)) {
-            return;
-        }
-        Skyesight.LOGGER.info(
-                "[Skyesight] CROSS_DIM_ENTITY_RENDER_SOURCE view={} renderSource={} reason={} populationEnabled={} poolRenderingEnabled={} poolEntityCount={} snapshotEntityCount={} snapshotSuppressed={}",
-                regionId,
-                renderSource,
-                reason,
-                SkyesightPortalEntityPoolConfig.portalEntityPoolPopulationEnabled(),
-                ENABLE_PORTAL_ENTITY_POOL_RENDERING,
-                poolEntityCount,
-                snapshotEntityCount,
-                snapshotSuppressed
-        );
-    }
-
-    private static void renderCrossDimPortalParticlesIfEnabled(
-            String portalName,
-            ResourceLocation regionId,
-            ResourceKey<Level> dimension,
-            SecondaryViewFrame frame,
-            float partialTick,
-            int expectedFramebufferId,
-            int stencilRef
-    ) {
-        if (!CROSS_DIM_PORTAL_PARTICLES_ENABLED) {
-            return;
-        }
-
-        SkyesightVisualWorld visualWorld = SkyesightVisualWorldManager.getOrCreate(regionId, dimension);
-
-        if (visualWorld == null || visualWorld.isClosed()) {
-            return;
-        }
-
-        beginPortalStencilReadOrThrow(ensureMainTargetStencilBits(), stencilRef);
-        PortalVisualDisplayTickDriver.Result displayTickResult = PortalVisualDisplayTickDriver.tick(
-                regionId,
-                "cross-dim",
-                visualWorld.level(),
-                visualWorld.particles(),
-                frame.camera().getPosition()
-        );
-        SecondaryParticlePass.renderVisualWorldParticles(
-                frame,
-                Minecraft.getInstance(),
-                visualWorld.level(),
-                visualWorld.particles(),
-                partialTick,
-                SecondaryParticlePass.RenderGroup.TRANSLUCENT,
-                expectedFramebufferId,
-                stencilRef
-        );
     }
 
     private static void renderMainForegroundParticlesOverPortalIfEnabled(

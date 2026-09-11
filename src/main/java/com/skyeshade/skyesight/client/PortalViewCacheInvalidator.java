@@ -61,6 +61,7 @@ public final class PortalViewCacheInvalidator {
             return;
         }
         ResourceLocation viewId = view.id();
+        com.skyeshade.skyesight.client.world.SecondaryParticleViews.close(viewId);
         CrossDimPortalTerrainWarmup.onPortalViewChanged(oldView, newView, cachePolicy);
         if (cachePolicy == PortalCachePolicy.SOFT_REPLACE) {
             PortalDirectStencilRenderer.softReplaceViewCaches(viewId);

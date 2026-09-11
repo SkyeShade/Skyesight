@@ -2,9 +2,7 @@ package com.skyeshade.skyesight.client.render;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
-import com.mojang.blaze3d.shaders.FogShape;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexSorting;
 import com.skyeshade.skyesight.api.PortalRenderSettings;
 import com.skyeshade.skyesight.api.SkyesightClipPlane;
@@ -13,11 +11,9 @@ import com.skyeshade.skyesight.api.SkyesightPortalApi;
 import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.SkyesightDebugConfig;
 import com.skyeshade.skyesight.client.compat.iris.SkyesightIrisCompat;
-import com.skyeshade.skyesight.client.portal.DirectStencilPortalMath;
 import com.skyeshade.skyesight.client.portal.DirectPortalProjectionMath;
 import com.skyeshade.skyesight.client.portal.PortalRenderCostAudit;
 import com.skyeshade.skyesight.client.portal.PortalRenderTargetBounds;
-import com.skyeshade.skyesight.client.portal.SecondaryPortalCompositePass;
 import com.skyeshade.skyesight.client.portal.PortalRenderDebugStatus;
 import com.skyeshade.skyesight.client.portal.PortalFrame;
 import com.skyeshade.skyesight.client.portal.PortalFrameMath;
@@ -28,20 +24,14 @@ import com.skyeshade.skyesight.client.render.config.PortalSecondaryRenderConfig;
 import com.skyeshade.skyesight.client.render.config.PortalSodiumRenderConfig;
 import com.skyeshade.skyesight.client.render.remote.PortalRemoteChunkController;
 import com.skyeshade.skyesight.client.render.state.PortalSecondaryRenderState;
-import com.skyeshade.skyesight.client.render.state.PortalRemoteChunkRuntimeState;
 import com.skyeshade.skyesight.mixin.client.GameRendererSetupInvoker;
 import com.skyeshade.skyesight.server.SkyesightSecondaryWatchRegion;
 import com.skyeshade.skyesight.server.SkyesightSecondaryChunkWatchRegion;
-import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.multiplayer.ClientChunkCache;
-import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.GameRenderer;
-import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.SectionPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
@@ -50,10 +40,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.minecraft.world.level.ChunkPos;
 import org.joml.Matrix4f;
@@ -62,19 +49,14 @@ import org.joml.Vector3f;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
 
-import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.ConcurrentModificationException;
-import java.util.HashSet;
 import java.util.Locale;
-import java.util.Set;
 import java.util.UUID;
 
 
 public final class PortalSecondaryWorldRenderer {
     private static int secondaryContextNonSecondaryTargetBindCount;
     private static String secondaryContextLastNonSecondaryBind = "n/a";
-    private static boolean secondaryEntityPassAttempted;
+
 
     private PortalSecondaryWorldRenderer() {}
 
@@ -114,7 +96,7 @@ public final class PortalSecondaryWorldRenderer {
         PortalRenderCostAudit.record(viewId, "targetResolveSize", targetResolveStart);
         PortalRenderTargetBounds.logIfEnabled(viewId, sourceTag, targetSize);
         long targetRestoreStart = PortalRenderCostAudit.start();
-        PortalTargetRenderState allocationState = PortalTargetRenderState.capture();
+        SecondarySceneOutputState allocationState = SecondarySceneOutputState.capture();
         PortalRenderCostAudit.record(viewId, "targetRestore", targetRestoreStart);
         TextureTarget previous = context.renderTarget();
         int previousWidth = previous == null ? 0 : previous.width;
@@ -243,7 +225,7 @@ public final class PortalSecondaryWorldRenderer {
             String sourceTag
     ) {
         Matrix4f currentViewProjection = new Matrix4f(event.getProjectionMatrix()).mul(event.getModelViewMatrix());
-        PortalTargetRenderState renderState = PortalTargetRenderState.capture();
+        SecondarySceneOutputState renderState = SecondarySceneOutputState.capture();
         TextureTarget output = getOrCreatePortalRenderTarget(
                 context,
                 minecraft,
@@ -282,117 +264,20 @@ public final class PortalSecondaryWorldRenderer {
                     clipPlane,
                     portalInstanceId
             );
-            if (SecondarySodiumTerrainPass.render(frame, context, minecraft, event)) {
-                renderPostTerrainFeatures(frame, context, minecraft, event.getPartialTick().getGameTimeDeltaPartialTick(true));
-            }
-
+            frame.diagnostics().setRenderToCurrentTarget(true);
+            frame.diagnostics().setEntityWatchRegionId(viewId);
+            frame.diagnostics().setTerrainChunkRadius(configuredTerrainChunkRadius(frame));
+            frame.diagnostics().setEntityChunkRadius(configuredEntityChunkRadius(frame));
+            frame.diagnostics().setBlockEntityChunkRadius(configuredBlockEntityChunkRadius(frame));
+            frame.diagnostics().setRenderEntities(runEntityPass);
+            var scene = new SecondarySceneFrame(viewId, minecraft.level, null, frame, context,
+                    event.getPartialTick().getGameTimeDeltaPartialTick(true), output, () -> {});
+            if (frame.diagnostics().renderSky()) SecondarySceneEnvironmentRenderer.renderBackground(scene, context.clouds());
+            frame.diagnostics().setRenderSky(false);
+            updateRemoteEntityTrackingIfEnabled(frame, context, minecraft);
+            SecondarySceneRenderer.renderContents(scene);
             return output;
         } finally {
-            PortalSecondaryRenderState.renderingSecondaryView = false;
-
-            modelViewStack.popMatrix();
-            renderState.restore();
-        }
-    }
-
-    public static TextureTarget renderCameraViewToTexture(
-            SecondaryViewContext context,
-            Minecraft minecraft,
-            float partialTick,
-            Vec3 cameraPosition,
-            Quaternionf cameraRotation,
-            ResourceLocation viewId,
-            int width,
-            int height,
-            float fov,
-            int renderDistanceChunks,
-            boolean renderSky,
-            boolean renderTerrain,
-            boolean renderBlockEntities,
-            boolean renderEntities,
-            boolean renderParticles,
-            boolean publishWatchRegion
-    ) {
-        int targetWidth = Math.max(1, width);
-        int targetHeight = Math.max(1, height);
-        float previousFogStart = RenderSystem.getShaderFogStart();
-        float previousFogEnd = RenderSystem.getShaderFogEnd();
-        var previousFogShape = RenderSystem.getShaderFogShape();
-        PortalTargetRenderState renderState = PortalTargetRenderState.capture();
-        TextureTarget output;
-        try {
-            output = context.getOrCreateRenderTarget(targetWidth, targetHeight);
-        } finally {
-            renderState.restore();
-        }
-
-        var modelViewStack = RenderSystem.getModelViewStack();
-        modelViewStack.pushMatrix();
-
-        PortalSecondaryRenderState.renderingSecondaryView = true;
-
-        try {
-            output.bindWrite(true);
-            RenderSystem.viewport(0, 0, output.width, output.height);
-            output.setClearColor(0.0F, 0.0F, 0.0F, 1.0F);
-            output.clear(Minecraft.ON_OSX);
-            output.bindWrite(true);
-            // Sodium bounds section traversal by min(backend distance, fog end).
-            // Inheriting the physical camera's fog silently caps a larger view.
-            RenderSystem.setShaderFogStart(renderDistanceChunks * 16.0F * 0.65F);
-            RenderSystem.setShaderFogEnd(renderDistanceChunks * 16.0F);
-            RenderSystem.setShaderFogShape(FogShape.CYLINDER);
-
-            SecondaryViewFrame frame = createSecondaryViewFrameFromPose(
-                    context,
-                    minecraft,
-                    partialTick,
-                    output,
-                    targetWidth,
-                    targetHeight,
-                    cameraPosition,
-                    cameraRotation,
-                    publishWatchRegion,
-                    publishWatchRegion ? viewId : null,
-                    renderEntities,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    viewId == null ? "camera-view" : "camera-view:" + viewId,
-                    0,
-                    fov,
-                    renderDistanceChunks
-            );
-            frame.diagnostics().setRenderSkyInCurrentTarget(renderSky);
-            frame.diagnostics().setCameraView(true);
-            frame.diagnostics().setTerrainChunkRadius(renderDistanceChunks);
-            frame.diagnostics().setPortalOwnedRenderRadiusChunks(renderDistanceChunks);
-            frame.diagnostics().setSameDimPlayerLoadedReuseRadiusChunks(renderDistanceChunks);
-            frame.diagnostics().setReusePlayerLoadedChunksForSameDim(false);
-            frame.diagnostics().setEntityChunkRadius(renderDistanceChunks);
-            frame.diagnostics().setBlockEntityChunkRadius(renderDistanceChunks);
-            frame.diagnostics().setBlockUpdateChunkRadius(renderDistanceChunks);
-            frame.diagnostics().setRenderSky(renderSky);
-            frame.diagnostics().setRenderTerrain(renderTerrain);
-            frame.diagnostics().setRenderTranslucent(true);
-            frame.diagnostics().setRenderEntities(renderEntities);
-            frame.diagnostics().setRenderBlockEntities(renderBlockEntities);
-            frame.diagnostics().setRenderParticles(renderParticles);
-            if (publishWatchRegion) {
-                updateSecondaryChunkWatchRegionIfNeeded(minecraft, frame, context);
-            }
-            if (SecondarySodiumTerrainPass.render(frame, context, minecraft, partialTick)) {
-                renderPostTerrainFeatures(frame, context, minecraft, partialTick);
-            }
-
-            SkyesightCameraOutput.makeOpaque(output);
-            return output;
-        } finally {
-            RenderSystem.setShaderFogStart(previousFogStart);
-            RenderSystem.setShaderFogEnd(previousFogEnd);
-            RenderSystem.setShaderFogShape(previousFogShape);
             PortalSecondaryRenderState.renderingSecondaryView = false;
 
             modelViewStack.popMatrix();
@@ -427,7 +312,9 @@ public final class PortalSecondaryWorldRenderer {
             boolean renderTerrain,
             boolean renderTranslucent,
             boolean renderEntities,
-            boolean renderBlockEntities
+            boolean renderBlockEntities,
+            boolean renderParticles,
+            Runnable prepareOutput
     ) {
         TextureTarget placeholder = getOrCreatePortalRenderTarget(
                 context,
@@ -493,20 +380,23 @@ public final class PortalSecondaryWorldRenderer {
             frame.diagnostics().setRenderTranslucent(renderTranslucent);
             frame.diagnostics().setRenderEntities(renderEntities);
             frame.diagnostics().setRenderBlockEntities(renderBlockEntities);
+            frame.diagnostics().setRenderParticles(renderParticles);
             RegisteredPortalView registeredView = entityWatchRegionId == null
                     ? null
                     : SkyesightPortalApi.getPortal(entityWatchRegionId.toString());
             frame.diagnostics().setRenderBackface(registeredView != null && registeredView.renderBackface());
             frame.diagnostics().setViewPhysicalSide("unknown");
             updateSecondaryChunkWatchRegionIfNeeded(minecraft, frame, context);
-            if (renderTerrain) {
+            updateRemoteEntityTrackingIfEnabled(frame, context, minecraft);
+            if (renderTerrain || renderEntities || renderBlockEntities || renderParticles) {
                 DirectTerrainRenderState terrainState = DirectTerrainRenderState.capture();
                 try {
                     try (SkyesightSecondaryRenderContext.Scope ignored =
                                  SkyesightSecondaryRenderContext.push(minecraft.getMainRenderTarget(), frame.camera(), minecraft.getMainRenderTarget())) {
-                        if (SecondarySodiumTerrainPass.render(frame, context, minecraft, event)) {
-                            renderPostTerrainFeatures(frame, context, minecraft, event.getPartialTick().getGameTimeDeltaPartialTick(true));
-                        }
+                        frame.diagnostics().setRenderSky(false);
+                        SecondarySceneRenderer.renderContents(new SecondarySceneFrame(entityWatchRegionId, minecraft.level,
+                                null, frame, context, event.getPartialTick().getGameTimeDeltaPartialTick(true),
+                                minecraft.getMainRenderTarget(), prepareOutput));
                     }
                 } finally {
                     if (PortalSecondaryRenderState.directTerrainRestoreAfterEachPortal) {
@@ -963,151 +853,6 @@ public final class PortalSecondaryWorldRenderer {
         projection.rotate(-angle, axis);
     }
 
-    static void renderDirectBlockEntitiesIfEnabled(
-            SecondaryViewFrame frame,
-            SecondaryViewContext context,
-            Minecraft minecraft,
-            float partialTick
-    ) {
-        if (!PortalSecondaryRenderConfig.DIRECT_RENDER_BLOCK_ENTITIES) {
-            SecondaryBlockEntityPass.markSkipped("feature disabled");
-            return;
-        }
-
-        if (frame == null) {
-            SecondaryBlockEntityPass.markSkipped("frame null at call site");
-            return;
-        }
-
-        if (context == null) {
-            SecondaryBlockEntityPass.markSkipped("context null at call site");
-            return;
-        }
-
-        if (!frame.diagnostics().renderToCurrentTarget()) {
-            SecondaryBlockEntityPass.markSkipped("not direct current-target frame");
-            return;
-        }
-
-        if (frame.diagnostics().portalInstanceId().contains("direct:C")
-                && !PortalRenderDebugStatus.farPortalRenderBlockEntities()) {
-            SecondaryBlockEntityPass.markSkipped("far portal block entities disabled");
-            return;
-        }
-
-        try {
-            int stencilRef = fallbackStencilRefForLegacyDebugFrame(frame);
-            int stencilBits = PortalRenderDebugStatus.stencilBits();
-            SecondaryPortalCompositePass.StencilResult stencil =
-                    SecondaryPortalCompositePass.beginExistingStencilApertureRead(stencilBits, stencilRef);
-            if (!stencil.succeeded()) {
-                SecondaryBlockEntityPass.markSkipped("stencil inactive " + stencil.exception());
-                return;
-            }
-
-            RenderSystem.enableDepthTest();
-            RenderSystem.depthFunc(GL11.GL_LEQUAL);
-            RenderSystem.depthMask(false);
-
-            ChunkPos center = new ChunkPos(secondaryRemoteCenterBlockPos(context, frame));
-            SecondaryBlockEntityPass.render(
-                    frame,
-                    minecraft,
-                    center,
-                    configuredBlockEntityChunkRadius(frame),
-                    partialTick
-            );
-        } catch (RuntimeException exception) {
-            SecondaryBlockEntityPass.markSkipped("exception " + exception.getClass().getSimpleName());
-        } finally {
-            RenderSystem.depthFunc(GL11.GL_LEQUAL);
-            RenderSystem.depthMask(true);
-            RenderSystem.enableDepthTest();
-            RenderSystem.disableBlend();
-            RenderSystem.enableCull();
-            RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-        }
-    }
-
-    static void renderPostTerrainFeatures(
-            SecondaryViewFrame frame,
-            SecondaryViewContext context,
-            Minecraft minecraft,
-            float partialTick
-    ) {
-        if (frame == null || context == null || minecraft == null) {
-            return;
-        }
-
-        if (frame.diagnostics().renderToCurrentTarget()) {
-            if (!PortalSecondaryRenderConfig.DIRECT_RENDER_TERRAIN_DRAW_SOLID_ONLY) {
-                return;
-            }
-
-            renderDirectBlockEntitiesIfEnabled(frame, context, minecraft, partialTick);
-            if (!PortalSecondaryRenderConfig.PORTAL_PARTICLES_ALL_AFTER_ENTITIES
-                    && !PortalSecondaryRenderConfig.PORTAL_PARTICLES_AFTER_ENTITIES) {
-                renderSecondaryParticlesIfEnabled(
-                        frame,
-                        minecraft,
-                        partialTick,
-                        SecondaryParticlePass.RenderGroup.OPAQUE
-                );
-            }
-            renderSecondaryEntitiesIfEnabled(frame, context, minecraft, partialTick);
-            if (PortalSecondaryRenderConfig.PORTAL_PARTICLES_ALL_AFTER_ENTITIES) {
-                renderSecondaryParticlesIfEnabled(
-                        frame,
-                        minecraft,
-                        partialTick,
-                        SecondaryParticlePass.RenderGroup.ALL
-                );
-            } else {
-                renderSecondaryParticlesIfEnabled(
-                        frame,
-                        minecraft,
-                        partialTick,
-                        SecondaryParticlePass.RenderGroup.TRANSLUCENT
-                );
-            }
-            return;
-        }
-
-        if (!PortalSecondaryRenderConfig.SECONDARY_RENDER_ENTITIES_AFTER_TRANSLUCENT) {
-            renderSecondaryBlockEntitiesIfEnabled(frame, context, minecraft, partialTick);
-            renderSecondaryEntitiesIfEnabled(frame, context, minecraft, partialTick);
-        }
-
-        if (PortalSecondaryRenderConfig.SECONDARY_RENDER_ENTITIES_AFTER_TRANSLUCENT) {
-            renderSecondaryBlockEntitiesIfEnabled(frame, context, minecraft, partialTick);
-            renderSecondaryEntitiesIfEnabled(frame, context, minecraft, partialTick);
-        }
-
-        renderSecondaryParticlesIfEnabled(frame, minecraft, partialTick);
-    }
-
-    private static int fallbackStencilRefForLegacyDebugFrame(SecondaryViewFrame frame) {
-        String portalId = frame == null ? "" : frame.diagnostics().portalInstanceId();
-        int explicitRef = frame == null ? 0 : frame.diagnostics().portalStencilRef();
-        if (explicitRef > 0) {
-            return explicitRef;
-        }
-
-        // Legacy manual/debug frames may only carry direct-render labels, so keep their historical stencil mapping.
-        int fallbackRef;
-        if (portalId.contains("direct:D")) {
-            fallbackRef = 4;
-        } else if (portalId.contains("direct:C")) {
-            fallbackRef = 3;
-        } else if (portalId.contains("direct:B")) {
-            fallbackRef = 2;
-        } else {
-            fallbackRef = 1;
-        }
-
-        return fallbackRef;
-    }
-
     static void applyDirectDepthModeAtSodiumDrawPoint() {
         String mode = PortalRenderDebugStatus.directPortalDepthMode();
 
@@ -1134,65 +879,6 @@ public final class PortalSecondaryWorldRenderer {
         }
     }
 
-    static void renderSecondarySkyIfEnabled(
-            SecondaryViewFrame frame,
-            Minecraft minecraft,
-            float partialTick
-    ) {
-        secondaryEntityPassAttempted = false;
-        if (!PortalSecondaryRenderConfig.SECONDARY_FEATURE_SKY || !frame.diagnostics().renderSky() || minecraft.level == null) {
-            return;
-        }
-
-        try {
-            SecondarySkyPass.render(frame, minecraft, partialTick);
-        } catch (RuntimeException exception) {
-            Skyesight.LOGGER.warn(
-                    "[Skyesight] Secondary sky render failed",
-                    exception
-            );
-        } finally {
-            RenderSystem.disableBlend();
-            RenderSystem.defaultBlendFunc();
-            RenderSystem.enableDepthTest();
-            RenderSystem.depthMask(true);
-            RenderSystem.enableCull();
-            RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-        }
-    }
-
-    static void resetSecondaryFeatureDiagnosticsForDirectRender() {
-        secondaryEntityPassAttempted = false;
-    }
-
-    static void renderSecondaryBlockEntitiesIfEnabled(
-            SecondaryViewFrame frame,
-            SecondaryViewContext context,
-            Minecraft minecraft,
-            float partialTick
-    ) {
-        if (!PortalSecondaryRenderConfig.SECONDARY_FEATURE_BLOCK_ENTITIES) {
-            return;
-        }
-
-        if (!frame.diagnostics().renderBlockEntities()) {
-            return;
-        }
-
-        ResourceLocation viewId = frame.diagnostics().entityWatchRegionId();
-        long auditStart = PortalRenderCostAudit.start();
-        ChunkPos center = new ChunkPos(secondaryRemoteCenterBlockPos(context, frame));
-        SecondaryBlockEntityPass.render(
-                frame,
-                minecraft,
-                center,
-                configuredBlockEntityChunkRadius(frame),
-                partialTick
-        );
-
-        PortalRenderCostAudit.record(viewId, "blockEntities", auditStart);
-    }
-
     static BlockPos secondaryRemoteCenterBlockPos(SecondaryViewContext context, SecondaryViewFrame frame) {
         Vec3 frozenCenter = context.frozenRemoteCameraPosition();
         return BlockPos.containing(frozenCenter == null ? frame.camera().getPosition() : frozenCenter);
@@ -1207,47 +893,7 @@ public final class PortalSecondaryWorldRenderer {
         );
     }
 
-    static void renderSecondaryEntitiesIfEnabled(
-            SecondaryViewFrame frame,
-            SecondaryViewContext context,
-            Minecraft minecraft,
-        float partialTick
-    ) {
-        if (!PortalSecondaryRenderConfig.SECONDARY_FEATURE_ENTITIES || !frame.diagnostics().runEntityPass() || !frame.diagnostics().renderEntities()) {
-            if (frame.diagnostics().publishEntityWatchRegion()) {
-                removeSecondaryWatchRegion(minecraft, frame.diagnostics().entityWatchRegionId());
-            }
-            return;
-        }
-
-        ResourceLocation viewId = frame.diagnostics().entityWatchRegionId();
-        long auditStart = PortalRenderCostAudit.start();
-        updateRemoteEntityTrackingIfEnabled(frame, context, minecraft);
-        Vec3 entityCenter = secondaryEntityCenter(context, frame);
-
-        SecondaryEntityPass.Result result = SecondaryEntityPass.render(
-                frame,
-                context.remoteEntityTracker(),
-                minecraft,
-                entityCenter,
-                configuredEntityChunkRadius(frame) * 16.0D,
-                partialTick
-        );
-
-        secondaryEntityPassAttempted = result.attempted();
-        PortalRenderCostAudit.record(viewId, "entities", auditStart);
-        PortalRenderCostAudit.recordEntityCounts(
-                viewId,
-                result.considered(),
-                result.rendered(),
-                result.skippedOutsideBounds()
-                        + result.skippedDistance()
-                        + result.skippedFrustum()
-                        + result.duplicateSuppressed()
-        );
-    }
-
-    private static void updateRemoteEntityTrackingIfEnabled(
+    public static void updateRemoteEntityTrackingIfEnabled(
             SecondaryViewFrame frame,
             SecondaryViewContext context,
             Minecraft minecraft
@@ -1293,7 +939,7 @@ public final class PortalSecondaryWorldRenderer {
         });
     }
 
-    private static void updateSecondaryChunkWatchRegionIfNeeded(
+    public static void updateSecondaryChunkWatchRegionIfNeeded(
             Minecraft minecraft,
             SecondaryViewFrame frame,
             SecondaryViewContext context
@@ -1412,118 +1058,6 @@ public final class PortalSecondaryWorldRenderer {
             return configured;
         }
         return Math.max(configured, configuredSameDimPlayerLoadedReuseRadiusChunks(frame));
-    }
-
-    private record PortalTargetRenderState(
-            int framebuffer,
-            int[] viewport,
-            boolean scissorEnabled,
-            int[] scissorBox,
-            Matrix4f projection,
-            VertexSorting vertexSorting,
-            Matrix4f modelView,
-            boolean depthEnabled,
-            int depthFunc,
-            boolean depthMask,
-            boolean stencilEnabled,
-            int stencilFunc,
-            int stencilRef,
-            int stencilValueMask,
-            int stencilWriteMask,
-            boolean blendEnabled,
-            boolean cullEnabled,
-            boolean[] colorMask,
-            float[] shaderColor,
-            ShaderInstance shader
-    ) {
-        private static PortalTargetRenderState capture() {
-            int[] viewport = new int[4];
-            GL11.glGetIntegerv(GL11.GL_VIEWPORT, viewport);
-            int[] scissorBox = new int[4];
-            GL11.glGetIntegerv(GL11.GL_SCISSOR_BOX, scissorBox);
-            return new PortalTargetRenderState(
-                    GL30.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING),
-                    viewport,
-                    GL11.glIsEnabled(GL11.GL_SCISSOR_TEST),
-                    scissorBox,
-                    new Matrix4f(RenderSystem.getProjectionMatrix()),
-                    RenderSystem.getVertexSorting(),
-                    new Matrix4f(RenderSystem.getModelViewStack()),
-                    GL11.glIsEnabled(GL11.GL_DEPTH_TEST),
-                    GL11.glGetInteger(GL11.GL_DEPTH_FUNC),
-                    GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK),
-                    GL11.glIsEnabled(GL11.GL_STENCIL_TEST),
-                    GL11.glGetInteger(GL11.GL_STENCIL_FUNC),
-                    GL11.glGetInteger(GL11.GL_STENCIL_REF),
-                    GL11.glGetInteger(GL11.GL_STENCIL_VALUE_MASK),
-                    GL11.glGetInteger(GL11.GL_STENCIL_WRITEMASK),
-                    GL11.glIsEnabled(GL11.GL_BLEND),
-                    GL11.glIsEnabled(GL11.GL_CULL_FACE),
-                    readColorMask(),
-                    RenderSystem.getShaderColor().clone(),
-                    RenderSystem.getShader()
-            );
-        }
-
-        private void restore() {
-            GL30.glBindFramebuffer(GL30.GL_FRAMEBUFFER, this.framebuffer);
-            RenderSystem.viewport(this.viewport[0], this.viewport[1], this.viewport[2], this.viewport[3]);
-            if (this.scissorEnabled) {
-                RenderSystem.enableScissor(this.scissorBox[0], this.scissorBox[1], this.scissorBox[2], this.scissorBox[3]);
-            } else {
-                RenderSystem.disableScissor();
-            }
-            RenderSystem.setProjectionMatrix(this.projection, this.vertexSorting);
-            var modelViewStack = RenderSystem.getModelViewStack();
-            modelViewStack.identity();
-            modelViewStack.mul(this.modelView);
-            RenderSystem.applyModelViewMatrix();
-            if (this.depthEnabled) {
-                RenderSystem.enableDepthTest();
-            } else {
-                RenderSystem.disableDepthTest();
-            }
-            RenderSystem.depthFunc(this.depthFunc);
-            RenderSystem.depthMask(this.depthMask);
-            RenderSystem.colorMask(this.colorMask[0], this.colorMask[1], this.colorMask[2], this.colorMask[3]);
-            if (this.stencilEnabled) {
-                GL11.glEnable(GL11.GL_STENCIL_TEST);
-            } else {
-                GL11.glDisable(GL11.GL_STENCIL_TEST);
-            }
-            RenderSystem.stencilMask(this.stencilWriteMask);
-            RenderSystem.stencilFunc(this.stencilFunc, this.stencilRef, this.stencilValueMask);
-            RenderSystem.stencilOp(GL11.GL_KEEP, GL11.GL_KEEP, GL11.GL_KEEP);
-            if (this.blendEnabled) {
-                RenderSystem.enableBlend();
-            } else {
-                RenderSystem.disableBlend();
-            }
-            if (this.cullEnabled) {
-                RenderSystem.enableCull();
-            } else {
-                RenderSystem.disableCull();
-            }
-            RenderSystem.setShaderColor(this.shaderColor[0], this.shaderColor[1], this.shaderColor[2], this.shaderColor[3]);
-            if (this.shader != null) {
-                RenderSystem.setShader(() -> this.shader);
-            }
-        }
-
-        private String viewportSummary() {
-            return this.viewport[0] + "," + this.viewport[1] + "," + this.viewport[2] + "," + this.viewport[3];
-        }
-
-        private static boolean[] readColorMask() {
-            ByteBuffer buffer = ByteBuffer.allocateDirect(4);
-            GL11.glGetBooleanv(GL11.GL_COLOR_WRITEMASK, buffer);
-            return new boolean[] {
-                    buffer.get(0) != 0,
-                    buffer.get(1) != 0,
-                    buffer.get(2) != 0,
-                    buffer.get(3) != 0
-            };
-        }
     }
 
     private record DirectTerrainRenderState(
@@ -1656,53 +1190,6 @@ public final class PortalSecondaryWorldRenderer {
         });
     }
 
-    static void renderSecondaryParticlesIfEnabled(
-            SecondaryViewFrame frame,
-            Minecraft minecraft,
-            float partialTick
-    ) {
-        renderSecondaryParticlesIfEnabled(frame, minecraft, partialTick, SecondaryParticlePass.RenderGroup.ALL);
-    }
-
-    static void renderSecondaryParticlesIfEnabled(
-            SecondaryViewFrame frame,
-            Minecraft minecraft,
-            float partialTick,
-            SecondaryParticlePass.RenderGroup renderGroup
-    ) {
-        if (!PortalSecondaryRenderConfig.SECONDARY_RENDER_PARTICLES) {
-            return;
-        }
-        if (!frame.diagnostics().renderParticles()) {
-            return;
-        }
-        if (PortalSecondaryRenderConfig.PORTAL_PARTICLES_SAME_DIM_ONLY && minecraft.level == null) {
-            return;
-        }
-
-        ResourceLocation viewId = frame.diagnostics().entityWatchRegionId();
-        long auditStart = PortalRenderCostAudit.start();
-        PortalVisualDisplayTickDriver.tick(
-                frame.diagnostics().entityWatchRegionId(),
-                sameDimPortalDisplayTickKind(frame, minecraft),
-                minecraft.level,
-                null,
-                frame.camera().getPosition()
-        );
-        SecondaryParticlePass.Result result = SecondaryParticlePass.render(frame, minecraft, partialTick, renderGroup);
-        PortalRenderCostAudit.record(viewId, "particles", auditStart);
-    }
-
-    private static String sameDimPortalDisplayTickKind(SecondaryViewFrame frame, Minecraft minecraft) {
-        if (frame == null || frame.camera() == null || minecraft == null || minecraft.gameRenderer == null) {
-            return "same-dim";
-        }
-
-        Vec3 realCameraPos = minecraft.gameRenderer.getMainCamera().getPosition();
-        double distance = realCameraPos.distanceTo(frame.camera().getPosition());
-        return distance <= 32.0D ? "near-same-dim" : "far-same-dim";
-    }
-
     public static boolean sodiumForceRemoteRenderListEnabled() {
         return PortalSodiumRenderConfig.SODIUM_FORCE_REMOTE_RENDER_LIST
                 && PortalSodiumRenderConfig.SODIUM_FORCE_RENDER_LIST_FROM_REMOTE_GEOMETRY;
@@ -1801,9 +1288,7 @@ public final class PortalSecondaryWorldRenderer {
         return false;
     }
 
-    public static boolean secondaryEntityPassAttempted() {
-        return secondaryEntityPassAttempted;
-    }
+
 
     public static float directPortalProjectionFov() {
         return PortalProjectionConfig.VIEW_FOV;
@@ -1837,6 +1322,3 @@ public final class PortalSecondaryWorldRenderer {
     }
 
 }
-
-
-

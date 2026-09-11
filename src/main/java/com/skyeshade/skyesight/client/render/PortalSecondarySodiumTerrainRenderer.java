@@ -85,13 +85,6 @@ final class PortalSecondarySodiumTerrainRenderer {
         modelViewStack.identity();
         RenderSystem.applyModelViewMatrix();
 
-        if (!frame.diagnostics().renderToCurrentTarget()
-                || frame.diagnostics().renderSkyInCurrentTarget()) {
-            PortalSecondaryWorldRenderer.renderSecondarySkyIfEnabled(frame, minecraft, partialTick);
-        } else {
-            PortalSecondaryWorldRenderer.resetSecondaryFeatureDiagnosticsForDirectRender();
-        }
-
         RenderSystem.setProjectionMatrix(projection, com.mojang.blaze3d.vertex.VertexSorting.DISTANCE_TO_ORIGIN);
         modelViewStack.identity();
         RenderSystem.applyModelViewMatrix();
@@ -268,7 +261,7 @@ final class PortalSecondarySodiumTerrainRenderer {
                 setupTerrainStart = PortalRenderCostAudit.start();
                 // Only the dedicated renderer may observe the secondary distance.
                 // Sodium reloads its section manager when this effective distance changes.
-                try (var distance = usingMainSodiumRenderer || !frame.diagnostics().cameraView()
+                try (var distance = usingMainSodiumRenderer
                         ? null : new SkyesightViewDistanceScope(
                         PortalSecondaryWorldRenderer.configuredSameDimRenderChunkRadius(frame))) {
                     renderer.setupTerrain(
@@ -542,6 +535,10 @@ final class PortalSecondarySodiumTerrainRenderer {
                 } finally {
                     RenderDevice.exitManagedCode();
                 }
+                // Creation must not return the renderer we just unloaded when a camera's
+                // physical ClientLevel changes (for example after dimension travel).
+                state.setRenderer(null);
+                state.setRendererLevel(null);
             }
 
             return createPortalSodiumRendererInRenderStage(minecraft, level, context, viewId);

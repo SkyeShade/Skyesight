@@ -47,8 +47,8 @@ final class PortalSecondaryVanillaTerrainRenderer {
         Matrix4f modelView = frame.modelViewMatrix();
         Vec3 cameraPosition = camera.getPosition();
 
-        try (var distance = frame.diagnostics().cameraView() ? new SkyesightViewDistanceScope(
-                PortalSecondaryWorldRenderer.configuredTerrainChunkRadius(frame)) : null) {
+        try (var distance = new SkyesightViewDistanceScope(
+                PortalSecondaryWorldRenderer.configuredTerrainChunkRadius(frame))) {
             VanillaSecondaryViewState state = VanillaSecondaryViewState.getOrCreate(context, minecraft);
             LevelRenderer levelRenderer = state.rendererFor(level);
             LevelRendererSecondaryTerrainBridge bridge = (LevelRendererSecondaryTerrainBridge) levelRenderer;
@@ -109,7 +109,7 @@ final class PortalSecondaryVanillaTerrainRenderer {
                     modelView,
                     projection
             );
-            if (frame.diagnostics().cameraView() && frame.diagnostics().renderTranslucent()) {
+            if (frame.diagnostics().renderTranslucent()) {
                 bridge.skyesight$renderSecondarySectionLayer(
                         RenderType.translucent(), cameraPosition.x(), cameraPosition.y(), cameraPosition.z(),
                         modelView, projection

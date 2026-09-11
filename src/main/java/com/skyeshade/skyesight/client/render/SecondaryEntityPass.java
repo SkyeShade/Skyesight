@@ -3,13 +3,11 @@ package com.skyeshade.skyesight.client.render;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexSorting;
-import com.skyeshade.skyesight.SkyesightClientConfig;
 import com.skyeshade.skyesight.entity.PortalMultipartEntityUtil;
 import com.skyeshade.skyesight.client.render.entity.PortalEntityRenderContextScope;
 import com.skyeshade.skyesight.client.render.entity.PortalMultipartPartEligibility;
 import com.skyeshade.skyesight.client.render.entity.PortalRenderableEntity;
 import com.skyeshade.skyesight.mixin.client.EntityRenderDispatcherAccessor;
-import com.skyeshade.skyesight.client.world.SkyesightVisualEntity;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -17,7 +15,6 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.core.BlockPos;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
@@ -33,7 +30,6 @@ import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -49,195 +45,6 @@ public final class SecondaryEntityPass {
 
     private SecondaryEntityPass() {}
 
-    public static Result render(
-            SecondaryViewFrame frame,
-            SecondaryRemoteEntityTracker tracker,
-            Minecraft minecraft,
-            Vec3 aabbCenter,
-            double radius,
-            float partialTick
-    ) {
-        if (minecraft.level == null || minecraft.player == null) {
-            return Result.empty();
-        }
-
-        ClientLevel level = minecraft.level;
-        Vec3 cameraPosition = frame.camera().getPosition();
-        BlockPos cameraBlockPos = BlockPos.containing(cameraPosition);
-        ChunkPos cameraChunkPos = new ChunkPos(cameraBlockPos);
-        int configuredEntityChunkRadius = frame.diagnostics().entityChunkRadius();
-        int portalEntityChunkRadius = Math.max(
-                0,
-                configuredEntityChunkRadius > 0
-                        ? configuredEntityChunkRadius
-                        : DEFAULT_PORTAL_ENTITY_RENDER_CHUNK_RADIUS
-        );
-        double portalEntityBlockRadius = portalEntityChunkRadius * 16.0D + PORTAL_ENTITY_RENDER_MARGIN_BLOCKS;
-        double minEntityY = Math.max(level.getMinBuildHeight(), cameraPosition.y() - portalEntityBlockRadius);
-        double maxEntityY = Math.min(level.getMaxBuildHeight(), cameraPosition.y() + portalEntityBlockRadius);
-        AABB bounds = new AABB(
-                cameraPosition.x() - portalEntityBlockRadius,
-                minEntityY,
-                cameraPosition.z() - portalEntityBlockRadius,
-                cameraPosition.x() + portalEntityBlockRadius,
-                maxEntityY,
-                cameraPosition.z() + portalEntityBlockRadius
-        );
-        Collection<Entity> portalEntityCandidates = level.getEntitiesOfClass(Entity.class, bounds, entity -> true);
-        int duplicateRenderAttempts = 0;
-        PoseStack poseStack = createEntityPoseStack();
-        MultiBufferSource.BufferSource bufferSource = minecraft.renderBuffers().bufferSource();
-        EntityRenderDispatcher dispatcher = minecraft.getEntityRenderDispatcher();
-        EntityRenderDispatcherAccessor dispatcherAccessor = (EntityRenderDispatcherAccessor) dispatcher;
-        Matrix4f projectionBefore = new Matrix4f(RenderSystem.getProjectionMatrix());
-        VertexSorting vertexSortingBefore = RenderSystem.getVertexSorting();
-        var modelViewStack = RenderSystem.getModelViewStack();
-        ShaderInstance shaderBefore = RenderSystem.getShader();
-        int texture0Before = RenderSystem.getShaderTexture(0);
-        float[] shaderColorBefore = RenderSystem.getShaderColor().clone();
-        Level dispatcherLevelBefore = dispatcherAccessor.skyesight$getLevel();
-        Camera dispatcherCameraBefore = dispatcher.camera;
-        Entity dispatcherCrosshairBefore = dispatcher.crosshairPickEntity;
-        Quaternionf dispatcherOrientationBefore = dispatcherAccessor.skyesight$getCameraOrientation() == null
-                ? null
-                : new Quaternionf(dispatcherAccessor.skyesight$getCameraOrientation());
-        int clientConsidered = 0;
-        int skippedOutsideAabb = 0;
-        int skippedChunkRange = 0;
-        int skippedDistance = 0;
-        int skippedFrustum = 0;
-        int rendered = 0;
-        boolean entityFrustumCullingEnabled = SkyesightClientConfig.enablePortalEntityFrustumCulling();
-        boolean entityFrustumAvailable = entityFrustumCullingEnabled && frame.frustum() != null;
-        int framebufferBeforePass = GL30.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
-
-        modelViewStack.pushMatrix();
-
-        try {
-            if (!frame.diagnostics().renderToCurrentTarget()) {
-                frame.colorTarget().bindWrite(true);
-                RenderSystem.viewport(0, 0, frame.viewportWidth(), frame.viewportHeight());
-            }
-            RenderSystem.setProjectionMatrix(frame.projectionMatrix(), VertexSorting.DISTANCE_TO_ORIGIN);
-            modelViewStack.identity();
-            modelViewStack.mul(frame.modelViewMatrix());
-            RenderSystem.applyModelViewMatrix();
-
-            RenderSystem.enableDepthTest();
-
-            RenderSystem.depthMask(true);
-            RenderSystem.disableBlend();
-            RenderSystem.enableCull();
-            RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-            dispatcher.prepare(level, frame.camera(), minecraft.crosshairPickEntity);
-
-            for (Entity entity : portalEntityCandidates) {
-
-                if (entity.isRemoved()) {
-                    continue;
-                }
-
-                ChunkPos entityChunkPos = entity.chunkPosition();
-                int chunkDistanceX = Math.abs(entityChunkPos.x - cameraChunkPos.x);
-                int chunkDistanceZ = Math.abs(entityChunkPos.z - cameraChunkPos.z);
-
-                if (chunkDistanceX > portalEntityChunkRadius || chunkDistanceZ > portalEntityChunkRadius) {
-                    skippedChunkRange++;
-                    continue;
-                }
-
-                if (!bounds.intersects(entity.getBoundingBoxForCulling())) {
-                    skippedOutsideAabb++;
-                    continue;
-                }
-
-                double horizontalDistanceSquared = horizontalDistanceSquared(entity.position(), cameraPosition);
-
-                if (horizontalDistanceSquared > portalEntityBlockRadius * portalEntityBlockRadius) {
-                    skippedDistance++;
-                    continue;
-                }
-
-                clientConsidered++;
-
-                if (entityFrustumAvailable
-                        && !frame.frustum().isVisible(entityFrustumCullBox(entity))) {
-                    skippedFrustum++;
-                    continue;
-                }
-
-                Vec3 renderPosition = lerpedPosition(entity, partialTick);
-                Vec3 renderCoordinates = renderCoordinates(renderPosition, cameraPosition);
-                renderEntityWithDispatcher(
-                        entity,
-                        renderCoordinates,
-                        partialTick,
-                        poseStack,
-                        bufferSource,
-                        dispatcher,
-                        false,
-                        true,
-                        -1
-                );
-                rendered++;
-            }
-
-            bufferSource.endBatch();
-
-            dispatcher.prepare(dispatcherLevelBefore, dispatcherCameraBefore, dispatcherCrosshairBefore);
-            if (dispatcherOrientationBefore != null) {
-                dispatcher.overrideCameraOrientation(dispatcherOrientationBefore);
-            }
-
-            modelViewStack.popMatrix();
-            RenderSystem.applyModelViewMatrix();
-            RenderSystem.setProjectionMatrix(projectionBefore, vertexSortingBefore);
-            restoreFramebuffer(minecraft, framebufferBeforePass);
-            restoreCommonRenderState(shaderColorBefore, shaderBefore, texture0Before);
-            return Result.success(
-                    clientConsidered,
-                    rendered,
-                    skippedOutsideAabb + skippedChunkRange,
-                    skippedDistance,
-                    skippedFrustum,
-                    duplicateRenderAttempts
-            );
-        } catch (RuntimeException exception) {
-            bufferSource.endBatch();
-            try {
-                dispatcher.prepare(dispatcherLevelBefore, dispatcherCameraBefore, dispatcherCrosshairBefore);
-                if (dispatcherOrientationBefore != null) {
-                    dispatcher.overrideCameraOrientation(dispatcherOrientationBefore);
-                }
-            } catch (RuntimeException ignored) {
-
-            }
-            try {
-                modelViewStack.popMatrix();
-                RenderSystem.applyModelViewMatrix();
-            } catch (RuntimeException ignored) {
-                // Preserve the original exception
-            }
-            RenderSystem.setProjectionMatrix(projectionBefore, vertexSortingBefore);
-            restoreFramebuffer(minecraft, framebufferBeforePass);
-            restoreCommonRenderState(shaderColorBefore, shaderBefore, texture0Before);
-            return Result.failed(
-                    clientConsidered,
-                    rendered,
-                    skippedOutsideAabb + skippedChunkRange,
-                    skippedDistance,
-                    skippedFrustum,
-                    duplicateRenderAttempts,
-                    exception
-            );
-        } finally {
-            bufferSource.endBatch();
-            restoreCommonRenderState(shaderColorBefore, shaderBefore, texture0Before);
-        }
-    }
-
-
-
     public static Result renderPortalEntities(
             SecondaryViewFrame frame,
             Minecraft minecraft,
@@ -250,14 +57,24 @@ public final class SecondaryEntityPass {
             boolean renderProofBox,
             int expectedFramebufferId
     ) {
-        boolean stencilEnabled = false;
-
-        try {
-            stencilEnabled = GL11.glIsEnabled(GL11.GL_STENCIL_TEST);
-        } catch (RuntimeException ignored) {
-            // Treat stencil query failures as inactive.
+        if (!GL11.glIsEnabled(GL11.GL_STENCIL_TEST)) {
+            return Result.skipped("stencil inactive");
         }
-
+        return renderSceneEntities(frame, minecraft, renderLevel, renderableEntities, portalEntityChunkRadius,
+                partialTick, renderSlotMarkers, renderDepthOffSlotMarker, renderProofBox, expectedFramebufferId);
+    }
+    public static Result renderSceneEntities(
+            SecondaryViewFrame frame,
+            Minecraft minecraft,
+            ClientLevel renderLevel,
+            Iterable<PortalRenderableEntity> renderableEntities,
+            int portalEntityChunkRadius,
+            float partialTick,
+            boolean renderSlotMarkers,
+            boolean renderDepthOffSlotMarker,
+            boolean renderProofBox,
+            int expectedFramebufferId
+    ) {
         String earlyReturnReason = "";
 
         if (frame == null) {
@@ -272,8 +89,7 @@ public final class SecondaryEntityPass {
             earlyReturnReason = "level null";
         } else if (renderableEntities == null) {
             earlyReturnReason = "source null";
-        } else if (!stencilEnabled) {
-            earlyReturnReason = "stencil inactive";
+
         }
 
         if (!earlyReturnReason.isBlank()) {

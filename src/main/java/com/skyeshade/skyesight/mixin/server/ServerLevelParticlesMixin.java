@@ -10,6 +10,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(ServerLevel.class)
 public abstract class ServerLevelParticlesMixin {
+    @Inject(method = "sendParticles(Lnet/minecraft/server/level/ServerPlayer;Lnet/minecraft/core/particles/ParticleOptions;ZDDDIDDDD)Z", at = @At("TAIL"))
+    private <T extends ParticleOptions> void skyesight$onTargetedParticles(
+            net.minecraft.server.level.ServerPlayer player, T type, boolean force,
+            double x, double y, double z, int count, double dx, double dy, double dz, double speed,
+            CallbackInfoReturnable<Boolean> cir) {
+        SkyesightServerParticleBroadcaster.send((ServerLevel) (Object) this, player, type, force, x, y, z, count, dx, dy, dz, speed);
+    }
     @Inject(
             method = "sendParticles(Lnet/minecraft/core/particles/ParticleOptions;DDDIDDDD)I",
             at = @At("TAIL")

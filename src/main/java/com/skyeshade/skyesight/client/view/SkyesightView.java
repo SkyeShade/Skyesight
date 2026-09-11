@@ -14,23 +14,23 @@ import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.SkyesightDebugConfig;
 import com.skyeshade.skyesight.client.SkyesightClientThreading;
 import com.skyeshade.skyesight.client.render.PortalSecondaryWorldRenderer;
+import com.skyeshade.skyesight.client.render.SecondarySceneEnvironmentRenderer;
+import com.skyeshade.skyesight.client.render.SecondarySceneFrame;
+import com.skyeshade.skyesight.client.render.SecondarySceneOutputState;
+import com.skyeshade.skyesight.client.render.SecondarySceneRenderer;
+import com.skyeshade.skyesight.client.render.SecondaryViewFrame;
 import com.skyeshade.skyesight.client.render.SecondaryViewContext;
 import com.skyeshade.skyesight.client.render.SkyesightCameraMatrices;
 import com.skyeshade.skyesight.client.render.SkyesightCameraOutput;
 import com.skyeshade.skyesight.client.render.SkyesightFrustumFactory;
 import com.skyeshade.skyesight.client.render.SkyesightProjectionMatrices;
 import com.skyeshade.skyesight.client.render.SkyesightProjectionScope;
-import com.skyeshade.skyesight.client.render.env.SkyesightEnvironmentRendererSelector;
-import com.skyeshade.skyesight.client.render.fog.SkyesightFogRenderer;
-import com.skyeshade.skyesight.client.render.light.SkyesightLightTextureUpdater;
 import com.skyeshade.skyesight.client.world.SkyesightClientChunkRequester;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorld;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorldManager;
 import com.skyeshade.skyesight.network.SkyesightRemoteViewLifecyclePayload;
 import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry;
-import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
@@ -51,6 +51,7 @@ public final class SkyesightView implements SkyesightViewHandle {
     private final SkyesightInternalCamera camera;
     private final SkyesightRenderMode renderMode;
     private final SecondaryViewContext secondaryViewContext = new SecondaryViewContext();
+
 
     private ResourceKey<Level> dimension;
     private int renderDistanceChunks;
@@ -342,186 +343,68 @@ public final class SkyesightView implements SkyesightViewHandle {
             return;
         }
 
-        if (canUseSharedOffscreenRenderer(minecraft)) {
-            retireRemoteRegistration();
-            this.target = PortalSecondaryWorldRenderer.renderCameraViewToTexture(
-                    this.secondaryViewContext,
-                    minecraft,
-                    partialTick,
-                    this.camera.position(),
-                    this.camera.rotation(),
-                    this.id,
-                    this.width,
-                    this.height,
-                    this.fov,
-                    this.renderDistanceChunks,
-                    this.renderOptions.sky(),
-                    this.renderOptions.terrain(),
-                    this.renderOptions.blockEntities(),
-                    this.renderOptions.entities(),
-                    this.renderOptions.particles(),
-                    this.renderOptions.publishWatchRegion()
-            );
-            return;
+        if (!ensureRemoteRegistration(minecraft)) return;
+        SkyesightVisualWorld visualWorld = null;
+        if (!this.dimension.equals(minecraft.level.dimension())) {
+            visualWorld = SkyesightVisualWorldManager.getOrCreate(this.id, this.dimension);
+            if (visualWorld == null || visualWorld.isClosed()) return;
+            SkyesightClientChunkRequester.requestChunksFor(this.id, this.dimension, this.camera.minecraftCamera(),
+                    com.skyeshade.skyesight.remote.SkyesightRemoteRadiusPolicy.loadRadius(this.renderDistanceChunks, this.remoteLoadRadiusLimit));
+            logRemoteDiagnostics(visualWorld);
         }
-
-        if (!ensureRemoteRegistration(minecraft)) {
-            return;
+        var level = visualWorld == null ? minecraft.level : visualWorld.level();
+        var explicitPosition = this.camera.position();
+        var explicitRotation = new Quaternionf(this.camera.rotation());
+        this.camera.minecraftCamera().setup(level, minecraft.player, false, false, partialTick);
+        this.camera.setPosition(explicitPosition);
+        this.camera.setRotation(explicitRotation);
+        var frame = new SecondaryViewFrame(this.camera.minecraftCamera(), this.target, this.width, this.height,
+                renderProjectionMatrix, modelMatrix, terrainCullingProjectionMatrix,
+                SkyesightFrustumFactory.create(this.camera.minecraftCamera(), modelMatrix, terrainCullingProjectionMatrix));
+        var options = frame.diagnostics();
+        options.setCameraView(true);
+        options.setRenderToCurrentTarget(true);
+        options.setEntityWatchRegionId(this.id);
+        options.setPortalInstanceId(this.id.toString());
+        options.setTerrainChunkRadius(this.renderDistanceChunks);
+        options.setPortalOwnedRenderRadiusChunks(this.renderDistanceChunks);
+        options.setSameDimPlayerLoadedReuseRadiusChunks(this.renderDistanceChunks);
+        options.setEntityChunkRadius(this.renderDistanceChunks);
+        options.setBlockEntityChunkRadius(this.renderDistanceChunks);
+        options.setBlockUpdateChunkRadius(this.renderDistanceChunks);
+        options.setRenderTerrain(this.renderOptions.terrain());
+        options.setRenderSky(false);
+        options.setRenderTranslucent(true);
+        options.setRenderEntities(this.renderOptions.entities());
+        options.setRenderBlockEntities(this.renderOptions.blockEntities());
+        options.setRenderParticles(this.renderOptions.particles());
+        options.setPublishEntityWatchRegion(this.renderOptions.publishWatchRegion());
+        if (visualWorld == null && this.renderOptions.publishWatchRegion()) {
+            PortalSecondaryWorldRenderer.updateSecondaryChunkWatchRegionIfNeeded(minecraft, frame, this.secondaryViewContext);
+            PortalSecondaryWorldRenderer.updateRemoteEntityTrackingIfEnabled(frame, this.secondaryViewContext, minecraft);
         }
-
-        SkyesightVisualWorld visualWorld =
-                SkyesightVisualWorldManager.getOrCreate(this.id, this.dimension);
-
-        if (visualWorld == null || visualWorld.isClosed()) {
-            return;
-        }
-
-        SkyesightClientChunkRequester.requestChunksFor(
-                this.id,
-                this.dimension,
-                this.camera.minecraftCamera(),
-                // One extra ring keeps edge meshes supplied; draw distance remains view-specific.
-                com.skyeshade.skyesight.remote.SkyesightRemoteRadiusPolicy.loadRadius(this.renderDistanceChunks, this.remoteLoadRadiusLimit)
-        );
-        logRemoteDiagnostics(visualWorld);
-
-        Frustum frustum = SkyesightFrustumFactory.create(
-                this.camera.minecraftCamera(),
-                modelMatrix,
-                terrainCullingProjectionMatrix
-        );
-
-        this.target.bindWrite(true);
-        RenderSystem.viewport(0, 0, this.width, this.height);
-
+        var scene = new SecondarySceneFrame(this.id, level, visualWorld, frame, this.secondaryViewContext,
+                partialTick, this.target, () -> {});
+        var saved = SecondarySceneOutputState.capture();
+        boolean previousSecondary = com.skyeshade.skyesight.client.render.state.PortalSecondaryRenderState.renderingSecondaryView;
         try {
-            Vec3 skyColor = visualWorld.level().getSkyColor(
-                    this.camera.minecraftCamera().getPosition(),
-                    partialTick
-            );
-
-            RenderSystem.clearColor(
-                    (float) skyColor.x(),
-                    (float) skyColor.y(),
-                    (float) skyColor.z(),
-                    1.0F
-            );
-
-            RenderSystem.clear(
-                    GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT,
-                    Minecraft.ON_OSX
-            );
-
-            int fogDistanceChunks = this.renderDistanceChunks;
-
-            SkyesightFogRenderer.setupForSky(
-                    visualWorld.level(),
-                    this.camera.minecraftCamera(),
-                    partialTick,
-                    fogDistanceChunks
-            );
-
-            if (this.renderOptions.sky()) {
-                SkyesightEnvironmentRendererSelector.get().renderSky(
-                        visualWorld.level(),
-                        this.camera.minecraftCamera(),
-                        modelMatrix,
-                        cullingProjectionMatrix,
-                        partialTick
-                );
-            }
-
-            SkyesightLightTextureUpdater.updateFor(
-                    visualWorld.level(),
-                    this.camera.minecraftCamera(),
-                    partialTick
-            );
-
-            SkyesightFogRenderer.setupForTerrain(
-                    visualWorld.level(),
-                    this.camera.minecraftCamera(),
-                    partialTick,
-                    fogDistanceChunks
-            );
-
-            RenderSystem.disableCull();
-
-            if (this.renderOptions.terrain()) {
-                visualWorld.renderTerrain(
-                        this.camera.minecraftCamera(),
-                        frustum,
-                        modelMatrix,
-                        renderProjectionMatrix,
-                        this.renderDistanceChunks
-                );
-            }
-
-            RenderSystem.enableCull();
-
-            minecraft.gameRenderer.lightTexture().turnOnLightLayer();
-
-            try {
-                if (this.renderOptions.blockEntities()) {
-                    visualWorld.renderBlockEntities(
-                            this.camera.minecraftCamera(),
-                            modelMatrix,
-                            renderProjectionMatrix,
-                            partialTick
-                    );
-                }
-
-                if (this.renderOptions.entities()) {
-                    visualWorld.renderEntities(
-                            this.camera.minecraftCamera(),
-                            modelMatrix,
-                            partialTick
-                    );
-                }
-
-                if (this.renderOptions.particles()) {
-                    visualWorld.renderParticles(
-                            this.camera.minecraftCamera(),
-                            modelMatrix,
-                            renderProjectionMatrix,
-                            partialTick
-                    );
-                }
-            } finally {
-                minecraft.gameRenderer.lightTexture().turnOffLightLayer();
-            }
-            if (this.renderMode == SkyesightRenderMode.WORLD) {
-                SkyesightCameraOutput.makeOpaque(this.target);
-            }
-        } finally {
-            SkyesightFogRenderer.clear();
-            SkyesightLightTextureUpdater.restoreMain(partialTick);
-
-            minecraft.getMainRenderTarget().bindWrite(true);
-            RenderSystem.viewport(
-                    0,
-                    0,
-                    minecraft.getWindow().getWidth(),
-                    minecraft.getWindow().getHeight()
-            );
-
-            RenderSystem.disableBlend();
-            RenderSystem.enableDepthTest();
+            com.skyeshade.skyesight.client.render.state.PortalSecondaryRenderState.renderingSecondaryView = true;
+            this.target.bindWrite(true);
+            RenderSystem.disableScissor();
+            GL11.glDisable(GL11.GL_STENCIL_TEST);
+            RenderSystem.colorMask(true, true, true, true);
             RenderSystem.depthMask(true);
-            RenderSystem.enableCull();
-            RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
+            this.target.setClearColor(0, 0, 0, 1);
+            this.target.clear(Minecraft.ON_OSX);
+            this.target.bindWrite(true);
+            if (this.renderOptions.sky()) SecondarySceneEnvironmentRenderer.renderBackground(scene, this.secondaryViewContext.clouds());
+            SecondarySceneRenderer.renderContents(scene);
+            if (this.renderMode == SkyesightRenderMode.WORLD) SkyesightCameraOutput.makeOpaque(this.target);
+        } finally {
+            com.skyeshade.skyesight.client.render.state.PortalSecondaryRenderState.renderingSecondaryView = previousSecondary;
+            saved.restore();
         }
-
-
     }
-
-    private boolean canUseSharedOffscreenRenderer(Minecraft minecraft) {
-        return this.renderMode == SkyesightRenderMode.WORLD
-                && this.clipPlane == null
-                && this.projectionOverride == null
-                && minecraft.level != null
-                && this.dimension.equals(minecraft.level.dimension());
-    }
-
     private boolean ensureRemoteRegistration(Minecraft minecraft) {
         if (minecraft.level == null || this.dimension.equals(minecraft.level.dimension())) {
             retireRemoteRegistration();
@@ -637,7 +520,7 @@ public final class SkyesightView implements SkyesightViewHandle {
         SkyesightVisualWorldManager.close(this.id);
         com.skyeshade.skyesight.client.chunk.SkyesightPortalChunkStorage.clearView(this.id);
         com.skyeshade.skyesight.network.SkyesightClientChunkHandler.invalidateView(this.id);
-        SkyesightClientThreading.runOnRenderThread(this.secondaryViewContext::close);
+        SkyesightClientThreading.runOnRenderThread(() -> { this.secondaryViewContext.close(); });
     }
     @Override
     public boolean isClosed() {
