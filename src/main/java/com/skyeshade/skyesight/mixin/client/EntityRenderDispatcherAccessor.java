@@ -8,6 +8,8 @@ import org.spongepowered.asm.mixin.gen.Accessor;
 
 @Mixin(EntityRenderDispatcher.class)
 public interface EntityRenderDispatcherAccessor {
+    @Accessor("shouldRenderShadow")
+    boolean skyesight$getShouldRenderShadow();
     @Accessor("level")
     Level skyesight$getLevel();
 

@@ -13,6 +13,8 @@ import net.minecraft.world.level.Level;
 import org.joml.Matrix4f;
 
 public final class SkyesightVisualWorld implements AutoCloseable {
+    private final SecondaryDestroyProgress destroyProgress = new SecondaryDestroyProgress();
+    public SecondaryDestroyProgress destroyProgress() { return destroyProgress; }
     private final ResourceKey<Level> dimension;
     private final SkyesightVisualClientLevel level;
     private boolean closed;
@@ -185,6 +187,7 @@ public final class SkyesightVisualWorld implements AutoCloseable {
         }
 
         this.closed = true;
+        this.destroyProgress.clear();
 
         this.chunkReceiver.clear();
         this.entityStore.clear();

@@ -12,8 +12,18 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(ParticleEngine.class)
 public abstract class ParticleEngineSecondaryCaptureMixin {
+    // Includes javac's synthetic destroy lambda, where TerrainParticle is constructed.
+    // Outside a secondary capture this returns the original engine level unchanged.
+    @org.spongepowered.asm.mixin.injection.Redirect(method = "*", at = @At(value = "FIELD", opcode = org.objectweb.asm.Opcodes.GETFIELD,
+            target = "Lnet/minecraft/client/particle/ParticleEngine;level:Lnet/minecraft/client/multiplayer/ClientLevel;"))
+    private ClientLevel skyesight$debrisLevel(ParticleEngine engine) {
+        return SecondaryParticleCapture.creationLevel(((ParticleEngineAccessor) engine).skyesight$getLevel());
+    }
+
     @ModifyArg(method = "makeParticle", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/particle/ParticleProvider;createParticle(Lnet/minecraft/core/particles/ParticleOptions;Lnet/minecraft/client/multiplayer/ClientLevel;DDDDDD)Lnet/minecraft/client/particle/Particle;"), index = 1)
-    private ClientLevel skyesight$secondaryProviderLevel(ClientLevel level) { return SecondaryParticleCapture.creationLevel(level); }
+    private ClientLevel skyesight$secondaryProviderLevel(ClientLevel level) {
+        return SecondaryParticleCapture.creationLevel(level);
+    }
 
     @Inject(method = "add", at = @At("HEAD"), cancellable = true)
     private void skyesight$captureSecondaryChild(Particle particle, CallbackInfo ci) {

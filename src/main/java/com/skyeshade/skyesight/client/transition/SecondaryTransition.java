@@ -29,6 +29,8 @@ public final class SecondaryTransition implements SkyesightTransition {
     private final Object connection;
     private Status status = Status.PREPARING;
     private Destination destination;
+    // Gameplay arrival validation is player-eye based, independently of F5 camera offset.
+    private net.minecraft.world.phys.Vec3 expectedArrivalEye;
     private TextureTarget image;
     private long deadline = Util.getMillis() + 10_000;
     private boolean authoritative, renderedDestination;
@@ -187,11 +189,11 @@ public final class SecondaryTransition implements SkyesightTransition {
         if (live && portal != null && mc.player != null) {
             // Walking backwards can leave the aperture outside the frustum, so its last captured
             // camera may be several blocks old. The warmed scene is still valid; refresh its pose.
-            var camera = new com.skyeshade.skyesight.client.view.SkyesightMutableCamera();
-            camera.setRotationPublic(mc.player.getYRot(), mc.player.getXRot(), 0);
+            var camera = ((com.skyeshade.skyesight.mixin.client.GameRendererStateAccessor) mc.gameRenderer).skyesight$getMainCameraField();
             var rotation = com.skyeshade.skyesight.portal.PortalTraversalMath.rotation(portal.source().rotation(), portal.target().rotation());
+            expectedArrivalEye = com.skyeshade.skyesight.portal.PortalTraversalMath.position(portal.source(), portal.target(), mc.player.getEyePosition());
             destination = new Destination(portal.target().dimension(),
-                    com.skyeshade.skyesight.portal.PortalTraversalMath.position(portal.source(), portal.target(), mc.player.getEyePosition()),
+                    com.skyeshade.skyesight.portal.PortalTraversalMath.position(portal.source(), portal.target(), camera.getPosition()),
                     rotation.mul(new org.joml.Quaternionf(camera.rotation())), destination.projection());
         }
         if (active != this) {
@@ -286,7 +288,8 @@ public final class SecondaryTransition implements SkyesightTransition {
             RenderSystem.disableScissor();
             GL11.glDisable(GL11.GL_STENCIL_TEST);
             var camera = new SkyesightInternalCamera();
-            camera.minecraftCamera().setup(original.level(), mc.player, false, false, partialTick);
+            var perspective = mc.options.getCameraType();
+            camera.minecraftCamera().setup(original.level(), mc.getCameraEntity(), !perspective.isFirstPerson(), perspective.isMirrored(), partialTick);
             camera.setPosition(position);
             camera.setRotation(rotation);
             // Handoff takes over the player's viewport, including its FOV/aspect and bob phase.
@@ -310,6 +313,7 @@ public final class SecondaryTransition implements SkyesightTransition {
             frame.diagnostics().setRenderTerrain(original.options().terrain());
             frame.diagnostics().setRenderTranslucent(original.options().translucent());
             frame.diagnostics().setEntityWatchRegionId(original.viewId());
+            if (transition.portal != null) frame.diagnostics().setPortalInstanceId(original.viewId().toString());
             frame.diagnostics().setTerrainChunkRadius(radius);
             frame.diagnostics().setPortalOwnedRenderRadiusChunks(PlayerPerspectiveViews.radius(original.viewId(), original.view().diagnostics().portalOwnedRenderRadiusChunks()));
             frame.diagnostics().setSameDimPlayerLoadedReuseRadiusChunks(original.view().diagnostics().sameDimPlayerLoadedReuseRadiusChunks());
@@ -348,7 +352,7 @@ public final class SecondaryTransition implements SkyesightTransition {
         var mc = Minecraft.getInstance();
         if (t == null || !t.presenting()) return;
         if (mc.level == null || mc.player == null || !t.destination.dimension().equals(mc.level.dimension())
-                || mc.player.getEyePosition().distanceToSqr(t.destination.eyePosition()) > 4) {
+                || mc.player.getEyePosition().distanceToSqr(t.expectedArrivalEye == null ? t.destination.eyePosition() : t.expectedArrivalEye) > 4) {
             t.finish(Status.FALLBACK);
             return;
         }
@@ -434,10 +438,10 @@ public final class SecondaryTransition implements SkyesightTransition {
                 t.coverageReadyFrames = 0;
                 return;
             }
-            float partial = mc.getTimer().getGameTimeDeltaPartialTick(true);
-            var expected = new com.skyeshade.skyesight.client.view.SkyesightMutableCamera();
-            expected.setRotationPublic(mc.player.getViewYRot(partial), mc.player.getViewXRot(partial), 0);
-            if (camera.getPosition().distanceToSqr(mc.player.getEyePosition(partial)) > .0025
+            // Live presentation consumes this same vanilla camera, including F5 offset,
+            // front-view rotation, eye-height smoothing and camera collision.
+            var expected = ((com.skyeshade.skyesight.mixin.client.GameRendererStateAccessor) mc.gameRenderer).skyesight$getMainCameraField();
+            if (camera.getPosition().distanceToSqr(expected.getPosition()) > .0025
                     || Math.abs(camera.rotation().dot(expected.rotation())) < Math.cos(Math.toRadians(.5) / 2)) {
                 t.coverageReadyFrames = 0;
                 return;
@@ -472,10 +476,7 @@ public final class SecondaryTransition implements SkyesightTransition {
                 t.finish(Status.FALLBACK); return;
             }
             float partialTick = mc.getTimer().getGameTimeDeltaPartialTick(true);
-            var camera = new com.skyeshade.skyesight.client.view.SkyesightMutableCamera();
-            camera.setup(mc.level, mc.player, false, false, partialTick);
-            camera.setPositionPublic(mc.player.getEyePosition(partialTick));
-            camera.setRotationPublic(mc.player.getViewYRot(partialTick), mc.player.getViewXRot(partialTick), 0);
+            var camera = ((com.skyeshade.skyesight.mixin.client.GameRendererStateAccessor) mc.gameRenderer).skyesight$getMainCameraField();
             var position = camera.getPosition();
             var rotation = new org.joml.Quaternionf(camera.rotation());
             if (!t.authoritative && t.awaitingDestinationPosition) {

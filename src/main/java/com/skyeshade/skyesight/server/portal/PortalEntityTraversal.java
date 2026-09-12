@@ -63,7 +63,7 @@ public final class PortalEntityTraversal {
         states.keySet().removeIf(key -> links.stream().noneMatch(link -> key.equals(new Key(link.id(), link.revision()))));
         Link closest = null; Vec3 closestHit = null;
         for (Link link : links) {
-            if (link.source().equals(EXIT_GUARDS.get(entity))) continue;
+            if (link.source().equals(EXIT_GUARDS.get(entity)) || !link.backface() && PortalTraversalMath.local(link.source(),sample.position).z < 0) continue;
             var a = PortalTraversalMath.local(link.source(), sample.position);
             var b = PortalTraversalMath.local(link.source(), entity.position());
             if (Math.min(Math.abs(a.z), Math.abs(b.z)) > entity.getBbWidth() + .1 && a.z * b.z > 0) {
@@ -95,7 +95,7 @@ public final class PortalEntityTraversal {
         // its drag/gravity update, then perform the ordered dimension transition at tick end.
         Vec3 end = sample.position.add(entity.getDeltaMovement());
         for (Link link : TraversalPortalManager.links(entity.level().dimension())) {
-            if (link.source().equals(EXIT_GUARDS.get(entity))) continue;
+            if (link.source().equals(EXIT_GUARDS.get(entity)) || !link.backface() && PortalTraversalMath.local(link.source(),sample.position).z < 0) continue;
             Vec3 a = PortalTraversalMath.local(link.source(), sample.position), b = PortalTraversalMath.local(link.source(), end);
             if (a.z * b.z >= 0 || a.z == b.z) continue;
             Vec3 hit = sample.position.lerp(end, a.z / (a.z - b.z));
@@ -108,7 +108,7 @@ public final class PortalEntityTraversal {
         }
     }
     private static boolean fits(Entity entity, Link link, Vec3 at) {
-        return PortalTraversalMath.fitsBody(link.source(), entity.getBoundingBox().move(at.subtract(entity.position())));
+        return com.skyeshade.skyesight.api.PortalAperture.fits(link, entity.getBoundingBox().move(at.subtract(entity.position())));
     }
     private static boolean teleport(Entity entity, Link link, Vec3 intersection) {
         var source = (ServerLevel) entity.level();
@@ -117,7 +117,10 @@ public final class PortalEntityTraversal {
         var pose = PortalTraversalMath.transform(link.source(), link.target(), entity.position(),
                 entity.getDeltaMovement(), entity.getYRot(), entity.getXRot());
         var exit = PortalTraversalMath.position(link.source(), link.target(), intersection);
-        if (!PortalTraversalMath.fitsBody(link.target(), entity.getBoundingBox().move(exit.subtract(entity.position())))) return false;
+                var exitLink=TraversalPortalManager.links(link.target().dimension()).stream()
+                .filter(l -> l.id().equals(com.skyeshade.skyesight.network.SkyesightTraversalPayload.pairedPortalId(link.id()))).findFirst().orElse(null);
+        var exitBounds=com.skyeshade.skyesight.portal.PortalCollisionMath.transform(entity.getBoundingBox().move(intersection.subtract(entity.position())),link.source(),link.target());
+        if(exitLink==null || !com.skyeshade.skyesight.api.PortalAperture.fits(exitLink,exitBounds)) return false;
         destination.getChunkAt(net.minecraft.core.BlockPos.containing(pose.position()));
         Entity owner = entity instanceof Projectile projectile ? projectile.getOwner() : null;
         float head = entity.getYHeadRot();

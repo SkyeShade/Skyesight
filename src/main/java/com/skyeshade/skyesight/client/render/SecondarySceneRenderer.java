@@ -75,6 +75,10 @@ public final class SecondarySceneRenderer {
                     }
                 }
             }
+            if (terrainRendered) {
+                prepare(scene);
+                com.skyeshade.skyesight.client.portal.PortalInteractionClient.render(scene);
+            }
         } finally {
             minecraft.gameRenderer.lightTexture().turnOffLightLayer();
             SkyesightLightTextureUpdater.restoreMain(partialTick);
@@ -117,7 +121,8 @@ public final class SecondarySceneRenderer {
             entities = PortalDimensionEntitySources.renderableVisualEntitiesForDimension(scene.viewId(), scene.visualWorld(),
                     scene.level().dimension(), bounds, frame.frustum());
         }
-        if (com.skyeshade.skyesight.client.transition.SecondaryTransition.renderingPrimaryPresentation() && Minecraft.getInstance().player != null)
+        if (com.skyeshade.skyesight.client.transition.SecondaryTransition.renderingPrimaryPresentation() && Minecraft.getInstance().player != null
+                && Minecraft.getInstance().options.getCameraType().isFirstPerson())
             entities = entities.stream().filter(entry -> !entry.entity().getUUID().equals(Minecraft.getInstance().player.getUUID())).toList();
         SecondaryEntityPass.renderSceneEntities(frame, Minecraft.getInstance(), scene.level(), entities,
                 scene.options().entityRadius(), scene.partialTick(), false, false, false, scene.output().frameBufferId);

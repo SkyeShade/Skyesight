@@ -104,12 +104,18 @@ public final class PortalDimensionEntitySources {
 
         String source = "visual_world:" + viewId;
 
+        var localPlayer = net.minecraft.client.Minecraft.getInstance().player;
+        if (localPlayer != null && isRenderableInDimension(localPlayer, localPlayer.level().dimension(), targetDimension, bounds, frustum)) {
+            result.add(new PortalRenderableEntity(localPlayer, targetDimension, "local-live", null, null, true, false, -1));
+        }
+
         for (SkyesightVisualEntity visualEntity : visualWorld.entityStore().entities()) {
             if (visualEntity == null) {
                 continue;
             }
 
             Entity entity = visualEntity.entity();
+            if (entity != null && localPlayer != null && entity.getUUID().equals(localPlayer.getUUID())) continue;
             if (PortalMultipartEntityUtil.shouldSkipStandaloneVisualEntity(entity)) {
                 PortalMultipartEntityUtil.warnSkippedStandalonePart(entity, "renderable_visual_entity_source");
                 continue;

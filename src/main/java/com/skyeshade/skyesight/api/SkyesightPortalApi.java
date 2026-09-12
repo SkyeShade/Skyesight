@@ -7,6 +7,39 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class SkyesightPortalApi {
+    /**
+     * Register or replace one authoritative, session-scoped pair on the server thread.
+     * Persist the identity/endpoints/settings in the caller's saved data and re-register on load.
+     * Direction IDs are stable across updates. Existing client-only overloads remain visual-only.
+     */
+    public static void registerPortalPair(net.minecraft.server.MinecraftServer server, java.util.UUID pairId,
+                                          PortalEndpoint a, PortalEndpoint b, PortalPairSettings settings) {
+        if (!server.isSameThread()) throw new IllegalStateException("Portal registration requires the server thread");
+        java.util.Objects.requireNonNull(pairId);
+        java.util.Objects.requireNonNull(settings);
+        if (server.getLevel(a.dimension()) == null || server.getLevel(b.dimension()) == null)
+            throw new IllegalArgumentException("Missing portal dimension");
+        if (settings.behavior() == PortalBehavior.TRAVERSABLE
+                && (!com.skyeshade.skyesight.portal.PortalCollisionMath.supported(a)
+                || !com.skyeshade.skyesight.portal.PortalCollisionMath.supported(b)))
+            throw new IllegalArgumentException("Gameplay collision currently requires upright cardinal endpoints");
+        com.skyeshade.skyesight.server.portal.TraversalPortalManager.registerPair(server, pairId, a, b, settings);
+    }
+
+    public static void registerPortalPair(net.minecraft.server.MinecraftServer server, java.util.UUID pairId,
+                                          PortalEndpoint a, PortalEndpoint b) {
+        registerPortalPair(server, pairId, a, b, PortalPairSettings.defaults());
+    }
+
+    public static void removePortalPair(net.minecraft.server.MinecraftServer server, java.util.UUID pairId) {
+        if (!server.isSameThread()) throw new IllegalStateException("Portal removal requires the server thread");
+        com.skyeshade.skyesight.server.portal.TraversalPortalManager.removePair(server, pairId);
+    }
+
+    public static ResourceLocation portalDirectionId(java.util.UUID pairId, boolean fromA) {
+        return ResourceLocation.parse(com.skyeshade.skyesight.network.SkyesightTraversalPayload.portalId(pairId, fromA));
+    }
+
     private SkyesightPortalApi() {
     }
 
