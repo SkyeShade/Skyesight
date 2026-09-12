@@ -135,7 +135,7 @@ public final class SecondaryEntityPass {
         Set<String> renderedParentSignatures = new HashSet<>();
         int framebufferBeforePass = GL30.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
         List<PortalRenderableEntity> renderableList = materializeRenderables(renderableEntities);
-        if (renderableList.isEmpty()) {
+        if (renderableList.isEmpty() && com.skyeshade.skyesight.client.transition.TraversalPortalClient.interactionLinks(renderLevel.dimension()).isEmpty()) {
             return Result.skipped("source empty");
         }
 
@@ -173,7 +173,9 @@ public final class SecondaryEntityPass {
                     renderLevel.dimension(),
                     scopeSource
             )) {
-                for (PortalRenderableEntity renderableEntity : renderableList) {
+                for (PortalRenderableEntity originalEntity : renderableList) {
+                    PortalRenderableEntity renderableEntity = com.skyeshade.skyesight.client.render.entity.PortalEntitySplicing.localPose(originalEntity, renderLevel.dimension());
+                    if (renderableEntity == null) continue;
                     total++;
                     if (!renderableEntity.standalonePart()
                             && suppressDuplicateVisualParent(
@@ -273,6 +275,8 @@ public final class SecondaryEntityPass {
             }
 
             bufferSource.endBatch();
+            com.skyeshade.skyesight.client.render.entity.PortalEntitySplicing.projections(renderLevel,frame.camera(),poseStack,partialTick,
+                    frame.diagnostics().portalInstanceId() == null ? frame.diagnostics().entityWatchRegionId() : ResourceLocation.tryParse(frame.diagnostics().portalInstanceId()));
             PortalProxyMarkerRenderer.renderMarkers(renderLevel, frame.camera(), poseStack, true);
             PortalLookMarkerRenderer.renderMarkers(renderLevel, frame.camera(), poseStack, true);
 
@@ -440,7 +444,7 @@ public final class SecondaryEntityPass {
                 renderCoordinates.x(),
                 renderCoordinates.y(),
                 renderCoordinates.z(),
-                entity.getYRot(),
+                Mth.lerp(partialTick, entity.yRotO, entity.getYRot()),
                 partialTick,
                 poseStack,
                 bufferSource,

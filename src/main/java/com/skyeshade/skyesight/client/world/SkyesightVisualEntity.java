@@ -25,6 +25,8 @@ public final class SkyesightVisualEntity {
     private Vec3 currentPosition;
 
     private int tickCount;
+    private final int initialItemAge;
+    private final long itemClockStart;
 
     private float walkPosition;
     private float walkSpeed;
@@ -65,6 +67,10 @@ public final class SkyesightVisualEntity {
         long now = animationTimeMillis();
 
         this.entity = entity;
+        this.initialItemAge = entry.itemAge();
+        this.itemClockStart = (long) SecondaryEntityClock.tickTime();
+        if (entity instanceof net.minecraft.world.entity.item.ItemEntity item)
+            ((com.skyeshade.skyesight.mixin.common.ItemEntityAnimationAccessor) item).skyesight$setVisualBob(entry.itemBob());
         this.playerBody = new RemotePlayerBody(entry.position(), entry.yBodyRot());
         acceptPose(entry, sampleTick);
 
@@ -156,6 +162,13 @@ public final class SkyesightVisualEntity {
         float elapsedTicks = elapsedAnimationTicks();
 
         this.entity.tickCount = this.tickCount + Mth.floor(elapsedTicks);
+        // Native ItemEntityRenderer adds render partial tick itself. Keep this clock integral,
+        // anchored once on creation; packet cadence and repeated renders must not reset it.
+        if (this.entity instanceof net.minecraft.world.entity.item.ItemEntity item) {
+            int age = initialItemAge == -32768 ? initialItemAge
+                    : initialItemAge + (int) ((long) SecondaryEntityClock.tickTime() - itemClockStart);
+            ((com.skyeshade.skyesight.mixin.common.ItemEntityAnimationAccessor) item).skyesight$setVisualAge(age);
+        }
 
         this.entity.setPos(position);
         this.entity.setDeltaMovement(this.deltaMovement);
@@ -386,6 +399,11 @@ public final class SkyesightVisualEntity {
 
     private static void copyRenderState(Entity source, Entity target) {
         target.tickCount = source.tickCount;
+        if (source instanceof net.minecraft.world.entity.item.ItemEntity from
+                && target instanceof net.minecraft.world.entity.item.ItemEntity to) {
+            ((com.skyeshade.skyesight.mixin.common.ItemEntityAnimationAccessor) to).skyesight$setVisualAge(from.getAge());
+            ((com.skyeshade.skyesight.mixin.common.ItemEntityAnimationAccessor) to).skyesight$setVisualBob(from.bobOffs);
+        }
         target.setPos(source.position());
         target.xo = source.xo;
         target.yo = source.yo;

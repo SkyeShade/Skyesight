@@ -18,7 +18,18 @@ public final class SkyesightPayloads {
         }
 
         PayloadRegistrar registrar = event.registrar(Skyesight.MODID)
-                .versioned("8");
+                .versioned("12");
+
+        registrar.playToServer(SkyesightPortalInteractionPayload.TYPE, SkyesightPortalInteractionPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> {
+                    if (context.player() instanceof ServerPlayer player)
+                        com.skyeshade.skyesight.server.portal.PortalInteractions.handle(player, payload);
+                }));
+        registrar.playToClient(SkyesightLevelEventPayload.TYPE, SkyesightLevelEventPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() -> SkyesightClientLevelEventHandler.handle(payload)));
+        registrar.playToClient(SkyesightPortalMiningPayload.TYPE, SkyesightPortalMiningPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() ->
+                        com.skyeshade.skyesight.client.portal.PortalInteractionClient.receive(payload)));
 
         registrar.playToClient(SkyesightTraversalPayload.TYPE, SkyesightTraversalPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() ->

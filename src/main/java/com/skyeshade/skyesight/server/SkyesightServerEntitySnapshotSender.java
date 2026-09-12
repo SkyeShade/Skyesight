@@ -203,6 +203,8 @@ public final class SkyesightServerEntitySnapshotSender {
                 entity.getYRot(),
                 entity.getXRot(),
                 entity.tickCount,
+                entity instanceof net.minecraft.world.entity.item.ItemEntity item ? item.getAge() : 0,
+                entity instanceof net.minecraft.world.entity.item.ItemEntity item ? item.bobOffs : 0,
                 yBodyRot,
                 yBodyRotO,
                 yHeadRot,

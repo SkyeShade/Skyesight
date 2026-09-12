@@ -1,7 +1,7 @@
 package com.skyeshade.skyesight.server.portal;
 
 import com.skyeshade.skyesight.Skyesight;
-import com.skyeshade.skyesight.api.PortalEndpoint;
+import com.skyeshade.skyesight.api.*;
 import com.skyeshade.skyesight.network.SkyesightTraversalPayload;
 import com.skyeshade.skyesight.portal.PortalTraversalMath;
 import net.minecraft.core.BlockPos;
@@ -19,10 +19,10 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 import java.util.*;
 
-/** Session-scoped debug infrastructure. All traversal decisions run on the server thread. */
+/** Canonical session-scoped server pair registry. All traversal decisions run on the server thread. */
 @EventBusSubscriber(modid = Skyesight.MODID)
 public final class TraversalPortalManager {
-    private record Pair(long revision, PortalEndpoint a, PortalEndpoint b) {}
+    private record Pair(long revision, PortalEndpoint a, PortalEndpoint b, PortalPairSettings settings) {}
     private record Sample(ResourceKey<Level> dimension, Vec3 feet) {}
     private static final Map<UUID, PortalEndpoint> SELECTIONS = new HashMap<>();
     private static final Map<UUID, Pair> PAIRS = new LinkedHashMap<>();
@@ -45,11 +45,12 @@ public final class TraversalPortalManager {
         if (cached != null) return cached;
         var result = new java.util.ArrayList<com.skyeshade.skyesight.api.SkyesightPortalRaycast.Link>();
         PAIRS.forEach((owner, pair) -> {
+            if (pair.settings.behavior() != PortalBehavior.TRAVERSABLE) return;
             for (boolean fromA : new boolean[]{true, false}) {
                 var source = fromA ? pair.a : pair.b; var target = fromA ? pair.b : pair.a;
-                if (source.dimension().equals(dimension)) result.add(com.skyeshade.skyesight.api.SkyesightPortalRaycast.Link.rectangle(
+                if (source.dimension().equals(dimension)) result.add(new com.skyeshade.skyesight.api.SkyesightPortalRaycast.Link(
                         net.minecraft.resources.ResourceLocation.parse(SkyesightTraversalPayload.portalId(owner, fromA)),
-                        pair.revision, source, target, true));
+                        pair.revision, source, target, pair.settings.renderBackface(), (fromA ? pair.settings.apertureA() : pair.settings.apertureB()).bind(source)));
             }
         });
         var snapshot = java.util.List.copyOf(result);
@@ -71,23 +72,33 @@ public final class TraversalPortalManager {
         player.sendSystemMessage(Component.literal("Traversal " + (a == null ? "A" : "B") + ": "
                 + endpoint.dimension().location() + " center=" + endpoint.center() + " normal=" + PortalTraversalMath.normal(endpoint)));
         if (a == null) { SELECTIONS.put(owner, endpoint); return; }
-        Pair pair = new Pair(++revision, a, endpoint);
-        PAIRS.put(owner, pair);
-        LINK_CACHE.clear();
-        PacketDistributor.sendToAllPlayers(definition(owner, pair));
+        SkyesightPortalApi.registerPortalPair(player.server, owner, a, endpoint, PortalPairSettings.of(PortalBehavior.TRAVERSABLE));
         player.sendSystemMessage(Component.literal("Created 2x3 pair " + SkyesightTraversalPayload.portalId(owner, true)
                 + " <-> " + SkyesightTraversalPayload.portalId(owner, false) + ". Walk through either side; sneak-use to remove."));
     }
     public static void clear(ServerPlayer player) {
-        UUID owner = player.getUUID(); SELECTIONS.remove(owner); Pair pair = PAIRS.remove(owner);
+        UUID owner = player.getUUID(); SELECTIONS.remove(owner);
+        SkyesightPortalApi.removePortalPair(player.server, owner);
+        player.sendSystemMessage(Component.literal("Traversal selection/pair removed."));
+    }
+    public static void registerPair(net.minecraft.server.MinecraftServer server, UUID owner, PortalEndpoint a, PortalEndpoint b) {
+        SkyesightPortalApi.registerPortalPair(server,owner,a,b,PortalPairSettings.of(PortalBehavior.TRAVERSABLE));
+    }
+    public static void registerPair(net.minecraft.server.MinecraftServer server, UUID owner, PortalEndpoint a, PortalEndpoint b, PortalPairSettings settings) {
+        var pair = new Pair(++revision, a, b, settings);
+        PAIRS.put(owner, pair); LINK_CACHE.clear();
+        SIDES.values().forEach(states -> states.keySet().removeIf(key -> key.owner.equals(owner)));
+        PacketDistributor.sendToAllPlayers(definition(owner, pair));
+    }
+    public static void removePair(net.minecraft.server.MinecraftServer server, UUID owner) {
+        Pair pair = PAIRS.remove(owner);
         LINK_CACHE.clear();
         if (pair != null) PacketDistributor.sendToAllPlayers(new SkyesightTraversalPayload(owner, pair.revision,
                 0, SkyesightTraversalPayload.REMOVE, true, null, null));
         SIDES.values().forEach(states -> states.keySet().removeIf(key -> key.owner.equals(owner)));
-        player.sendSystemMessage(Component.literal("Traversal selection/pair removed."));
     }
     private static SkyesightTraversalPayload definition(UUID owner, Pair pair) {
-        return new SkyesightTraversalPayload(owner, pair.revision, 0, SkyesightTraversalPayload.DEFINE, true, pair.a, pair.b);
+        return new SkyesightTraversalPayload(owner, pair.revision, 0, SkyesightTraversalPayload.DEFINE, true, pair.a, pair.b, Vec3.ZERO, pair.settings);
     }
     @SubscribeEvent public static void login(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer player)
@@ -116,16 +127,21 @@ public final class TraversalPortalManager {
         boolean traversed = false;
         for (var entry : PAIRS.entrySet()) {
             for (boolean fromA : new boolean[]{true, false}) {
-                Pair pair = entry.getValue(); PortalEndpoint source = fromA ? pair.a : pair.b, target = fromA ? pair.b : pair.a;
-                if (!source.dimension().equals(player.level().dimension())) continue;
+                Pair pair = entry.getValue(); if (pair.settings.behavior() != PortalBehavior.TRAVERSABLE) continue; PortalEndpoint source = fromA ? pair.a : pair.b, target = fromA ? pair.b : pair.a;
+                                if (!source.dimension().equals(player.level().dimension())) continue;
+                var aperture = fromA ? pair.settings.apertureA() : pair.settings.apertureB();
+                java.util.function.Predicate<Vec3> fits = point -> aperture.fitsPlayer(source,point,player.getBbWidth(),player.getBbHeight());
+                if (!pair.settings.renderBackface() && PortalTraversalMath.local(source,previous.feet).z < 0) continue;
                 var states = SIDES.computeIfAbsent(id, ignored -> new HashMap<>());
                 var side = states.computeIfAbsent(new SideKey(entry.getKey(), fromA, pair.revision), ignored -> {
                     var state = new com.skyeshade.skyesight.portal.PortalCrossingState();
-                    state.update(source, previous.feet, player.getBbWidth(), player.getBbHeight());
+                    state.update(source, previous.feet, fits);
                     return state;
                 });
-                Vec3 hit = side.update(source, current, player.getBbWidth(), player.getBbHeight());
+                Vec3 hit = side.update(source, current, fits);
                 if (hit == null) continue;
+                var exitShape=fromA ? pair.settings.apertureB() : pair.settings.apertureA();
+                if (!exitShape.fitsPlayer(target,PortalTraversalMath.position(source,target,hit),player.getBbWidth(),player.getBbHeight())) continue;
                 var destination = player.server.getLevel(target.dimension()); if (destination == null) continue;
                 var rotation = PortalTraversalMath.rotation(source.rotation(), target.rotation());
                 // ServerPlayer horizontal deltaMovement does not track client-controlled walking.

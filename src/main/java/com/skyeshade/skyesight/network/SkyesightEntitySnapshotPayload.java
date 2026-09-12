@@ -77,6 +77,8 @@ public record SkyesightEntitySnapshotPayload(
             float xRot = buffer.readFloat();
 
             int tickCount = buffer.readVarInt();
+            int itemAge = buffer.readVarInt();
+            float itemBob = buffer.readFloat();
 
             float yBodyRot = buffer.readFloat();
             float yBodyRotO = buffer.readFloat();
@@ -112,6 +114,7 @@ public record SkyesightEntitySnapshotPayload(
                     yRot,
                     xRot,
                     tickCount,
+                    itemAge, itemBob,
                     yBodyRot,
                     yBodyRotO,
                     yHeadRot,
@@ -177,6 +180,8 @@ public record SkyesightEntitySnapshotPayload(
             buffer.writeFloat(entity.xRot());
 
             buffer.writeVarInt(entity.tickCount());
+            buffer.writeVarInt(entity.itemAge());
+            buffer.writeFloat(entity.itemBob());
 
             buffer.writeFloat(entity.yBodyRot());
             buffer.writeFloat(entity.yBodyRotO());
@@ -278,6 +283,7 @@ public record SkyesightEntitySnapshotPayload(
             float yRot,
             float xRot,
             int tickCount,
+            int itemAge, float itemBob,
             float yBodyRot,
             float yBodyRotO,
             float yHeadRot,
