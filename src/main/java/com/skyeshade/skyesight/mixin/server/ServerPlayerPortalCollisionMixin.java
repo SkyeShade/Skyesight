@@ -6,10 +6,13 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.shapes.BooleanOp;
+import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
-import org.spongepowered.asm.mixin.Mixin;
+import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Redirect;
+import org.spongepowered.asm.mixin.Mixin;
 
 @Mixin(ServerGamePacketListenerImpl.class)
 public abstract class ServerPlayerPortalCollisionMixin {
@@ -18,9 +21,9 @@ public abstract class ServerPlayerPortalCollisionMixin {
                                                     LevelReader argumentLevel, AABB oldBox, double x, double y, double z) {
         var shapes = level.getCollisions(entity, box);
         if (!(level instanceof Level world)) return shapes;
-        var reference = new net.minecraft.world.phys.Vec3((oldBox.minX + oldBox.maxX) / 2, oldBox.minY, (oldBox.minZ + oldBox.maxZ) / 2);
-        var current = net.minecraft.world.phys.shapes.Shapes.create(box);
+        var reference = new Vec3((oldBox.minX + oldBox.maxX) / 2, oldBox.minY, (oldBox.minZ + oldBox.maxZ) / 2);
+        var current = Shapes.create(box);
         return PortalCollisions.collect(world, entity, box.minmax(oldBox), shapes, reference).stream()
-                .filter(shape -> net.minecraft.world.phys.shapes.Shapes.joinIsNotEmpty(shape, current, net.minecraft.world.phys.shapes.BooleanOp.AND)).toList();
+                .filter(shape -> Shapes.joinIsNotEmpty(shape, current, BooleanOp.AND)).toList();
     }
 }

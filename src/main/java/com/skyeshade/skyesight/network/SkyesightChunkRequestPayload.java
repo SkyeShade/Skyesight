@@ -1,6 +1,7 @@
 package com.skyeshade.skyesight.network;
 
 import com.skyeshade.skyesight.Skyesight;
+import io.netty.handler.codec.DecoderException;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
@@ -49,7 +50,7 @@ public record SkyesightChunkRequestPayload(
         int radius = buffer.readVarInt();
 
         int count = buffer.readVarInt();
-        if (count < 0 || count > 256) throw new io.netty.handler.codec.DecoderException("Remote chunk request count must be 0..256");
+        if (count < 0 || count > 256) throw new DecoderException("Remote chunk request count must be 0..256");
         List<ChunkPos> chunks = new ArrayList<>(count);
 
         for (int i = 0; i < count; i++) {

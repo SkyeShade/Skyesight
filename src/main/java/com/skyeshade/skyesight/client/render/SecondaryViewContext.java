@@ -1,10 +1,11 @@
 package com.skyeshade.skyesight.client.render;
 
 import com.mojang.blaze3d.pipeline.TextureTarget;
+import com.skyeshade.skyesight.client.transition.SecondaryTransition;
+import com.skyeshade.skyesight.client.view.SkyesightMutableCamera;
 import com.skyeshade.skyesight.PortalFirstUseTimeline;
 import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.SkyesightDebugConfig;
-import com.skyeshade.skyesight.client.view.SkyesightMutableCamera;
 import it.unimi.dsi.fastutil.longs.LongOpenHashSet;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.client.Minecraft;
@@ -437,7 +438,7 @@ public final class SecondaryViewContext {
     }
 
     public void close() {
-        if (com.skyeshade.skyesight.client.transition.SecondaryTransition.deferClose(this, this::close)) return;
+        if (SecondaryTransition.deferClose(this, this::close)) return;
         this.clouds.close();
         if (this.renderTarget != null) {
             this.renderTarget.destroyBuffers();

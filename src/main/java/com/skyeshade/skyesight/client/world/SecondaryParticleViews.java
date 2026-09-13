@@ -1,7 +1,8 @@
 package com.skyeshade.skyesight.client.world;
 
-import com.skyeshade.skyesight.client.render.SecondarySceneFrame;
 import com.skyeshade.skyesight.client.render.PortalVisualDisplayTickDriver;
+import com.skyeshade.skyesight.client.render.SecondarySceneFrame;
+import com.skyeshade.skyesight.client.transition.SecondaryTransition;
 import com.skyeshade.skyesight.mixin.client.GameRendererStateAccessor;
 import com.skyeshade.skyesight.network.SkyesightParticlePayload;
 import com.skyeshade.skyesight.network.SkyesightParticleWatchPayload;
@@ -12,6 +13,7 @@ import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.network.PacketDistributor;
+
 import java.util.*;
 
 /** Active, view-owned particle simulations. Rendering touches a lease; only client ticks advance it. */
@@ -107,7 +109,7 @@ public final class SecondaryParticleViews {
         if (view == null) return;
         // Keep the selected live scene's particles ticking across physical level replacement.
         // Capture identity so deferred cleanup cannot close a newer view with the same ID.
-        if (com.skyeshade.skyesight.client.transition.SecondaryTransition.deferClose(view.particles, () -> close(view))) return;
+        if (SecondaryTransition.deferClose(view.particles, () -> close(view))) return;
         VIEWS.remove(view.id, view);
         send(view, false);
         view.particles.setActive(false, view.center, view.radius);

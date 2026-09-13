@@ -1,5 +1,6 @@
 package com.skyeshade.skyesight.client.render;
 
+import com.mojang.blaze3d.shaders.FogShape;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.VertexSorting;
 import net.minecraft.client.renderer.ShaderInstance;
@@ -32,7 +33,7 @@ public record SecondarySceneOutputState(
         boolean[] colorMask,
         float[] shaderColor,
         float[] clearColor,
-        float fogStart, float fogEnd, com.mojang.blaze3d.shaders.FogShape fogShape, float[] fogColor,
+        float fogStart, float fogEnd, FogShape fogShape, float[] fogColor,
         int blendSrcRgb, int blendDstRgb, int blendSrcAlpha, int blendDstAlpha,
         int stencilFail, int stencilDepthFail, int stencilDepthPass,
         ShaderInstance shader

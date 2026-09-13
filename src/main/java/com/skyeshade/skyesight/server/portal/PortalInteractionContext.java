@@ -1,10 +1,14 @@
 package com.skyeshade.skyesight.server.portal;
 
 import com.skyeshade.skyesight.api.SkyesightPortalRaycast.Link;
+import com.skyeshade.skyesight.portal.PortalCollisionMath;
 import com.skyeshade.skyesight.portal.PortalTraversalMath;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * A synchronous, actor-specific interaction scope. Never moves an entity or changes world ownership.
@@ -12,26 +16,26 @@ import net.minecraft.world.entity.Entity;
 public final class PortalInteractionContext implements AutoCloseable {
     private static final ThreadLocal<PortalInteractionContext> CURRENT = new ThreadLocal<>();
     private final PortalInteractionContext previous;
-    public final net.minecraft.world.entity.player.Player player;
-    public final net.minecraft.world.level.Level level;
-    public final net.minecraft.world.level.Level sourceLevel;
-    public final net.minecraft.world.phys.Vec3 sourcePosition;
+    public final Player player;
+    public final Level level;
+    public final Level sourceLevel;
+    public final Vec3 sourcePosition;
     public final PortalTraversalMath.Pose pose;
-    public final net.minecraft.world.phys.AABB bounds;
+    public final AABB bounds;
 
-    private PortalInteractionContext(net.minecraft.world.entity.player.Player player, net.minecraft.world.level.Level level, Link link) {
+    private PortalInteractionContext(Player player, Level level, Link link) {
         this.player = player;
         this.level = level;
         this.sourceLevel = player.level();
         this.sourcePosition = player.position();
         this.pose = PortalTraversalMath.transform(link.source(), link.target(), player.position(),
                 player.getDeltaMovement(), player.getYRot(), player.getXRot());
-        this.bounds = com.skyeshade.skyesight.portal.PortalCollisionMath.transform(player.getBoundingBox(), link.source(), link.target());
+        this.bounds = PortalCollisionMath.transform(player.getBoundingBox(), link.source(), link.target());
         previous = CURRENT.get();
         CURRENT.set(this);
     }
 
-    public static PortalInteractionContext open(net.minecraft.world.entity.player.Player player, net.minecraft.world.level.Level level, Link link) {
+    public static PortalInteractionContext open(Player player, Level level, Link link) {
         return new PortalInteractionContext(player, level, link);
     }
 

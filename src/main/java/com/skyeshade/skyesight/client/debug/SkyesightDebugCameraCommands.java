@@ -8,6 +8,7 @@ import com.skyeshade.skyesight.api.SkyesightViewRenderOptions;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.commands.Commands;
+import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.phys.Vec3;
@@ -16,6 +17,8 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.RegisterClientCommandsEvent;
 import org.joml.Quaternionf;
+
+import java.util.Locale;
 
 /**
  * Minimal client-side integration test for the public camera API.
@@ -61,7 +64,7 @@ public final class SkyesightDebugCameraCommands {
         );
     }
 
-    private static int createFromCurrentCamera(net.minecraft.commands.CommandSourceStack source, int width, int height) {
+    private static int createFromCurrentCamera(CommandSourceStack source, int width, int height) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.level == null) {
             source.sendFailure(Component.literal("[Skyesight] No client level is loaded."));
@@ -91,7 +94,7 @@ public final class SkyesightDebugCameraCommands {
         return 1;
     }
 
-    private static int renderFromCurrentCamera(net.minecraft.commands.CommandSourceStack source) {
+    private static int renderFromCurrentCamera(CommandSourceStack source) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.level == null) {
             source.sendFailure(Component.literal("[Skyesight] No client level is loaded."));
@@ -112,7 +115,7 @@ public final class SkyesightDebugCameraCommands {
         return 1;
     }
 
-    private static int status(net.minecraft.commands.CommandSourceStack source) {
+    private static int status(CommandSourceStack source) {
         SkyesightCameraView view = SkyesightCameraApi.get(DEBUG_CAMERA_ID).orElse(null);
         if (view == null) {
             source.sendSuccess(() -> Component.literal("[Skyesight] Debug camera is not created."), false);
@@ -130,7 +133,7 @@ public final class SkyesightDebugCameraCommands {
         return 1;
     }
 
-    private static int resize(net.minecraft.commands.CommandSourceStack source, int width, int height) {
+    private static int resize(CommandSourceStack source, int width, int height) {
         SkyesightCameraView view = SkyesightCameraApi.get(DEBUG_CAMERA_ID).orElse(null);
         if (view == null || view.isClosed()) {
             source.sendFailure(Component.literal("[Skyesight] No debug camera exists. Run /skyesightcamera create first."));
@@ -144,7 +147,7 @@ public final class SkyesightDebugCameraCommands {
         return 1;
     }
 
-    private static int remove(net.minecraft.commands.CommandSourceStack source) {
+    private static int remove(CommandSourceStack source) {
         boolean removed = SkyesightCameraApi.destroy(DEBUG_CAMERA_ID);
         source.sendSuccess(() -> Component.literal(
                 removed
@@ -164,7 +167,7 @@ public final class SkyesightDebugCameraCommands {
 
     private static String formatPosition(Vec3 position) {
         return String.format(
-                java.util.Locale.ROOT,
+                Locale.ROOT,
                 "%.2f %.2f %.2f",
                 position.x(),
                 position.y(),

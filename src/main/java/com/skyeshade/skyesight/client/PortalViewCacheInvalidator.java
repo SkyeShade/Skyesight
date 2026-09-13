@@ -1,19 +1,23 @@
 package com.skyeshade.skyesight.client;
 
-import com.skyeshade.skyesight.Skyesight;
-import com.skyeshade.skyesight.SkyesightDebugConfig;
 import com.skyeshade.skyesight.api.PortalCachePolicy;
 import com.skyeshade.skyesight.api.RegisteredPortalView;
 import com.skyeshade.skyesight.api.SkyesightPortalRegistry;
 import com.skyeshade.skyesight.client.chunk.SkyesightPortalChunkStorage;
-import com.skyeshade.skyesight.client.portal.CrossDimPortalViewUpdater;
 import com.skyeshade.skyesight.client.portal.CrossDimPortalTerrainWarmup;
+import com.skyeshade.skyesight.client.portal.CrossDimPortalViewUpdater;
 import com.skyeshade.skyesight.client.portal.PortalDirectStencilRenderer;
 import com.skyeshade.skyesight.client.render.PortalSecondaryWorldRenderer;
+import com.skyeshade.skyesight.client.render.remote.PortalNetworkStreaming;
+import com.skyeshade.skyesight.client.transition.SecondaryTransition;
+import com.skyeshade.skyesight.client.transition.TraversalPortalStandby;
+import com.skyeshade.skyesight.client.world.SecondaryParticleViews;
 import com.skyeshade.skyesight.client.world.SkyesightClientChunkRequester;
 import com.skyeshade.skyesight.client.world.SkyesightPortalEntityPool;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorldManager;
 import com.skyeshade.skyesight.network.SkyesightClientChunkHandler;
+import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.SkyesightDebugConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.api.distmarker.Dist;
@@ -61,7 +65,11 @@ public final class PortalViewCacheInvalidator {
             return;
         }
         ResourceLocation viewId = view.id();
-        com.skyeshade.skyesight.client.world.SecondaryParticleViews.close(viewId);
+        // An invalidation queued from another thread must not close a newer registration.
+        var current = SkyesightPortalRegistry.get(viewId);
+        if (current != null && current.generation() != view.generation()
+                && (newView == null || current.generation() != newView.generation())) return;
+        SecondaryParticleViews.close(viewId);
         CrossDimPortalTerrainWarmup.onPortalViewChanged(oldView, newView, cachePolicy);
         if (cachePolicy == PortalCachePolicy.SOFT_REPLACE) {
             PortalDirectStencilRenderer.softReplaceViewCaches(viewId);
@@ -94,6 +102,9 @@ public final class PortalViewCacheInvalidator {
             }
             return;
         }
+        PortalNetworkStreaming.retire(viewId);
+        TraversalPortalStandby.remove(viewId.toString());
+        SecondaryTransition.invalidate(viewId);
         PortalDirectStencilRenderer.invalidateViewCaches(viewId);
         PortalSecondaryWorldRenderer.invalidateViewCaches(viewId);
         SkyesightVisualWorldManager.close(viewId);

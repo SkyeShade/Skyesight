@@ -1,32 +1,34 @@
 package com.skyeshade.skyesight.mixin.client;
 
-import com.skyeshade.skyesight.client.transition.SecondaryTransition;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.skyeshade.skyesight.client.transition.SecondaryTransition;
+import com.skyeshade.skyesight.client.transition.TraversalPortalClient;
 import net.minecraft.client.Camera;
 import net.minecraft.client.DeltaTracker;
+import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.LightTexture;
 import org.joml.Matrix4f;
-import net.minecraft.client.renderer.GameRenderer;
-import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 
 @Mixin(GameRenderer.class)
 public abstract class GameRendererTransitionMixin {
-    @org.spongepowered.asm.mixin.Unique private boolean skyesight$physicalRendered;
+    @Unique private boolean skyesight$physicalRendered;
     @Inject(method = "render", at = @At("HEAD"))
     private void skyesight$frameStart(CallbackInfo ci) {
-        com.skyeshade.skyesight.client.transition.TraversalPortalClient.beforePresentation();
+        TraversalPortalClient.beforePresentation();
         SecondaryTransition.frameStarted();
     }
     @WrapOperation(method = "renderLevel", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/renderer/LevelRenderer;renderLevel(Lnet/minecraft/client/DeltaTracker;ZLnet/minecraft/client/Camera;Lnet/minecraft/client/renderer/GameRenderer;Lnet/minecraft/client/renderer/LightTexture;Lorg/joml/Matrix4f;Lorg/joml/Matrix4f;)V"))
     private void skyesight$worldPresentation(LevelRenderer renderer, DeltaTracker timer, boolean outline,
             Camera camera, GameRenderer gameRenderer, LightTexture light, Matrix4f model, Matrix4f projection,
             Operation<Void> original) {
-        com.skyeshade.skyesight.client.transition.TraversalPortalClient.beforeWorld(camera);
+        TraversalPortalClient.beforeWorld(camera);
         skyesight$physicalRendered = SecondaryTransition.shouldRenderPhysical();
         if (skyesight$physicalRendered) {
             original.call(renderer, timer, outline, camera, gameRenderer, light, model, projection);

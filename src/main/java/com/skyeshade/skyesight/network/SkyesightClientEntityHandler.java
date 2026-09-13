@@ -1,8 +1,11 @@
 package com.skyeshade.skyesight.network;
 
-import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.client.render.PlayerPerspectiveViews;
+import com.skyeshade.skyesight.client.world.SkyesightClientChunkRequester;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorld;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorldManager;
+import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry;
+import com.skyeshade.skyesight.Skyesight;
 
 public final class SkyesightClientEntityHandler {
     private static boolean snapshotApplyFailureLogged;
@@ -10,13 +13,13 @@ public final class SkyesightClientEntityHandler {
     private SkyesightClientEntityHandler() {}
 
     public static void handle(SkyesightEntitySnapshotPayload payload) {
-        if (!com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry.accepts(
+        if (!SkyesightRemoteViewRegistry.accepts(
                 payload.viewId(), payload.generation(), payload.dimension())) {
             return;
         }
 
-        if (com.skyeshade.skyesight.client.render.PlayerPerspectiveViews.contains(payload.viewId())
-                && !com.skyeshade.skyesight.client.world.SkyesightClientChunkRequester.hasDemand(payload.viewId())) return;
+        if (PlayerPerspectiveViews.contains(payload.viewId())
+                && !SkyesightClientChunkRequester.hasDemand(payload.viewId())) return;
         SkyesightVisualWorld world =
                 SkyesightVisualWorldManager.getIfCurrent(payload.viewId(), payload.dimension());
 

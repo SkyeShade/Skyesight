@@ -1,9 +1,10 @@
 package com.skyeshade.skyesight.network;
 
-import com.skyeshade.skyesight.Skyesight;
-import com.skyeshade.skyesight.SkyesightDebugConfig;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorld;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorldManager;
+import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry;
+import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.SkyesightDebugConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.world.level.ChunkPos;
 
@@ -11,7 +12,7 @@ public final class SkyesightClientBlockUpdateHandler {
     private SkyesightClientBlockUpdateHandler() {}
 
     public static void handle(SkyesightBlockUpdatesPayload payload) {
-        if (!com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry.accepts(
+        if (!SkyesightRemoteViewRegistry.accepts(
                 payload.viewId(), payload.generation(), payload.dimension())) {
             return;
         }

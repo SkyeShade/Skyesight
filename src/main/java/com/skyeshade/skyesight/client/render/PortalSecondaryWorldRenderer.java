@@ -64,6 +64,7 @@ public final class PortalSecondaryWorldRenderer {
         if (viewId == null) {
             return;
         }
+        RecursivePortalRenderer.invalidate(viewId);
         PortalSecondaryRenderState.SECONDARY_CHUNK_WATCH_SENT_CENTERS.remove(viewId);
         PortalSecondaryRenderState.SECONDARY_CHUNK_WATCH_SENT_RADII.remove(viewId);
     }
@@ -165,6 +166,7 @@ public final class PortalSecondaryWorldRenderer {
 
 
     public static void beginPortalRenderFrame() {
+        RecursivePortalRenderer.beginFrame();
         PortalSecondaryRenderState.newPortalSodiumRenderersCreatedThisFrame = 0;
         PortalSecondaryRenderState.sameDimPortalTerrainWarmupsThisFrame = 0;
     }
@@ -385,6 +387,7 @@ public final class PortalSecondaryWorldRenderer {
                     ? null
                     : SkyesightPortalApi.getPortal(entityWatchRegionId.toString());
             frame.diagnostics().setRenderBackface(registeredView != null && registeredView.renderBackface());
+            if (registeredView != null) frame.diagnostics().setPortalInstanceId(registeredView.id().toString());
             frame.diagnostics().setViewPhysicalSide("unknown");
             updateSecondaryChunkWatchRegionIfNeeded(minecraft, frame, context);
             updateRemoteEntityTrackingIfEnabled(frame, context, minecraft);
@@ -740,7 +743,8 @@ public final class PortalSecondaryWorldRenderer {
                 projection,
                 modelView,
                 cullProjection,
-                frustum
+                frustum,
+                cullProjectionBase
         );
 
         String projectionModeName = directStencilProjection

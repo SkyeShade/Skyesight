@@ -1,9 +1,11 @@
 package com.skyeshade.skyesight.server;
 
+import com.skyeshade.skyesight.network.SkyesightRemoteViewLifecyclePayload;
+import com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics;
+import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistration;
 import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.SkyesightDebugConfig;
-import com.skyeshade.skyesight.network.SkyesightRemoteViewLifecyclePayload;
-import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistration;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
@@ -25,7 +27,7 @@ public final class SkyesightRemoteViewLifecycleHandler {
                 return;
             }
 
-            com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics.log("server-lifecycle-received",payload.viewId(),payload.generation(),
+            SkyesightRemoteCenterDiagnostics.log("server-lifecycle-received",payload.viewId(),payload.generation(),
                     "player="+player.getUUID()+" active="+payload.active()+" current="+SkyesightServerRemoteViewRegistry.get(player,payload.viewId()));
             if (!payload.active()) {
                 SkyesightServerRemoteViewRegistry.unregister(
@@ -51,7 +53,7 @@ public final class SkyesightRemoteViewLifecycleHandler {
                 return;
             }
 
-            com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics.log("server-register",payload.viewId(),payload.generation(),"player="+player.getUUID());
+            SkyesightRemoteCenterDiagnostics.log("server-register",payload.viewId(),payload.generation(),"player="+player.getUUID());
             if (previous != null && (previous.generation() != payload.generation()
                     || !previous.targetDimension().equals(payload.targetDimension()))) {
                 cleanup(player, previous);
@@ -69,9 +71,9 @@ public final class SkyesightRemoteViewLifecycleHandler {
         });
     }
 
-    public static void removeView(ServerPlayer player, net.minecraft.resources.ResourceLocation viewId) {
+    public static void removeView(ServerPlayer player, ResourceLocation viewId) {
         SkyesightServerRemoteViewRegistry.get(player, viewId).ifPresent(registration -> {
-            com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics.log("server-api-close",viewId,registration.generation(),
+            SkyesightRemoteCenterDiagnostics.log("server-api-close",viewId,registration.generation(),
                     "player="+player.getUUID()+" alive="+player.isAlive()+" physicalDim="+player.level().dimension().location()
                     +" mainHand="+player.getMainHandItem().getItem());
             SkyesightServerRemoteViewRegistry.unregister(player, viewId, registration.generation())
@@ -87,7 +89,7 @@ public final class SkyesightRemoteViewLifecycleHandler {
     public static void dimensionChanged(ServerPlayer player) {
         SkyesightServerRemoteViewRegistry.removeNonTraversalViews(player).forEach(registration -> cleanup(player, registration));
     }
-    public static void releaseWatch(ServerPlayer player, net.minecraft.resources.ResourceLocation id) {
+    public static void releaseWatch(ServerPlayer player, ResourceLocation id) {
         var registration = SkyesightServerRemoteViewRegistry.resolve(player, id).orElse(null);
         if (registration != null) cleanup(player, registration);
         else {
@@ -103,7 +105,7 @@ public final class SkyesightRemoteViewLifecycleHandler {
             ServerPlayer player,
             SkyesightRemoteViewRegistration registration
     ) {
-        com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics.log("server-retire",registration.viewId(),registration.generation(),"player="+player.getUUID());
+        SkyesightRemoteCenterDiagnostics.log("server-retire",registration.viewId(),registration.generation(),"player="+player.getUUID());
         ServerLevel level = player.server.getLevel(registration.targetDimension());
         SkyesightServerChunkLoader.removeView(player, registration.viewId(), level);
         SkyesightServerViewTracker.removeView(player, registration.viewId());

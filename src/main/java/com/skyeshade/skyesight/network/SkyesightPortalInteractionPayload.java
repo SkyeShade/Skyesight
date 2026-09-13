@@ -1,8 +1,9 @@
 package com.skyeshade.skyesight.network;
 
-import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 
 /**
@@ -10,7 +11,7 @@ import net.minecraft.resources.ResourceLocation;
  * reconstruct the portal ray and compare that block; no client dimension, entity id or reach is accepted.
  */
 public record SkyesightPortalInteractionPayload(ResourceLocation portal, long revision, long sequence, Action action,
-                                                net.minecraft.core.BlockPos predictedBlock)
+                                                BlockPos predictedBlock)
         implements CustomPacketPayload {
     public enum Action {START, STOP, ABORT, ATTACK, USE}
 

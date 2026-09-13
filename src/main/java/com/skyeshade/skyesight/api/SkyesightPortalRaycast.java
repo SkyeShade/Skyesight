@@ -16,10 +16,15 @@ public final class SkyesightPortalRaycast {
     private SkyesightPortalRaycast() {}
     /** Aperture predicate receives source-local coordinates; masked links must provide their actual shape. */
     public record Link(ResourceLocation id, long revision, PortalEndpoint source, PortalEndpoint target,
-                       boolean backface, Predicate<Vec3> aperture) {
+                       boolean backface, Predicate<Vec3> aperture, PortalSidedness sidedness) {
+        public Link(ResourceLocation id, long revision, PortalEndpoint source, PortalEndpoint target,
+                    boolean backface, Predicate<Vec3> aperture) {
+            this(id, revision, source, target, backface, aperture, backface ? PortalSidedness.BOTH : PortalSidedness.FRONT_ONLY);
+        }
         public Link {
             Objects.requireNonNull(id); Objects.requireNonNull(source); Objects.requireNonNull(target);
             Objects.requireNonNull(aperture);
+            Objects.requireNonNull(sidedness);
         }
         public static Link rectangle(ResourceLocation id, long revision, PortalEndpoint source,
                                      PortalEndpoint target, boolean backface) {
@@ -59,7 +64,7 @@ public final class SkyesightPortalRaycast {
                 if (!link.source.dimension().equals(dimension)) continue;
                 Vec3 a = PortalTraversalMath.local(link.source, origin);
                 Vec3 b = PortalTraversalMath.local(link.source, end);
-                if (a.z == b.z || !link.backface && a.z <= 0) continue;
+                if (a.z == b.z || !link.sidedness.allows(a.z)) continue;
                 double t = a.z / (a.z - b.z);
                 if (t < 0 || t > 1) continue;
                 double distance = t * (reach - used);

@@ -2,32 +2,34 @@ package com.skyeshade.skyesight.mixin.common;
 
 import com.skyeshade.skyesight.server.portal.PortalInteractionContext;
 import net.minecraft.core.BlockPos;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.Mixin;
 
 @Mixin(Entity.class)
 public abstract class EntityPortalInteractionMixin {
     @Inject(method = "getBlockX", at = @At("HEAD"), cancellable = true)
     private void skyesight$blockX(CallbackInfoReturnable<Integer> cir) {
         var c = PortalInteractionContext.forEntity((Entity) (Object) this);
-        if (c != null) cir.setReturnValue(net.minecraft.util.Mth.floor(c.pose.position().x));
+        if (c != null) cir.setReturnValue(Mth.floor(c.pose.position().x));
     }
 
     @Inject(method = "getBlockY", at = @At("HEAD"), cancellable = true)
     private void skyesight$blockY(CallbackInfoReturnable<Integer> cir) {
         var c = PortalInteractionContext.forEntity((Entity) (Object) this);
-        if (c != null) cir.setReturnValue(net.minecraft.util.Mth.floor(c.pose.position().y));
+        if (c != null) cir.setReturnValue(Mth.floor(c.pose.position().y));
     }
 
     @Inject(method = "getBlockZ", at = @At("HEAD"), cancellable = true)
     private void skyesight$blockZ(CallbackInfoReturnable<Integer> cir) {
         var c = PortalInteractionContext.forEntity((Entity) (Object) this);
-        if (c != null) cir.setReturnValue(net.minecraft.util.Mth.floor(c.pose.position().z));
+        if (c != null) cir.setReturnValue(Mth.floor(c.pose.position().z));
     }
 
     @Inject(method = "getX(D)D", at = @At("HEAD"), cancellable = true)
@@ -61,7 +63,7 @@ public abstract class EntityPortalInteractionMixin {
     }
 
     @Inject(method = "getBoundingBox", at = @At("HEAD"), cancellable = true)
-    private void skyesight$bounds(CallbackInfoReturnable<net.minecraft.world.phys.AABB> cir) {
+    private void skyesight$bounds(CallbackInfoReturnable<AABB> cir) {
         var c = PortalInteractionContext.forEntity((Entity) (Object) this);
         if (c != null) cir.setReturnValue(c.bounds);
     }

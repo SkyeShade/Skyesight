@@ -4,6 +4,8 @@ import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.DimensionSpecialEffects;
 import net.minecraft.world.level.material.FogType;
 
+import java.util.Locale;
+
 public final class SkyesightLevelRendererSkyDebug {
     private static volatile boolean renderSkyEntered;
     private static volatile boolean renderSkyReturned;
@@ -42,7 +44,7 @@ public final class SkyesightLevelRendererSkyDebug {
         FogType cameraFog = camera.getFluidInCamera();
         fogType = cameraFog == null ? "null" : cameraFog.name();
         cameraPosition = String.format(
-                java.util.Locale.ROOT,
+                Locale.ROOT,
                 "%.2f,%.2f,%.2f",
                 camera.getPosition().x(),
                 camera.getPosition().y(),

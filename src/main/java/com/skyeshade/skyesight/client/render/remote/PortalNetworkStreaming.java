@@ -1,9 +1,9 @@
 package com.skyeshade.skyesight.client.render.remote;
 
-import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.api.SkyesightPortalApi;
 import com.skyeshade.skyesight.client.world.SkyesightClientChunkRequester;
 import com.skyeshade.skyesight.network.SkyesightRemoteViewLifecyclePayload;
+import com.skyeshade.skyesight.Skyesight;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
@@ -11,10 +11,12 @@ import net.minecraft.world.level.Level;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
+
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /** Network counterpart of the integrated portal loader; owns only per-observer streaming leases. */
@@ -40,14 +42,15 @@ public final class PortalNetworkStreaming {
         if (Minecraft.getInstance().getConnection() != null)
             PacketDistributor.sendToServer(new SkyesightRemoteViewLifecyclePayload(id, lease.generation, lease.dimension, active));
     }
-    private static void retire(ResourceLocation id) {
+    /** Explicit removal retires the ordered network lease immediately, before ID reuse. */
+    public static void retire(ResourceLocation id) {
         var lease = LEASES.remove(id);
         if (lease == null) return;
         SkyesightClientChunkRequester.reset(id, lease.generation);
         send(id, lease, false);
     }
     @SubscribeEvent public static void tick(ClientTickEvent.Post event) {
-        for (var id : java.util.List.copyOf(LEASES.keySet())) {
+        for (var id : List.copyOf(LEASES.keySet())) {
             var portal = SkyesightPortalApi.getPortal(id.toString());
             var lease = LEASES.get(id);
             if (portal == null || !portal.active() || portal.generation() != lease.generation
@@ -55,6 +58,6 @@ public final class PortalNetworkStreaming {
         }
     }
     @SubscribeEvent public static void logout(ClientPlayerNetworkEvent.LoggingOut event) {
-        for (var id : java.util.List.copyOf(LEASES.keySet())) retire(id);
+        for (var id : List.copyOf(LEASES.keySet())) retire(id);
     }
 }

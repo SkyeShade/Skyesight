@@ -35,6 +35,14 @@ public final class PortalServerViewCacheInvalidator {
         }
         ResourceLocation viewId = view.id();
         MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+        if (server == null) return;
+        if (!server.isSameThread()) {
+            server.execute(() -> invalidate(oldView, newView, reason, cachePolicy));
+            return;
+        }
+        var current = SkyesightPortalRegistry.get(viewId);
+        if (current != null && current.generation() != view.generation()
+                && (newView == null || current.generation() != newView.generation())) return;
         if (cachePolicy == PortalCachePolicy.DISABLE_RETAIN_CACHE) {
             SkyesightServerVisualEntityPacketTracker.removeView(viewId);
             SkyesightServerViewTracker.removeView(viewId);

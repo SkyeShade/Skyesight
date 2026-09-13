@@ -1,14 +1,15 @@
 package com.skyeshade.skyesight.client.world;
 
+import com.skyeshade.skyesight.network.SkyesightEnvironmentPayload;
 import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.SkyesightDebugConfig;
-import com.skyeshade.skyesight.network.SkyesightEnvironmentPayload;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.client.renderer.LevelRenderer;
-import net.minecraft.core.Holder;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Holder;
 import net.minecraft.core.particles.ParticleOptions;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvent;
@@ -16,16 +17,16 @@ import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.profiling.ProfilerFiller;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.level.gameevent.GameEvent;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.dimension.DimensionType;
-import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.world.level.gameevent.GameEvent;
+import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
-import java.util.HashSet;
-import java.util.Set;
 import java.util.function.Supplier;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Set;
 
 public final class SkyesightVisualClientLevel extends ClientLevel {
     private SkyesightVisualParticleManager particleManager;
@@ -371,6 +372,6 @@ public final class SkyesightVisualClientLevel extends ClientLevel {
     }
 
     private static String format(double value) {
-        return String.format(java.util.Locale.ROOT, "%.2f", value);
+        return String.format(Locale.ROOT, "%.2f", value);
     }
 }

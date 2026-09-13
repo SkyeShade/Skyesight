@@ -1,6 +1,7 @@
 package com.skyeshade.skyesight.client.portal;
 
 import com.skyeshade.skyesight.api.SkyesightClipPlane;
+import com.skyeshade.skyesight.portal.PortalTraversalMath;
 import net.minecraft.client.Camera;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Quaternionf;
@@ -37,10 +38,10 @@ public final class DirectStencilPortalMath {
             PortalFrame entrancePortal,
             PortalFrame exitPortal
     ) {
-        Quaternionf transform = com.skyeshade.skyesight.portal.PortalTraversalMath.rotation(
+        Quaternionf transform = PortalTraversalMath.rotation(
                 entrancePortal.rotation(), exitPortal.rotation());
         Vec3 transformedPosition = exitPortal.position().add(
-                com.skyeshade.skyesight.portal.PortalTraversalMath.rotate(
+                PortalTraversalMath.rotate(
                         sourcePosition.subtract(entrancePortal.position()), transform));
         return new PortalCameraPose(transformedPosition, transform.mul(new Quaternionf(sourceRotation)).normalize());
     }

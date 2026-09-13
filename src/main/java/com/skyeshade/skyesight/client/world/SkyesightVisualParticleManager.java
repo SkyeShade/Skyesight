@@ -1,8 +1,13 @@
 package com.skyeshade.skyesight.client.world;
 
-import com.skyeshade.skyesight.network.SkyesightParticlePayload;
 import com.skyeshade.skyesight.mixin.client.ParticleAccessor;
+import com.skyeshade.skyesight.mixin.client.ParticleEngineAccessor;
+import com.skyeshade.skyesight.network.SkyesightParticlePayload;
+import com.skyeshade.skyesight.remote.SecondaryParticlePolicy;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.particle.Particle;
+import net.minecraft.client.particle.ParticleProvider;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -37,13 +42,13 @@ public final class SkyesightVisualParticleManager {
     private int captureAuditCount;
     private final Map<String, Integer> totalCaptureTypes = new LinkedHashMap<>();
     private int totalCaptureCount;
-    private net.minecraft.client.multiplayer.ClientLevel level;
+    private ClientLevel level;
     private boolean active;
     private Vec3 center = Vec3.ZERO;
     private int radius;
     private int missingProviders;
 
-    public void bindLevel(net.minecraft.client.multiplayer.ClientLevel level) { this.level = level; }
+    public void bindLevel(ClientLevel level) { this.level = level; }
     public boolean isActive() { return this.active; }
     public void setActive(boolean active, Vec3 center, int radius) {
         this.active = active; this.center = center; this.radius = radius;
@@ -301,7 +306,7 @@ public final class SkyesightVisualParticleManager {
     }
 
     private void add(VisualParticle particle) {
-        if (!this.active || this.level == null || !com.skyeshade.skyesight.remote.SecondaryParticlePolicy.contains(
+        if (!this.active || this.level == null || !SecondaryParticlePolicy.contains(
                 this.center, this.radius, particle.position.x, particle.position.y, particle.position.z)
                 || size() >= MAX_PARTICLES) return;
         Particle instance = createParticle(particle);
@@ -315,7 +320,7 @@ public final class SkyesightVisualParticleManager {
     public void addClientParticle(Particle instance) {
         var position = instance.getPos();
         if (!this.active || size() >= MAX_PARTICLES
-                || !com.skyeshade.skyesight.remote.SecondaryParticlePolicy.contains(this.center, this.radius, position.x, position.y, position.z)) return;
+                || !SecondaryParticlePolicy.contains(this.center, this.radius, position.x, position.y, position.z)) return;
         String id = instance.getClass().getSimpleName();
         var particle = new VisualParticle(this.nextParticleSequence++, position, Vec3.ZERO, null, id,
                 new ParticleColor(1, 1, 1, 1), .2F, 1, true, false);
@@ -326,9 +331,9 @@ public final class SkyesightVisualParticleManager {
 
     @SuppressWarnings({"rawtypes", "unchecked"})
     private Particle createParticle(VisualParticle particle) {
-        var engine = (com.skyeshade.skyesight.mixin.client.ParticleEngineAccessor)
-                net.minecraft.client.Minecraft.getInstance().particleEngine;
-        net.minecraft.client.particle.ParticleProvider provider = engine.skyesight$getProviders().get(
+        var engine = (ParticleEngineAccessor)
+                Minecraft.getInstance().particleEngine;
+        ParticleProvider provider = engine.skyesight$getProviders().get(
                 BuiltInRegistries.PARTICLE_TYPE.getKey(particle.particleOptions.getType()));
         if (provider == null) return null;
         try (var ignored = SecondaryParticleCapture.push(this.level, this)) {

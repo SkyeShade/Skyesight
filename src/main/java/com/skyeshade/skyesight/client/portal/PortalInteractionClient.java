@@ -1,23 +1,53 @@
 package com.skyeshade.skyesight.client.portal;
 
+import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.BufferUploader;
+import com.mojang.blaze3d.vertex.ByteBufferBuilder;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.SheetedDecalTextureGenerator;
+import com.mojang.blaze3d.vertex.VertexSorting;
 import com.skyeshade.skyesight.api.*;
+import com.skyeshade.skyesight.client.render.SecondarySceneFrame;
 import com.skyeshade.skyesight.client.transition.TraversalPortalClient;
+import com.skyeshade.skyesight.client.world.SecondaryEntityClock;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorldManager;
+import com.skyeshade.skyesight.mixin.client.PortalCarriedItemInvoker;
+import com.skyeshade.skyesight.mixin.client.PortalOutlineInvoker;
 import com.skyeshade.skyesight.network.*;
+import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry;
+import com.skyeshade.skyesight.server.portal.PortalInteractionContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.core.BlockPos;
+import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.resources.model.ModelBakery;
 import net.minecraft.core.Direction;
+import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
+import net.minecraft.network.protocol.Packet;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.level.*;
+import net.minecraft.world.level.chunk.EmptyLevelChunk;
 import net.minecraft.world.phys.*;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.Vec3;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.client.ClientHooks;
+import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.client.model.data.ModelData;
 import net.neoforged.neoforge.network.PacketDistributor;
+import org.joml.Matrix4f;
+
+import java.util.ArrayList;
 
 /**
  * One-hop predicted pick. The physical hit result never contains destination coordinates.
  */
-@net.neoforged.fml.common.EventBusSubscriber(modid = "skyesight", value = net.neoforged.api.distmarker.Dist.CLIENT)
+@EventBusSubscriber(modid = "skyesight", value = Dist.CLIENT)
 public final class PortalInteractionClient {
     private static long sequence;
     private static SkyesightPortalRaycast.Link miningLink;
@@ -25,12 +55,12 @@ public final class PortalInteractionClient {
 
     public static ClientLevel interactionLevel() {
         var mc = Minecraft.getInstance();
-        var context = com.skyeshade.skyesight.server.portal.PortalInteractionContext.forEntity(mc.player);
+        var context = PortalInteractionContext.forEntity(mc.player);
         return context != null && context.level instanceof ClientLevel client ? client : null;
     }
 
-    public static boolean routeAction(net.minecraft.network.protocol.Packet<?> packet) {
-        if (interactionLevel() == null || mining == null || !(packet instanceof net.minecraft.network.protocol.game.ServerboundPlayerActionPacket action))
+    public static boolean routeAction(Packet<?> packet) {
+        if (interactionLevel() == null || mining == null || !(packet instanceof ServerboundPlayerActionPacket action))
             return false;
         var intent = switch (action.getAction()) {
             case START_DESTROY_BLOCK -> SkyesightPortalInteractionPayload.Action.START;
@@ -39,7 +69,7 @@ public final class PortalInteractionClient {
             default -> null;
         };
         if (intent == null) return false;
-        ((com.skyeshade.skyesight.mixin.client.PortalCarriedItemInvoker) Minecraft.getInstance().gameMode).skyesight$syncCarriedItem();
+        ((PortalCarriedItemInvoker) Minecraft.getInstance().gameMode).skyesight$syncCarriedItem();
         PacketDistributor.sendToServer(new SkyesightPortalInteractionPayload(mining.portal(), mining.revision(), ++sequence, intent, action.getPos()));
         return true;
     }
@@ -48,7 +78,7 @@ public final class PortalInteractionClient {
     private static SkyesightPortalRaycast.Result selected;
     private static ClientLevel selectedLevel;
     private static SkyesightPortalRaycast.Step mining;
-    private static com.mojang.blaze3d.vertex.ByteBufferBuilder overlayBuffer;
+    private static ByteBufferBuilder overlayBuffer;
 
     public static ClientLevel destination(SkyesightPortalRaycast.Link link) {
         var world = SkyesightVisualWorldManager.get(link.id());
@@ -63,12 +93,12 @@ public final class PortalInteractionClient {
 
     public static boolean loaded(ClientLevel level, Vec3 from, Vec3 to) {
         if (level == null) return false;
-        int minX = net.minecraft.util.Mth.floor(Math.min(from.x, to.x)) >> 4, maxX = net.minecraft.util.Mth.floor(Math.max(from.x, to.x)) >> 4;
-        int minZ = net.minecraft.util.Mth.floor(Math.min(from.z, to.z)) >> 4, maxZ = net.minecraft.util.Mth.floor(Math.max(from.z, to.z)) >> 4;
+        int minX = Mth.floor(Math.min(from.x, to.x)) >> 4, maxX = Mth.floor(Math.max(from.x, to.x)) >> 4;
+        int minZ = Mth.floor(Math.min(from.z, to.z)) >> 4, maxZ = Mth.floor(Math.max(from.z, to.z)) >> 4;
         for (int x = minX; x <= maxX; x++)
             for (int z = minZ; z <= maxZ; z++) {
                 var chunk = level.getChunkSource().getChunk(x, z, false);
-                if (chunk == null || chunk instanceof net.minecraft.world.level.chunk.EmptyLevelChunk) return false;
+                if (chunk == null || chunk instanceof EmptyLevelChunk) return false;
             }
         return true;
     }
@@ -114,7 +144,7 @@ public final class PortalInteractionClient {
             public HitResult nearestHit(ResourceKey<Level> dimension, Vec3 from, Vec3 to) {
                 HitResult nearest = current.clip(new ClipContext(from, to, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, mc.player));
                 double distance = from.distanceToSqr(nearest.getLocation());
-                var candidates = new java.util.ArrayList<>(current.getEntities(mc.player, new AABB(from, to).inflate(1), e -> e.isPickable() && !e.isSpectator()));
+                var candidates = new ArrayList<>(current.getEntities(mc.player, new AABB(from, to).inflate(1), e -> e.isPickable() && !e.isSpectator()));
                 for (var link : links) {
                     var world = SkyesightVisualWorldManager.get(link.id());
                     if (world != null && world.level() == current) for (var visual : world.entityStore().entities())
@@ -163,7 +193,7 @@ public final class PortalInteractionClient {
             return false; // Preserve Minecraft's native miss delay and swing behavior.
         }
         if (ray.end() == SkyesightPortalRaycast.End.HIT) {
-            var event = net.neoforged.neoforge.client.ClientHooks.onClickInput(0, mc.options.keyAttack, InteractionHand.MAIN_HAND);
+            var event = ClientHooks.onClickInput(0, mc.options.keyAttack, InteractionHand.MAIN_HAND);
             if (event.isCanceled()) {
                 stopMining();
                 if (event.shouldSwingHand()) mc.player.swing(InteractionHand.MAIN_HAND);
@@ -192,7 +222,7 @@ public final class PortalInteractionClient {
             return false;
         }
         if (ray.end() == SkyesightPortalRaycast.End.HIT && !mc.player.isHandsBusy()) {
-            var event = net.neoforged.neoforge.client.ClientHooks.onClickInput(1, mc.options.keyUse, InteractionHand.MAIN_HAND);
+            var event = ClientHooks.onClickInput(1, mc.options.keyUse, InteractionHand.MAIN_HAND);
             if (!event.isCanceled()) send(ray, SkyesightPortalInteractionPayload.Action.USE);
             if (event.shouldSwingHand()) mc.player.swing(InteractionHand.MAIN_HAND);
         }
@@ -200,7 +230,7 @@ public final class PortalInteractionClient {
     }
 
     private static void send(SkyesightPortalRaycast.Result ray, SkyesightPortalInteractionPayload.Action action) {
-        ((com.skyeshade.skyesight.mixin.client.PortalCarriedItemInvoker) Minecraft.getInstance().gameMode).skyesight$syncCarriedItem();
+        ((PortalCarriedItemInvoker) Minecraft.getInstance().gameMode).skyesight$syncCarriedItem();
         var step = ray.chain().getFirst();
         PacketDistributor.sendToServer(new SkyesightPortalInteractionPayload(step.portal(), step.revision(), ++sequence, action));
     }
@@ -226,7 +256,7 @@ public final class PortalInteractionClient {
             return;
         }
         var hit = (BlockHitResult) ray.hit();
-        try (var ignored = com.skyeshade.skyesight.server.portal.PortalInteractionContext.open(mc.player, miningLevel, miningLink)) {
+        try (var ignored = PortalInteractionContext.open(mc.player, miningLevel, miningLink)) {
             if (initial) mc.gameMode.startDestroyBlock(hit.getBlockPos(), hit.getDirection());
             else mc.gameMode.continueDestroyBlock(hit.getBlockPos(), hit.getDirection());
         }
@@ -235,7 +265,7 @@ public final class PortalInteractionClient {
     private static void stopMining() {
         var mc = Minecraft.getInstance();
         if (mining != null && miningLevel != null && mc.player != null && mc.gameMode != null) {
-            try (var ignored = com.skyeshade.skyesight.server.portal.PortalInteractionContext.open(mc.player, miningLevel, miningLink)) {
+            try (var ignored = PortalInteractionContext.open(mc.player, miningLevel, miningLink)) {
                 mc.gameMode.stopDestroyBlock();
             }
         }
@@ -245,15 +275,15 @@ public final class PortalInteractionClient {
     }
 
     public static void receive(SkyesightPortalMiningPayload payload) {
-        if (!com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry.accepts(payload.viewId(), payload.generation(), payload.dimension()))
+        if (!SkyesightRemoteViewRegistry.accepts(payload.viewId(), payload.generation(), payload.dimension()))
             return;
-        var world = com.skyeshade.skyesight.client.world.SkyesightVisualWorldManager.getIfCurrent(payload.viewId(), payload.dimension());
+        var world = SkyesightVisualWorldManager.getIfCurrent(payload.viewId(), payload.dimension());
         if (world != null && !world.isClosed()) world.destroyProgress().update(payload.breakerId(), payload.pos(),
-                payload.stage(), (long) com.skyeshade.skyesight.client.world.SecondaryEntityClock.tickTime());
+                payload.stage(), (long) SecondaryEntityClock.tickTime());
     }
 
-    @net.neoforged.bus.api.SubscribeEvent
-    public static void logout(net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut event) {
+    @SubscribeEvent
+    public static void logout(ClientPlayerNetworkEvent.LoggingOut event) {
         selected = null;
         selectedLevel = null;
         mining = null;
@@ -266,7 +296,7 @@ public final class PortalInteractionClient {
         }
     }
 
-    public static void render(com.skyeshade.skyesight.client.render.SecondarySceneFrame scene) {
+    public static void render(SecondarySceneFrame scene) {
         renderProgress(scene);
         var ray = selected;
         if (ray == null || ray.chain().isEmpty() || !ray.chain().getFirst().portal().equals(scene.viewId())
@@ -275,57 +305,57 @@ public final class PortalInteractionClient {
         var pos = hit.getBlockPos();
         var state = scene.level().getBlockState(pos);
         var camera = scene.view().camera().getPosition();
-        var projection = new org.joml.Matrix4f(com.mojang.blaze3d.systems.RenderSystem.getProjectionMatrix());
-        var sorting = com.mojang.blaze3d.systems.RenderSystem.getVertexSorting();
-        var model = com.mojang.blaze3d.systems.RenderSystem.getModelViewStack();
+        var projection = new Matrix4f(RenderSystem.getProjectionMatrix());
+        var sorting = RenderSystem.getVertexSorting();
+        var model = RenderSystem.getModelViewStack();
         model.pushMatrix();
         try {
             model.set(scene.view().modelViewMatrix());
-            com.mojang.blaze3d.systems.RenderSystem.applyModelViewMatrix();
-            com.mojang.blaze3d.systems.RenderSystem.setProjectionMatrix(scene.view().projectionMatrix(), com.mojang.blaze3d.vertex.VertexSorting.DISTANCE_TO_ORIGIN);
-            var stack = new com.mojang.blaze3d.vertex.PoseStack();
-            if (overlayBuffer == null) overlayBuffer = new com.mojang.blaze3d.vertex.ByteBufferBuilder(4096);
-            var lines = net.minecraft.client.renderer.RenderType.lines();
-            var outline = new com.mojang.blaze3d.vertex.BufferBuilder(overlayBuffer, lines.mode(), lines.format());
-            com.skyeshade.skyesight.mixin.client.PortalOutlineInvoker.skyesight$shape(stack, outline,
-                    state.getShape(scene.level(), pos, net.minecraft.world.phys.shapes.CollisionContext.of(mc.player)),
+            RenderSystem.applyModelViewMatrix();
+            RenderSystem.setProjectionMatrix(scene.view().projectionMatrix(), VertexSorting.DISTANCE_TO_ORIGIN);
+            var stack = new PoseStack();
+            if (overlayBuffer == null) overlayBuffer = new ByteBufferBuilder(4096);
+            var lines = RenderType.lines();
+            var outline = new BufferBuilder(overlayBuffer, lines.mode(), lines.format());
+            PortalOutlineInvoker.skyesight$shape(stack, outline,
+                    state.getShape(scene.level(), pos, CollisionContext.of(mc.player)),
                     pos.getX() - camera.x, pos.getY() - camera.y, pos.getZ() - camera.z, 0, 0, 0, .4f);
             var outlineMesh = outline.build();
             if (outlineMesh != null) lines.draw(outlineMesh);
 
         } finally {
             model.popMatrix();
-            com.mojang.blaze3d.systems.RenderSystem.applyModelViewMatrix();
-            com.mojang.blaze3d.systems.RenderSystem.setProjectionMatrix(projection, sorting);
+            RenderSystem.applyModelViewMatrix();
+            RenderSystem.setProjectionMatrix(projection, sorting);
         }
     }
 
-    private static void renderProgress(com.skyeshade.skyesight.client.render.SecondarySceneFrame scene) {
+    private static void renderProgress(SecondarySceneFrame scene) {
         if (scene.visualWorld() == null) return;
         var mc = Minecraft.getInstance();
         var camera = scene.view().camera().getPosition();
-        var model = com.mojang.blaze3d.systems.RenderSystem.getModelViewStack();
-        var projection = new org.joml.Matrix4f(com.mojang.blaze3d.systems.RenderSystem.getProjectionMatrix());
-        var sorting = com.mojang.blaze3d.systems.RenderSystem.getVertexSorting();
+        var model = RenderSystem.getModelViewStack();
+        var projection = new Matrix4f(RenderSystem.getProjectionMatrix());
+        var sorting = RenderSystem.getVertexSorting();
         model.pushMatrix();
         try {
             model.set(scene.view().modelViewMatrix());
-            com.mojang.blaze3d.systems.RenderSystem.applyModelViewMatrix();
-            com.mojang.blaze3d.systems.RenderSystem.setProjectionMatrix(scene.view().projectionMatrix(), com.mojang.blaze3d.vertex.VertexSorting.DISTANCE_TO_ORIGIN);
-            if (overlayBuffer == null) overlayBuffer = new com.mojang.blaze3d.vertex.ByteBufferBuilder(4096);
-            for (var crack : scene.visualWorld().destroyProgress().visible((long) com.skyeshade.skyesight.client.world.SecondaryEntityClock.tickTime())) {
+            RenderSystem.applyModelViewMatrix();
+            RenderSystem.setProjectionMatrix(scene.view().projectionMatrix(), VertexSorting.DISTANCE_TO_ORIGIN);
+            if (overlayBuffer == null) overlayBuffer = new ByteBufferBuilder(4096);
+            for (var crack : scene.visualWorld().destroyProgress().visible((long) SecondaryEntityClock.tickTime())) {
                 var pos = crack.pos();
                 var state = scene.level().getBlockState(pos);
-                if (state.isAir() || camera.distanceToSqr(net.minecraft.world.phys.Vec3.atCenterOf(pos)) > 1024
-                        || !scene.view().frustum().isVisible(new net.minecraft.world.phys.AABB(pos))) continue;
-                var stack = new com.mojang.blaze3d.vertex.PoseStack();
+                if (state.isAir() || camera.distanceToSqr(Vec3.atCenterOf(pos)) > 1024
+                        || !scene.view().frustum().isVisible(new AABB(pos))) continue;
+                var stack = new PoseStack();
                 stack.translate(pos.getX() - camera.x, pos.getY() - camera.y, pos.getZ() - camera.z);
                 // Flush this view's geometry while its projection/stencil are installed. Never enqueue
                 // destination vertices into a main-world batch whose eventual draw owns other matrices.
-                var material = net.minecraft.client.resources.model.ModelBakery.DESTROY_TYPES.get(crack.stage());
-                var breaking = new com.mojang.blaze3d.vertex.BufferBuilder(overlayBuffer, material.mode(), material.format());
-                var consumer = new com.mojang.blaze3d.vertex.SheetedDecalTextureGenerator(breaking, stack.last(), 1);
-                mc.getBlockRenderer().renderBreakingTexture(state, pos, scene.level(), stack, consumer, net.neoforged.neoforge.client.model.data.ModelData.EMPTY);
+                var material = ModelBakery.DESTROY_TYPES.get(crack.stage());
+                var breaking = new BufferBuilder(overlayBuffer, material.mode(), material.format());
+                var consumer = new SheetedDecalTextureGenerator(breaking, stack.last(), 1);
+                mc.getBlockRenderer().renderBreakingTexture(state, pos, scene.level(), stack, consumer, ModelData.EMPTY);
                 var mesh = breaking.build();
                 if (mesh != null) {
                     // Match vanilla's view-offset layering. Polygon offset alone can lose the
@@ -335,11 +365,11 @@ public final class PortalInteractionClient {
                     model.pushMatrix();
                     try {
                         model.scale(0.99975586f);
-                        com.mojang.blaze3d.systems.RenderSystem.applyModelViewMatrix();
-                        com.mojang.blaze3d.vertex.BufferUploader.drawWithShader(mesh);
+                        RenderSystem.applyModelViewMatrix();
+                        BufferUploader.drawWithShader(mesh);
                     } finally {
                         model.popMatrix();
-                        com.mojang.blaze3d.systems.RenderSystem.applyModelViewMatrix();
+                        RenderSystem.applyModelViewMatrix();
                         material.clearRenderState();
                     }
                 }
@@ -347,8 +377,8 @@ public final class PortalInteractionClient {
             }
         } finally {
             model.popMatrix();
-            com.mojang.blaze3d.systems.RenderSystem.applyModelViewMatrix();
-            com.mojang.blaze3d.systems.RenderSystem.setProjectionMatrix(projection, sorting);
+            RenderSystem.applyModelViewMatrix();
+            RenderSystem.setProjectionMatrix(projection, sorting);
         }
     }
 

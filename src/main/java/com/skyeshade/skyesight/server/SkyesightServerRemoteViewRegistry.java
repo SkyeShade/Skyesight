@@ -1,12 +1,14 @@
 package com.skyeshade.skyesight.server;
 
-import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistration;
 import com.skyeshade.skyesight.api.SkyesightPortalRegistry;
+import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistration;
+import com.skyeshade.skyesight.server.portal.TraversalPortalManager;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -139,9 +141,9 @@ public final class SkyesightServerRemoteViewRegistry {
     public static synchronized Collection<SkyesightRemoteViewRegistration> removeNonTraversalViews(ServerPlayer player) {
         var views = REGISTRATIONS.get(player.getUUID());
         if (views == null) return List.of();
-        var removed = new java.util.ArrayList<SkyesightRemoteViewRegistration>();
+        var removed = new ArrayList<SkyesightRemoteViewRegistration>();
         views.values().removeIf(view -> {
-            if (com.skyeshade.skyesight.server.portal.TraversalPortalManager.ownsView(view.viewId())) return false;
+            if (TraversalPortalManager.ownsView(view.viewId())) return false;
             removed.add(view); return true;
         });
         if (views.isEmpty()) REGISTRATIONS.remove(player.getUUID());

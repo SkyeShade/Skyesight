@@ -1,18 +1,19 @@
 package com.skyeshade.skyesight.server.portal;
 
-import com.skyeshade.skyesight.server.SkyesightForcedChunkTickets;
 import com.skyeshade.skyesight.server.portal.PortalRegionTracker.Key;
 import com.skyeshade.skyesight.server.portal.PortalRegionTracker.Region;
-import net.minecraft.server.MinecraftServer;
+import com.skyeshade.skyesight.server.SkyesightForcedChunkTickets;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.TicketType;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.ChunkPos;
 
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 
 public final class PortalChunkTicketController {
-    private static final TicketType<String> SIMULATION_TICKET = TicketType.create("skyesight_simulation", java.util.Comparator.<String>naturalOrder());
+    private static final TicketType<String> SIMULATION_TICKET = TicketType.create("skyesight_simulation", Comparator.<String>naturalOrder());
     private static final Map<Key, Long> LAST_TICKET_REFRESH_TICKS = new HashMap<>();
 
     private PortalChunkTicketController() {

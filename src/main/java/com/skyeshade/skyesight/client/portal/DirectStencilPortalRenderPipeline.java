@@ -1,5 +1,6 @@
 package com.skyeshade.skyesight.client.portal;
 
+import com.skyeshade.skyesight.client.transition.SecondaryTransition;
 import net.minecraft.core.BlockPos;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 
@@ -7,7 +8,7 @@ public final class DirectStencilPortalRenderPipeline {
     private DirectStencilPortalRenderPipeline() {}
 
     public static void onRenderLevelStage(RenderLevelStageEvent event) {
-        if (com.skyeshade.skyesight.client.transition.SecondaryTransition.warmingPhysicalTerrain()) return;
+        if (SecondaryTransition.warmingPhysicalTerrain()) return;
         PortalDirectStencilRenderer.onRenderLevelStage(event);
     }
 

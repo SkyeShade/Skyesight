@@ -17,10 +17,14 @@ final class PortalPairWire {
         render(b, s.renderB());
         b.writeBoolean(s.renderBackface());
         b.writeUtf(s.sourceTag(), 256);
+        b.writeEnum(s.sidednessA());
+        b.writeEnum(s.sidednessB());
+        b.writeEnum(s.directionality());
     }
 
     static PortalPairSettings read(RegistryFriendlyByteBuf b) {
-        return new PortalPairSettings(b.readEnum(PortalBehavior.class), shape(b), shape(b), render(b), render(b), b.readBoolean(), b.readUtf(256));
+        return new PortalPairSettings(b.readEnum(PortalBehavior.class), shape(b), shape(b), render(b), render(b), b.readBoolean(), b.readUtf(256),
+                b.readEnum(PortalSidedness.class), b.readEnum(PortalSidedness.class), b.readEnum(PortalDirectionality.class));
     }
 
     static void shape(RegistryFriendlyByteBuf b, PortalAperture a) {

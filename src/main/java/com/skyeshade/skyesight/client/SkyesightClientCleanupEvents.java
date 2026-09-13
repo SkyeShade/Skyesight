@@ -1,6 +1,5 @@
 package com.skyeshade.skyesight.client;
 
-import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.api.SkyesightPortalApi;
 import com.skyeshade.skyesight.client.chunk.SkyesightPortalChunkStorage;
 import com.skyeshade.skyesight.client.portal.CrossDimPortalTerrainWarmup;
@@ -8,19 +7,25 @@ import com.skyeshade.skyesight.client.portal.PortalDirectStencilRenderer;
 import com.skyeshade.skyesight.client.render.SecondarySodiumTerrainPass;
 import com.skyeshade.skyesight.client.render.state.PortalRemoteChunkRuntimeState;
 import com.skyeshade.skyesight.client.render.state.PortalSecondaryRenderState;
+import com.skyeshade.skyesight.client.transition.TraversalPortalStandby;
 import com.skyeshade.skyesight.client.view.SkyesightClientApi;
 import com.skyeshade.skyesight.client.world.SkyesightClientChunkRequester;
 import com.skyeshade.skyesight.client.world.SkyesightPortalEntityPool;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorldManager;
+import com.skyeshade.skyesight.Skyesight;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
+
+import java.util.ArrayList;
+import java.util.Set;
 
 @EventBusSubscriber(
         modid = Skyesight.MODID,
@@ -76,8 +81,8 @@ public final class SkyesightClientCleanupEvents {
 
     public static void invalidateLevelBoundCaches(String reason) {
         var retained = reason != null && reason.startsWith("client_level_changed")
-                ? com.skyeshade.skyesight.client.transition.TraversalPortalStandby.retained()
-                : java.util.Set.<net.minecraft.resources.ResourceLocation>of();
+                ? TraversalPortalStandby.retained()
+                : Set.<ResourceLocation>of();
         int viewContexts = PortalDirectStencilRenderer.invalidateLevelBoundCaches(reason, retained);
         int visualWorlds = SkyesightVisualWorldManager.count();
 
@@ -103,7 +108,7 @@ public final class SkyesightClientCleanupEvents {
             SkyesightVisualWorldManager.closeAll();
             SkyesightPortalEntityPool.clearAll();
         } else {
-            var retire = new java.util.ArrayList<net.minecraft.resources.ResourceLocation>();
+            var retire = new ArrayList<ResourceLocation>();
             SkyesightVisualWorldManager.forEachWorld((id, world) -> { if (!retained.contains(id)) retire.add(id); });
             retire.forEach(SkyesightVisualWorldManager::close);
         }

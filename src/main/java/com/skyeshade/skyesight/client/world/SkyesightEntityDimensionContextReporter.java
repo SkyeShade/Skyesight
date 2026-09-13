@@ -1,9 +1,9 @@
 package com.skyeshade.skyesight.client.world;
 
+import com.skyeshade.skyesight.entity.SkyesightEntityDimensionContext;
 import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.SkyesightDebugConfig;
 import com.skyeshade.skyesight.SkyesightNativeVisualEntityRoutingDebug;
-import com.skyeshade.skyesight.entity.SkyesightEntityDimensionContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceKey;
@@ -13,6 +13,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 
 public final class SkyesightEntityDimensionContextReporter {
@@ -153,7 +154,7 @@ public final class SkyesightEntityDimensionContextReporter {
     }
 
     private static String format(double value) {
-        return String.format(java.util.Locale.ROOT, "%.1f", value);
+        return String.format(Locale.ROOT, "%.1f", value);
     }
 
     private static final class DimensionBucket {

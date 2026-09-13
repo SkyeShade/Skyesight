@@ -1,19 +1,20 @@
 package com.skyeshade.skyesight.server;
 
-import com.skyeshade.skyesight.Skyesight;
-import com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics;
-import com.skyeshade.skyesight.SkyesightDebugConfig;
 import com.skyeshade.skyesight.network.SkyesightChunkDataPayload;
 import com.skyeshade.skyesight.network.SkyesightChunkRequestPayload;
+import com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics;
+import com.skyeshade.skyesight.remote.SkyesightRemoteRadiusPolicy;
 import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistration;
+import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.SkyesightDebugConfig;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkPacketData;
 import net.minecraft.network.protocol.game.ClientboundLightUpdatePacketData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.chunk.LevelChunk;
-import net.neoforged.neoforge.network.PacketDistributor;
+import net.minecraft.world.level.ChunkPos;
 import net.neoforged.neoforge.network.handling.IPayloadContext;
+import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -44,15 +45,15 @@ public final class SkyesightServerChunkSender {
             if (registration == null
                     || registration.generation() != payload.viewGeneration()
                     || !registration.targetDimension().equals(payload.dimension())) {
-                if (com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics.due("server-rejected-"+player.getUUID(),payload.viewId(),payload.viewGeneration()))
-                    com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics.log("server-rejected",payload.viewId(),payload.viewGeneration(),"player="+player.getUUID()+" current="+registration+" payloadCenter="+payload.centerChunkX()+","+payload.centerChunkZ());
+                if (SkyesightRemoteCenterDiagnostics.due("server-rejected-"+player.getUUID(),payload.viewId(),payload.viewGeneration()))
+                    SkyesightRemoteCenterDiagnostics.log("server-rejected",payload.viewId(),payload.viewGeneration(),"player="+player.getUUID()+" current="+registration+" payloadCenter="+payload.centerChunkX()+","+payload.centerChunkZ());
                 return;
             }
 
             ServerLevel level = player.server.getLevel(payload.dimension());
             // ChunkMap clamps normal server view distance to 2..32; mirror its upper bound.
             int serverMaximum = Math.max(0, Math.min(32, player.server.getPlayerList().getViewDistance()));
-            int loadRadius = com.skyeshade.skyesight.remote.SkyesightRemoteRadiusPolicy.accepted(payload.radius(),serverMaximum);
+            int loadRadius = SkyesightRemoteRadiusPolicy.accepted(payload.radius(),serverMaximum);
             if (SkyesightRemoteCenterDiagnostics.due("radius-"+player.getUUID(),payload.viewId(),payload.viewGeneration()))
                 Skyesight.LOGGER.info("REMOTE_RADIUS_ACCEPTED player={} view={} requested={} serverMax={} accepted={}",
                         player.getUUID(),payload.viewId(),payload.radius(),serverMaximum,loadRadius);
@@ -164,8 +165,8 @@ public final class SkyesightServerChunkSender {
             SkyesightServerViewTracker.ViewWatch watch =
                     SkyesightServerViewTracker.getWatch(player, request.viewId());
 
-            if (com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics.due("server-accepted-"+player.getUUID(),request.viewId(),request.viewGeneration()))
-                com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics.log("server-accepted",request.viewId(),request.viewGeneration(),"player="+player.getUUID()+" requestCenter="+request.centerChunkX()+","+request.centerChunkZ()+" serverWatchCenter="+(watch==null?"none":watch.centerChunkX()+","+watch.centerChunkZ())+" sent="+sent);
+            if (SkyesightRemoteCenterDiagnostics.due("server-accepted-"+player.getUUID(),request.viewId(),request.viewGeneration()))
+                SkyesightRemoteCenterDiagnostics.log("server-accepted",request.viewId(),request.viewGeneration(),"player="+player.getUUID()+" requestCenter="+request.centerChunkX()+","+request.centerChunkZ()+" serverWatchCenter="+(watch==null?"none":watch.centerChunkX()+","+watch.centerChunkZ())+" sent="+sent);
             SkyesightRemoteCenterDiagnostics.trace("SERVER_WATCH_UPDATE",request.viewId(),request.viewGeneration(),request.requestSequence(),
                     "player="+player.getUUID()+" oldCenter="+(oldWatch==null?"none":oldWatch.centerChunkX()+","+oldWatch.centerChunkZ())
                     +" newCenter="+(watch==null?"none":watch.centerChunkX()+","+watch.centerChunkZ())+" watchChunks="+watchedChunks.size()

@@ -1,17 +1,24 @@
 package com.skyeshade.skyesight.client.render.sodium;
 
-import net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer;
-import net.caffeinemc.mods.sodium.client.render.chunk.RenderSectionManager;
+import it.unimi.dsi.fastutil.longs.Long2ReferenceMap;
 import net.caffeinemc.mods.sodium.client.render.chunk.lists.SortedRenderLists;
+import net.caffeinemc.mods.sodium.client.render.chunk.occlusion.OcclusionCuller;
+import net.caffeinemc.mods.sodium.client.render.chunk.RenderSection;
+import net.caffeinemc.mods.sodium.client.render.chunk.RenderSectionManager;
+import net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer;
+import net.caffeinemc.mods.sodium.client.render.viewport.CameraTransform;
+import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
+
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.HashSet;
 import java.util.Set;
 
 /** Sodium-specific read-only adapter for the geometry lists actually submitted to rendering. */
 public final class SodiumTerrainCoverage {
     private static Field managerField, listsField, sectionsField;
-    private static java.lang.reflect.Method searchDistance, withinDistance;
+    private static Method searchDistance, withinDistance;
     private SodiumTerrainCoverage() {}
     private static void initialize() throws ReflectiveOperationException {
         if (managerField != null) return;
@@ -19,9 +26,9 @@ public final class SodiumTerrainCoverage {
         listsField = RenderSectionManager.class.getDeclaredField("renderLists"); listsField.setAccessible(true);
         sectionsField = RenderSectionManager.class.getDeclaredField("sectionByPosition"); sectionsField.setAccessible(true);
         searchDistance = RenderSectionManager.class.getDeclaredMethod("getSearchDistance"); searchDistance.setAccessible(true);
-        withinDistance = net.caffeinemc.mods.sodium.client.render.chunk.occlusion.OcclusionCuller.class.getDeclaredMethod("isWithinRenderDistance",
-                net.caffeinemc.mods.sodium.client.render.viewport.CameraTransform.class,
-                net.caffeinemc.mods.sodium.client.render.chunk.RenderSection.class, float.class);
+        withinDistance = OcclusionCuller.class.getDeclaredMethod("isWithinRenderDistance",
+                CameraTransform.class,
+                RenderSection.class, float.class);
         withinDistance.setAccessible(true);
         managerField = manager;
     }
@@ -56,10 +63,10 @@ public final class SodiumTerrainCoverage {
             initialize();
             var manager = (RenderSectionManager) managerField.get(renderer);
             if (manager == null) return Set.of();
-            var sections = (it.unimi.dsi.fastutil.longs.Long2ReferenceMap<net.caffeinemc.mods.sodium.client.render.chunk.RenderSection>) sectionsField.get(manager);
+            var sections = (Long2ReferenceMap<RenderSection>) sectionsField.get(manager);
             float distance = (float) searchDistance.invoke(manager);
-            var camera = net.minecraft.client.Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
-            var transform = new net.caffeinemc.mods.sodium.client.render.viewport.CameraTransform(camera.x, camera.y, camera.z);
+            var camera = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
+            var transform = new CameraTransform(camera.x, camera.y, camera.z);
             var result = new HashSet<BlockPos>();
             for (var section : sections.values()) {
                 var pos = section.getPosition();

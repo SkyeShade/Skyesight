@@ -1,4 +1,4 @@
-package com.skyeshade.skyesight.client.render.entity;
+package com.skyeshade.skyesight.client.render.slice;
 
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormat;
@@ -12,17 +12,21 @@ import java.util.*;
  * Scoped Sutherland-Hodgman clipping of entity QUADS. Attributes are interpolated at the cut.
  * Leaves shaders, render types and batch ownership unchanged; direct GPU/custom primitive draws are unsupported.
  */
-public final class PortalEntityClipBuffer implements MultiBufferSource, AutoCloseable {
+public final class EntityClipBuffer implements MultiBufferSource, AutoCloseable {
     private final MultiBufferSource output;
     private final List<List<Vector4f>> regions;
     private final boolean union;
+    private SliceCapCollector caps;
+    private boolean closed;
+
+    EntityClipBuffer withCaps(SliceCapCollector caps) { this.caps=caps;return this; }
     private final Map<RenderType, Consumer> consumers = new LinkedHashMap<>();
 
-    public PortalEntityClipBuffer(MultiBufferSource output, List<Vector4f> planes) {
+    public EntityClipBuffer(MultiBufferSource output, List<Vector4f> planes) {
         this(output, List.of(planes), true);
     }
 
-    public PortalEntityClipBuffer(MultiBufferSource output, List<List<Vector4f>> regions, boolean union) {
+    public EntityClipBuffer(MultiBufferSource output, List<List<Vector4f>> regions, boolean union) {
         this.output = output;
         this.union = union;
         this.regions = regions.stream().map(p -> p.stream().map(Vector4f::new).toList()).toList();
@@ -38,13 +42,18 @@ public final class PortalEntityClipBuffer implements MultiBufferSource, AutoClos
 
     @Override
     public void close() {
+        if (closed) return;
+        closed = true;
         consumers.values().forEach(Consumer::finish);
+        if (caps != null) caps.render(output);
     }
 
     private final class Consumer implements VertexConsumer {
         private final RenderType type;
         private final List<float[]> vertices = new ArrayList<>(4);
         private float[] current;
+        private boolean currentCap;
+        private boolean quadCap=true;
 
         Consumer(RenderType type) {
             this.type = type;
@@ -53,10 +62,12 @@ public final class PortalEntityClipBuffer implements MultiBufferSource, AutoClos
         private void finishVertex() {
             if (current == null) return;
             vertices.add(current);
+            quadCap &= currentCap;
             current = null;
             if (vertices.size() == 4) {
                 emit();
                 vertices.clear();
+                quadCap=true;
             }
         }
 
@@ -65,6 +76,7 @@ public final class PortalEntityClipBuffer implements MultiBufferSource, AutoClos
         }
 
         private void emit() {
+            if (caps != null && quadCap && vertices.stream().anyMatch(v -> v[6]>0)) caps.collect(vertices);
             if (union) {
                 for (var planes : regions) {
                     List<float[]> polygon = new ArrayList<>(vertices);
@@ -100,6 +112,8 @@ public final class PortalEntityClipBuffer implements MultiBufferSource, AutoClos
         @Override
         public VertexConsumer addVertex(float x, float y, float z) {
             finishVertex();
+            // Snapshot eligibility now, not when a deferred quad is emitted after scope exit.
+            currentCap=caps==null || CapContributionScope.producesCap();
             current = new float[16];
             current[0] = x;
             current[1] = y;
@@ -148,7 +162,7 @@ public final class PortalEntityClipBuffer implements MultiBufferSource, AutoClos
     }
 
     /** Disjoint remainder outside a convex region; preserves source geometry beside the aperture. */
-    static List<List<float[]>> subtract(List<float[]> polygon, List<Vector4f> region) {
+    public static List<List<float[]>> subtract(List<float[]> polygon, List<Vector4f> region) {
         List<List<float[]>> outside = new ArrayList<>();
         for (var plane : region) {
             var piece = clip(polygon, new Vector4f(plane).negate());
@@ -159,7 +173,7 @@ public final class PortalEntityClipBuffer implements MultiBufferSource, AutoClos
         return outside;
     }
 
-    static List<float[]> clip(List<float[]> input, Vector4f p) {
+    public static List<float[]> clip(List<float[]> input, Vector4f p) {
         List<float[]> out = new ArrayList<>();
         if (input.isEmpty()) return out;
         float[] previous = input.getLast();

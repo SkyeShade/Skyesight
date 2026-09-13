@@ -1,20 +1,22 @@
 package com.skyeshade.skyesight.mixin.client;
 
+import com.llamalad7.mixinextras.injector.WrapWithCondition;
+import com.llamalad7.mixinextras.sugar.Local;
 import com.skyeshade.skyesight.client.transition.SecondaryTransition;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.ReceivingLevelScreen;
-import org.spongepowered.asm.mixin.Mixin;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.Minecraft;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.Mixin;
 
 @Mixin(Minecraft.class)
 public abstract class MinecraftLiveTransitionScreenMixin {
-    @com.llamalad7.mixinextras.injector.WrapWithCondition(method = {"updateScreenAndTick", "forceSetScreen"},
+    @WrapWithCondition(method = {"updateScreenAndTick", "forceSetScreen"},
             at = @At(value = "INVOKE", target = "Lnet/minecraft/client/Minecraft;runTick(Z)V"))
     private boolean skyesight$skipConcealedForcedFrame(Minecraft minecraft, boolean advanceGameTime,
-            @com.llamalad7.mixinextras.sugar.Local(argsOnly = true) Screen screen) {
+            @Local(argsOnly = true) Screen screen) {
         // The forced loading frame repeats the old partial tick inside packet application.
         // Keep the already presented scene until the next normal frame advances the timer.
         return !(screen instanceof ReceivingLevelScreen) || !SecondaryTransition.concealsLoadingScreen();

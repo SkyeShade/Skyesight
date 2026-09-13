@@ -1,9 +1,13 @@
 package com.skyeshade.skyesight.server;
 
+import com.skyeshade.skyesight.server.portal.PortalChunkTicketController;
+import com.skyeshade.skyesight.server.portal.PortalRegionTracker;
 import com.skyeshade.skyesight.Skyesight;
 import net.minecraft.server.level.ServerPlayer;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.entity.living.LivingDeathEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 
@@ -19,8 +23,8 @@ public final class SkyesightRemoteViewServerEvents {
         }
     }
 
-    @SubscribeEvent(priority = net.neoforged.bus.api.EventPriority.LOWEST)
-    public static void onDeath(net.neoforged.neoforge.event.entity.living.LivingDeathEvent event) {
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void onDeath(LivingDeathEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) SkyesightRemoteViewLifecycleHandler.removeAll(player);
     }
 
@@ -40,10 +44,10 @@ public final class SkyesightRemoteViewServerEvents {
             SkyesightRemoteViewLifecycleHandler.removeAll(player);
         }
         SkyesightServerChunkLoader.clear(event.getServer());
-        for (var region : com.skyeshade.skyesight.server.portal.PortalRegionTracker.snapshotValues()) {
-            com.skyeshade.skyesight.server.portal.PortalChunkTicketController.removeRegionTickets(event.getServer(), region, 1);
-            com.skyeshade.skyesight.server.portal.PortalRegionTracker.remove(
-                    new com.skyeshade.skyesight.server.portal.PortalRegionTracker.Key(region.playerId(), region.viewId()));
+        for (var region : PortalRegionTracker.snapshotValues()) {
+            PortalChunkTicketController.removeRegionTickets(event.getServer(), region, 1);
+            PortalRegionTracker.remove(
+                    new PortalRegionTracker.Key(region.playerId(), region.viewId()));
         }
         SkyesightForcedChunkTickets.clear(event.getServer());
         SkyesightServerRemoteViewRegistry.clear();

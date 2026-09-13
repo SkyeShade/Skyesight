@@ -1,14 +1,20 @@
 package com.skyeshade.skyesight.server.portal;
 
-import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.api.*;
+import com.skyeshade.skyesight.api.SkyesightPortalRaycast;
 import com.skyeshade.skyesight.network.SkyesightTraversalPayload;
+import com.skyeshade.skyesight.portal.PortalCrossingState;
 import com.skyeshade.skyesight.portal.PortalTraversalMath;
+import com.skyeshade.skyesight.server.SkyesightRemoteViewLifecycleHandler;
+import com.skyeshade.skyesight.server.SkyesightServerChunkLoader;
+import com.skyeshade.skyesight.Skyesight;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -17,7 +23,11 @@ import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
+
 import java.util.*;
+import java.util.ArrayList;
+import java.util.function.Predicate;
+import java.util.List;
 
 /** Canonical session-scoped server pair registry. All traversal decisions run on the server thread. */
 @EventBusSubscriber(modid = Skyesight.MODID)
@@ -26,12 +36,12 @@ public final class TraversalPortalManager {
     private record Sample(ResourceKey<Level> dimension, Vec3 feet) {}
     private static final Map<UUID, PortalEndpoint> SELECTIONS = new HashMap<>();
     private static final Map<UUID, Pair> PAIRS = new LinkedHashMap<>();
-    private static final Map<ResourceKey<Level>, java.util.List<com.skyeshade.skyesight.api.SkyesightPortalRaycast.Link>> LINK_CACHE = new HashMap<>();
+    private static final Map<ResourceKey<Level>, List<SkyesightPortalRaycast.Link>> LINK_CACHE = new HashMap<>();
     private static final Map<UUID, Sample> PREVIOUS = new HashMap<>();
     private record SideKey(UUID owner, boolean fromA, long revision) {}
-    private static final Map<UUID, Map<SideKey, com.skyeshade.skyesight.portal.PortalCrossingState>> SIDES = new HashMap<>();
+    private static final Map<UUID, Map<SideKey, PortalCrossingState>> SIDES = new HashMap<>();
     private static long revision, sequence;
-    public static boolean ownsView(net.minecraft.resources.ResourceLocation id) {
+    public static boolean ownsView(ResourceLocation id) {
         for (UUID owner : PAIRS.keySet()) {
             if (id.toString().equals(SkyesightTraversalPayload.portalId(owner, true))
                     || id.toString().equals(SkyesightTraversalPayload.portalId(owner, false))) return true;
@@ -39,21 +49,27 @@ public final class TraversalPortalManager {
         return false;
     }
     private TraversalPortalManager() {}
+    public static PortalDefinition definition(UUID id) {
+        var pair = PAIRS.get(id);
+        return pair == null ? null : new PortalDefinition(id, pair.a, pair.b, pair.settings);
+    }
     /** Immutable directional geometry snapshot; never consult the client portal registry on a server. */
-    public static java.util.List<com.skyeshade.skyesight.api.SkyesightPortalRaycast.Link> links(ResourceKey<Level> dimension) {
+    public static List<SkyesightPortalRaycast.Link> links(ResourceKey<Level> dimension) {
         var cached = LINK_CACHE.get(dimension);
         if (cached != null) return cached;
-        var result = new java.util.ArrayList<com.skyeshade.skyesight.api.SkyesightPortalRaycast.Link>();
+        var result = new ArrayList<SkyesightPortalRaycast.Link>();
         PAIRS.forEach((owner, pair) -> {
             if (pair.settings.behavior() != PortalBehavior.TRAVERSABLE) return;
             for (boolean fromA : new boolean[]{true, false}) {
+                if (!pair.settings.directionality().allows(fromA)) continue;
                 var source = fromA ? pair.a : pair.b; var target = fromA ? pair.b : pair.a;
-                if (source.dimension().equals(dimension)) result.add(new com.skyeshade.skyesight.api.SkyesightPortalRaycast.Link(
-                        net.minecraft.resources.ResourceLocation.parse(SkyesightTraversalPayload.portalId(owner, fromA)),
-                        pair.revision, source, target, pair.settings.renderBackface(), (fromA ? pair.settings.apertureA() : pair.settings.apertureB()).bind(source)));
+                if (source.dimension().equals(dimension)) result.add(new SkyesightPortalRaycast.Link(
+                        ResourceLocation.parse(SkyesightTraversalPayload.portalId(owner, fromA)),
+                        pair.revision, source, target, pair.settings.sides(fromA) != PortalSidedness.FRONT_ONLY,
+                        (fromA ? pair.settings.apertureA() : pair.settings.apertureB()).bind(source), pair.settings.sides(fromA)));
             }
         });
-        var snapshot = java.util.List.copyOf(result);
+        var snapshot = List.copyOf(result);
         LINK_CACHE.put(dimension, snapshot);
         return snapshot;
     }
@@ -72,7 +88,7 @@ public final class TraversalPortalManager {
         player.sendSystemMessage(Component.literal("Traversal " + (a == null ? "A" : "B") + ": "
                 + endpoint.dimension().location() + " center=" + endpoint.center() + " normal=" + PortalTraversalMath.normal(endpoint)));
         if (a == null) { SELECTIONS.put(owner, endpoint); return; }
-        SkyesightPortalApi.registerPortalPair(player.server, owner, a, endpoint, PortalPairSettings.of(PortalBehavior.TRAVERSABLE));
+        SkyesightPortalApi.register(player.server, debugDefinition(owner, a, endpoint));
         player.sendSystemMessage(Component.literal("Created 2x3 pair " + SkyesightTraversalPayload.portalId(owner, true)
                 + " <-> " + SkyesightTraversalPayload.portalId(owner, false) + ". Walk through either side; sneak-use to remove."));
     }
@@ -81,18 +97,34 @@ public final class TraversalPortalManager {
         SkyesightPortalApi.removePortalPair(player.server, owner);
         player.sendSystemMessage(Component.literal("Traversal selection/pair removed."));
     }
-    public static void registerPair(net.minecraft.server.MinecraftServer server, UUID owner, PortalEndpoint a, PortalEndpoint b) {
+    /** Preserve the free-standing debug tool's policy independently of public builder defaults. */
+    static PortalDefinition debugDefinition(UUID id, PortalEndpoint a, PortalEndpoint b) {
+        return PortalDefinition.builder(id).endpointA(a).endpointB(b)
+                .behavior(PortalBehavior.TRAVERSABLE)
+                .directionality(PortalDirectionality.TWO_WAY)
+                .sides(PortalSidedness.BOTH, PortalSidedness.BOTH)
+                .aperture(PortalAperture.RECTANGLE).build();
+    }
+    public static void registerPair(MinecraftServer server, UUID owner, PortalEndpoint a, PortalEndpoint b) {
         SkyesightPortalApi.registerPortalPair(server,owner,a,b,PortalPairSettings.of(PortalBehavior.TRAVERSABLE));
     }
-    public static void registerPair(net.minecraft.server.MinecraftServer server, UUID owner, PortalEndpoint a, PortalEndpoint b, PortalPairSettings settings) {
+    public static void registerPair(MinecraftServer server, UUID owner, PortalEndpoint a, PortalEndpoint b, PortalPairSettings settings) {
+        if (!server.isSameThread()) throw new IllegalStateException("Portal mutation requires the server thread");
+        var old = PAIRS.get(owner);
+        if (old != null && old.a.equals(a) && old.b.equals(b) && old.settings.equals(settings)) return;
         var pair = new Pair(++revision, a, b, settings);
         PAIRS.put(owner, pair); LINK_CACHE.clear();
         SIDES.values().forEach(states -> states.keySet().removeIf(key -> key.owner.equals(owner)));
         PacketDistributor.sendToAllPlayers(definition(owner, pair));
     }
-    public static void removePair(net.minecraft.server.MinecraftServer server, UUID owner) {
+    public static void removePair(MinecraftServer server, UUID owner) {
+        if (!server.isSameThread()) throw new IllegalStateException("Portal registration requires the server thread");
         Pair pair = PAIRS.remove(owner);
         LINK_CACHE.clear();
+        if (pair != null) for (var player : server.getPlayerList().getPlayers()) {
+            SkyesightRemoteViewLifecycleHandler.removeView(player, ResourceLocation.parse(SkyesightTraversalPayload.portalId(owner, true)));
+            SkyesightRemoteViewLifecycleHandler.removeView(player, ResourceLocation.parse(SkyesightTraversalPayload.portalId(owner, false)));
+        }
         if (pair != null) PacketDistributor.sendToAllPlayers(new SkyesightTraversalPayload(owner, pair.revision,
                 0, SkyesightTraversalPayload.REMOVE, true, null, null));
         SIDES.values().forEach(states -> states.keySet().removeIf(key -> key.owner.equals(owner)));
@@ -114,27 +146,27 @@ public final class TraversalPortalManager {
         LINK_CACHE.clear();
     }
     @SubscribeEvent public static void tick(ServerTickEvent.Post event) {
-        com.skyeshade.skyesight.server.SkyesightServerChunkLoader.expireTraversalStandby(event.getServer());
+        SkyesightServerChunkLoader.expireTraversalStandby(event.getServer());
         for (ServerPlayer player : event.getServer().getPlayerList().getPlayers()) movementAccepted(player);
     }
     /** Called after vanilla validates movement, before another movement packet can accumulate. */
     public static void movementAccepted(ServerPlayer player) {
-        if (PAIRS.isEmpty()) return;
         UUID id = player.getUUID(); Vec3 current = player.position();
         Sample previous = PREVIOUS.put(id, new Sample(player.level().dimension(), current));
+        if (PAIRS.isEmpty()) return;
         if (previous == null || !previous.dimension.equals(player.level().dimension())
                 || !player.isAlive() || player.isPassenger()) return;
         boolean traversed = false;
         for (var entry : PAIRS.entrySet()) {
             for (boolean fromA : new boolean[]{true, false}) {
-                Pair pair = entry.getValue(); if (pair.settings.behavior() != PortalBehavior.TRAVERSABLE) continue; PortalEndpoint source = fromA ? pair.a : pair.b, target = fromA ? pair.b : pair.a;
+                Pair pair = entry.getValue(); if (pair.settings.behavior() != PortalBehavior.TRAVERSABLE || !pair.settings.directionality().allows(fromA)) continue; PortalEndpoint source = fromA ? pair.a : pair.b, target = fromA ? pair.b : pair.a;
                                 if (!source.dimension().equals(player.level().dimension())) continue;
                 var aperture = fromA ? pair.settings.apertureA() : pair.settings.apertureB();
-                java.util.function.Predicate<Vec3> fits = point -> aperture.fitsPlayer(source,point,player.getBbWidth(),player.getBbHeight());
-                if (!pair.settings.renderBackface() && PortalTraversalMath.local(source,previous.feet).z < 0) continue;
+                Predicate<Vec3> fits = point -> aperture.fitsPlayer(source,point,player.getBbWidth(),player.getBbHeight());
+                if (!pair.settings.sides(fromA).allows(PortalTraversalMath.local(source,previous.feet).z)) continue;
                 var states = SIDES.computeIfAbsent(id, ignored -> new HashMap<>());
                 var side = states.computeIfAbsent(new SideKey(entry.getKey(), fromA, pair.revision), ignored -> {
-                    var state = new com.skyeshade.skyesight.portal.PortalCrossingState();
+                    var state = new PortalCrossingState();
                     state.update(source, previous.feet, fits);
                     return state;
                 });
@@ -167,7 +199,7 @@ public final class TraversalPortalManager {
                 PREVIOUS.put(id, new Sample(target.dimension(), position));
                 // Teleport reset the old samples. Seed the reverse endpoint at arrival;
                 // an actual return sweep is valid even before full-body exit clearance.
-                var arrival = new com.skyeshade.skyesight.portal.PortalCrossingState();
+                var arrival = new PortalCrossingState();
                 arrival.arrive(target, position);
                 SIDES.computeIfAbsent(id, ignored -> new HashMap<>()).put(
                         new SideKey(entry.getKey(), !fromA, pair.revision), arrival);

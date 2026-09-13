@@ -1,15 +1,17 @@
 package com.skyeshade.skyesight.client.world;
 
 import com.mojang.authlib.GameProfile;
-import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.entity.PortalMultipartEntityUtil;
 import com.skyeshade.skyesight.entity.SkyesightEntityDimensionContext;
 import com.skyeshade.skyesight.mixin.common.SynchedEntityDataAccessor;
 import com.skyeshade.skyesight.network.SkyesightEntitySnapshotPayload;
+import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry;
+import com.skyeshade.skyesight.Skyesight;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.RemotePlayer;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
@@ -32,7 +34,7 @@ public final class SkyesightVisualEntityStore {
     private final ClientLevel level;
     private final Map<UUID, SkyesightVisualEntity> entities = new HashMap<>();
     private final Map<UUID, Long> lastSeenMillis = new HashMap<>();
-    private net.minecraft.resources.ResourceLocation viewId;
+    private ResourceLocation viewId;
     private long generation;
 
     public SkyesightVisualEntityStore(ClientLevel level) {
@@ -164,7 +166,7 @@ public final class SkyesightVisualEntityStore {
     }
 
     private void retireIfStale() {
-        if (this.viewId != null && !com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry.accepts(
+        if (this.viewId != null && !SkyesightRemoteViewRegistry.accepts(
                 this.viewId, this.generation, this.level.dimension())) clear();
     }
 

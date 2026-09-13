@@ -27,6 +27,12 @@ public final class SkyesightClientConfig {
             .comment("Maximum client-side distance in blocks at which portals render their remote view.")
             .defineInRange("portalRenderDistanceBlocks", DEFAULT_PORTAL_RENDER_DISTANCE_BLOCKS, 1.0D, 2048.0D);
 
+    public static final ModConfigSpec.IntValue MAX_PORTAL_RECURSION_DEPTH = BUILDER
+            .comment("Portal scene depth: 1 = no recursive/nested portal draws; 2+ = nested recursion. 0 also renders ordinary portals only. Hard maximum 5. Applies live.")
+            .defineInRange("maxPortalRecursionDepth", 1, 0, 5);
+
+    public static int maxPortalRecursionDepth() { return Math.clamp(MAX_PORTAL_RECURSION_DEPTH.get(), 0, 5); }
+
     public static final ModConfigSpec SPEC = BUILDER.build();
 
     private SkyesightClientConfig() {}

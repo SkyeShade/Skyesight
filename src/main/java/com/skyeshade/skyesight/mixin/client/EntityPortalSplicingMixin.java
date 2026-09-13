@@ -15,6 +15,10 @@ public class EntityPortalSplicingMixin {
     @Inject(method = "render", at = @At("HEAD"), cancellable = true)
     private void skyesight$split(Entity entity, double x, double y, double z, float yaw, float tick,
                                  PoseStack pose, MultiBufferSource output, int light, CallbackInfo ci) {
+        if (com.skyeshade.skyesight.client.debug.SkyesightSliceDebug.hides(entity)) {
+            ci.cancel();
+            return;
+        }
         if (PortalEntitySplicing.source((EntityRenderDispatcher) (Object) this, entity, x, y, z, yaw, tick, pose, output, light))
             ci.cancel();
     }

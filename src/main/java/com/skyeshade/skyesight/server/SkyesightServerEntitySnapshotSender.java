@@ -1,29 +1,31 @@
 package com.skyeshade.skyesight.server;
 
-import com.skyeshade.skyesight.mixin.common.LivingEntityAnimationAccessor;
-import com.skyeshade.skyesight.mixin.common.LivingEntityWalkAnimationAccessor;
-import com.skyeshade.skyesight.mixin.common.WalkAnimationStateAccessor;
-import com.skyeshade.skyesight.SkyesightNativeVisualEntityRoutingDebug;
-import com.skyeshade.skyesight.SkyesightPortalEntityPoolConfig;
 import com.skyeshade.skyesight.api.RegisteredPortalView;
 import com.skyeshade.skyesight.api.SkyesightPortalApi;
 import com.skyeshade.skyesight.entity.PortalMultipartEntityUtil;
+import com.skyeshade.skyesight.mixin.common.LivingEntityAnimationAccessor;
+import com.skyeshade.skyesight.mixin.common.LivingEntityWalkAnimationAccessor;
+import com.skyeshade.skyesight.mixin.common.WalkAnimationStateAccessor;
 import com.skyeshade.skyesight.network.SkyesightEntitySnapshotPayload;
+import com.skyeshade.skyesight.SkyesightNativeVisualEntityRoutingDebug;
+import com.skyeshade.skyesight.SkyesightPortalEntityPoolConfig;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.WalkAnimationState;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.UUID;
 
 public final class SkyesightServerEntitySnapshotSender {
     private static final int MAX_ENTITIES_PER_SNAPSHOT = 128;
@@ -40,7 +42,7 @@ public final class SkyesightServerEntitySnapshotSender {
             return;
         }
 
-        int radiusBlocks = watch.radius() * 16 + 16;
+        int radiusBlocks = snapshotRadius(watch) * 16 + 16;
         double centerX = watch.centerChunkX() * 16.0D + 8.0D;
         double centerZ = watch.centerChunkZ() * 16.0D + 8.0D;
 
@@ -54,7 +56,7 @@ public final class SkyesightServerEntitySnapshotSender {
         );
 
         List<SkyesightEntitySnapshotPayload.Entry> entries = new ArrayList<>();
-        var included = new java.util.HashSet<java.util.UUID>();
+        var included = new HashSet<UUID>();
         List<Entity> candidates = level.getEntities((Entity) null, area, entity -> true);
 
         for (Entity entity : candidates) {
@@ -94,6 +96,13 @@ public final class SkyesightServerEntitySnapshotSender {
         );
     }
 
+    // Terrain demand and entity visibility have different radii. Both the periodic sender
+    // and immediate chunk-response sender must produce the same authoritative roster.
+    static int snapshotRadius(SkyesightServerViewTracker.ViewWatch watch) {
+        RegisteredPortalView view = SkyesightPortalApi.getPortal(watch.viewId().toString());
+        return view != null && view.target().dimension().equals(watch.dimension())
+                ? view.renderSettings().entityChunkRadius() : watch.radius();
+    }
     private static boolean crossDimSnapshotDisabled(SkyesightServerViewTracker.ViewWatch watch, ServerLevel level) {
         if (!SkyesightPortalEntityPoolConfig.crossDimEntitySnapshotsDisabled()) {
             return false;
@@ -203,8 +212,8 @@ public final class SkyesightServerEntitySnapshotSender {
                 entity.getYRot(),
                 entity.getXRot(),
                 entity.tickCount,
-                entity instanceof net.minecraft.world.entity.item.ItemEntity item ? item.getAge() : 0,
-                entity instanceof net.minecraft.world.entity.item.ItemEntity item ? item.bobOffs : 0,
+                entity instanceof ItemEntity item ? item.getAge() : 0,
+                entity instanceof ItemEntity item ? item.bobOffs : 0,
                 yBodyRot,
                 yBodyRotO,
                 yHeadRot,

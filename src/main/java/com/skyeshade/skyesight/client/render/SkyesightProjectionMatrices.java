@@ -30,7 +30,12 @@ public final class SkyesightProjectionMatrices {
             Camera camera,
             SkyesightClipPlane clipPlane
     ) {
-        Vector4f cameraSpacePlane = toCameraSpacePlane(camera, clipPlane);
+        return applyObliqueClipPlane(projectionMatrix, camera.getPosition(), camera.rotation(), clipPlane);
+    }
+
+    static Matrix4f applyObliqueClipPlane(Matrix4f projectionMatrix, Vec3 cameraPosition,
+                                         Quaternionf cameraRotation, SkyesightClipPlane clipPlane) {
+        Vector4f cameraSpacePlane = toCameraSpacePlane(cameraPosition, cameraRotation, clipPlane);
 
         Matrix4f inverseProjection = new Matrix4f(projectionMatrix).invert();
 
@@ -62,16 +67,16 @@ public final class SkyesightProjectionMatrices {
     }
 
     private static Vector4f toCameraSpacePlane(
-            Camera camera,
+            Vec3 cameraPosition,
+            Quaternionf cameraRotation,
             SkyesightClipPlane clipPlane
     ) {
-        Vec3 cameraPosition = camera.getPosition();
         Vec3 planePoint = clipPlane.point();
         Vec3 worldNormal = clipPlane.normal().normalize();
 
         Vec3 relativePoint = planePoint.subtract(cameraPosition);
 
-        Quaternionf inverseCameraRotation = new Quaternionf(camera.rotation()).conjugate();
+        Quaternionf inverseCameraRotation = new Quaternionf(cameraRotation).conjugate();
 
         Vector3f cameraSpacePoint = new Vector3f(
                 (float) relativePoint.x(),

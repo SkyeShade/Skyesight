@@ -1,5 +1,6 @@
 package com.skyeshade.skyesight.client.render.sodium;
 
+import com.skyeshade.skyesight.client.render.SkyesightViewDistanceScope;
 import com.skyeshade.skyesight.client.world.SkyesightVisualClientLevel;
 import com.skyeshade.skyesight.client.world.SkyesightVisualTerrainBackend;
 import net.caffeinemc.mods.sodium.client.render.chunk.map.ChunkTracker;
@@ -9,8 +10,10 @@ import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.core.BlockPos;
 import org.joml.Matrix4f;
 
+import java.util.Set;
+
 public final class SkyesightVisualSodiumTerrain implements SkyesightVisualTerrainBackend {
-    @Override public java.util.Set<BlockPos> visibleTerrainSections() { return SodiumTerrainCoverage.visible(renderer.renderer()); }
+    @Override public Set<BlockPos> visibleTerrainSections() { return SodiumTerrainCoverage.visible(renderer.renderer()); }
     private final ChunkTracker chunkTracker;
     private final SkyesightSodiumWorldRenderer renderer;
 
@@ -43,7 +46,7 @@ public final class SkyesightVisualSodiumTerrain implements SkyesightVisualTerrai
             int chunkRadius,
             boolean renderTranslucent
     ) {
-        try (var distance = new com.skyeshade.skyesight.client.render.SkyesightViewDistanceScope(chunkRadius)) {
+        try (var distance = new SkyesightViewDistanceScope(chunkRadius)) {
             this.renderer.renderTerrain(camera, frustum, modelMatrix, projectionMatrix, renderTranslucent);
         }
     }

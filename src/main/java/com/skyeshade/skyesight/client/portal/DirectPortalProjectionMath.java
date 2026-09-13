@@ -2,6 +2,7 @@ package com.skyeshade.skyesight.client.portal;
 
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
+import org.joml.Quaternionf;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 
@@ -166,11 +167,11 @@ public final class DirectPortalProjectionMath {
     private static ProjectedQuad projectExitPortal(
             Matrix4f projection,
             Vec3 cameraPosition,
-            org.joml.Quaternionf cameraRotation,
+            Quaternionf cameraRotation,
             PortalFrame portal
     ) {
         Matrix4f viewProjection = new Matrix4f(projection)
-                .mul(new Matrix4f().rotation(new org.joml.Quaternionf(cameraRotation).conjugate())
+                .mul(new Matrix4f().rotation(new Quaternionf(cameraRotation).conjugate())
                         .translate(
                                 (float) -cameraPosition.x(),
                                 (float) -cameraPosition.y(),

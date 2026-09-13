@@ -1,19 +1,21 @@
 package com.skyeshade.skyesight.mixin.server;
 
 import com.skyeshade.skyesight.server.SkyesightServerBlockEventBroadcaster;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.BlockEventData;
-
-import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.Mixin;
 
 @Mixin(ServerLevel.class)
 public abstract class ServerLevelBlockEventMixin {
     @Inject(method = "blockEvent", at = @At("TAIL"))
-    private void skyesight$queuedVisualEvent(net.minecraft.core.BlockPos pos, net.minecraft.world.level.block.Block block,
-            int id, int param, org.spongepowered.asm.mixin.injection.callback.CallbackInfo ci) {
+    private void skyesight$queuedVisualEvent(BlockPos pos, Block block,
+            int id, int param, CallbackInfo ci) {
         var level = (ServerLevel)(Object)this;
         // Remote watches load chunks without enabling server block ticking. The native queue waits
         // there, but client animation (e.g. lid open count) must receive the event now.

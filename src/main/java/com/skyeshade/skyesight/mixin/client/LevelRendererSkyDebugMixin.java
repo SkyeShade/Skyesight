@@ -1,26 +1,25 @@
 package com.skyeshade.skyesight.mixin.client;
 
-import com.mojang.blaze3d.vertex.BufferUploader;
-import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.VertexBuffer;
 import com.skyeshade.skyesight.client.portal.PortalSkyCaptureManager;
 import com.skyeshade.skyesight.client.render.SkyesightLevelRendererSkyDebug;
 import net.minecraft.client.Camera;
-import net.minecraft.client.renderer.ShaderInstance;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.DimensionSpecialEffects;
 import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.renderer.ShaderInstance;
 import org.joml.Matrix4f;
-import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 
 @Mixin(LevelRenderer.class)
 public abstract class LevelRendererSkyDebugMixin {
     @Shadow
-    private net.minecraft.client.multiplayer.ClientLevel level;
+    private ClientLevel level;
 
     @Inject(
             method = "renderSky",

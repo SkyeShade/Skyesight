@@ -5,6 +5,7 @@ import com.skyeshade.skyesight.client.world.SkyesightVisualEntity;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorld;
 import com.skyeshade.skyesight.entity.PortalMultipartEntityUtil;
 import com.skyeshade.skyesight.entity.SkyesightEntityDimensionContext;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.resources.ResourceKey;
@@ -104,11 +105,24 @@ public final class PortalDimensionEntitySources {
 
         String source = "visual_world:" + viewId;
 
-        var localPlayer = net.minecraft.client.Minecraft.getInstance().player;
+        var localPlayer = Minecraft.getInstance().player;
         if (localPlayer != null && isRenderableInDimension(localPlayer, localPlayer.level().dimension(), targetDimension, bounds, frustum)) {
             result.add(new PortalRenderableEntity(localPlayer, targetDimension, "local-live", null, null, true, false, -1));
         }
 
+        // The player retains the authoritative physical level even inside a secondary
+        // renderer scope. Transfer each UUID as soon as vanilla inserts it; other
+        // remote bodies remain available until their own physical insertion arrives.
+        var physicalOwned = new java.util.HashSet<java.util.UUID>();
+        if (localPlayer != null && localPlayer.level() instanceof ClientLevel physicalLevel
+                && physicalLevel.dimension().equals(targetDimension)) {
+            for (Entity physical : physicalLevel.entitiesForRendering()) {
+                if (!physical.isRemoved()) physicalOwned.add(physical.getUUID());
+            }
+            for (var physical : renderableMainLevelEntitiesForDimension(physicalLevel, targetDimension, bounds, frustum)) {
+                if (!physical.entity().getUUID().equals(localPlayer.getUUID())) result.add(physical);
+            }
+        }
         for (SkyesightVisualEntity visualEntity : visualWorld.entityStore().entities()) {
             if (visualEntity == null) {
                 continue;
@@ -116,6 +130,7 @@ public final class PortalDimensionEntitySources {
 
             Entity entity = visualEntity.entity();
             if (entity != null && localPlayer != null && entity.getUUID().equals(localPlayer.getUUID())) continue;
+            if (entity != null && physicalOwned.contains(entity.getUUID())) continue;
             if (PortalMultipartEntityUtil.shouldSkipStandaloneVisualEntity(entity)) {
                 PortalMultipartEntityUtil.warnSkippedStandalonePart(entity, "renderable_visual_entity_source");
                 continue;

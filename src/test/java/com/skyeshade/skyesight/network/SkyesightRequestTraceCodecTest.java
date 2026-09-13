@@ -1,6 +1,7 @@
 package com.skyeshade.skyesight.network;
 
 import io.netty.buffer.Unpooled;
+import io.netty.handler.codec.DecoderException;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
@@ -23,7 +24,7 @@ class SkyesightRequestTraceCodecTest {
                 buffer.writeInt(0);
                 buffer.writeVarInt(Integer.MAX_VALUE);
                 buffer.writeVarInt(count);
-                assertThrows(io.netty.handler.codec.DecoderException.class,
+                assertThrows(DecoderException.class,
                         () -> SkyesightChunkRequestPayload.STREAM_CODEC.decode(buffer));
             } finally { buffer.release(); }
         }

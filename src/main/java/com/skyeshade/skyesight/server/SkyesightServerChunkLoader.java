@@ -1,13 +1,16 @@
 package com.skyeshade.skyesight.server;
 
+import com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics;
 import com.skyeshade.skyesight.server.portal.PortalRegionTracker;
+import com.skyeshade.skyesight.server.portal.TraversalPortalManager;
 import it.unimi.dsi.fastutil.longs.LongSet;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.Level;
+
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
@@ -45,8 +48,8 @@ public final class SkyesightServerChunkLoader {
             }
         }
         LOADED_VIEWS.put(key, new LoadedView(level.dimension(), next, player.server.getTickCount(),
-                com.skyeshade.skyesight.server.portal.TraversalPortalManager.ownsView(viewId)));
-        com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics.trace("SERVER_LOAD_UPDATE",viewId,generation,sequence,
+                TraversalPortalManager.ownsView(viewId)));
+        SkyesightRemoteCenterDiagnostics.trace("SERVER_LOAD_UPDATE",viewId,generation,sequence,
                 "player="+player.getUUID()+" center="+centerChunkX+","+centerChunkZ
                 +" newlyOwned="+newlyOwned+" released="+released+" ownedChunks="+next.size());
     }

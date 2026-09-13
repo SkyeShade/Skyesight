@@ -1,8 +1,7 @@
 package com.skyeshade.skyesight.client.render;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.skyeshade.skyesight.Skyesight;
-import com.skyeshade.skyesight.SkyesightDebugConfig;
+import com.mojang.blaze3d.vertex.VertexSorting;
 import com.skyeshade.skyesight.api.RegisteredPortalView;
 import com.skyeshade.skyesight.api.SkyesightPortalApi;
 import com.skyeshade.skyesight.client.portal.PortalRenderCostAudit;
@@ -17,12 +16,14 @@ import com.skyeshade.skyesight.client.render.sodium.SodiumSecondaryViewState;
 import com.skyeshade.skyesight.client.render.state.PortalRemoteChunkRuntimeState;
 import com.skyeshade.skyesight.client.render.state.PortalSecondaryRenderState;
 import com.skyeshade.skyesight.client.render.state.PortalSodiumReflectionState;
+import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.SkyesightDebugConfig;
 import it.unimi.dsi.fastutil.longs.Long2ReferenceMap;
 import net.caffeinemc.mods.sodium.client.gl.device.RenderDevice;
-import net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer;
 import net.caffeinemc.mods.sodium.client.render.chunk.ChunkRenderMatrices;
 import net.caffeinemc.mods.sodium.client.render.chunk.RenderSection;
 import net.caffeinemc.mods.sodium.client.render.chunk.RenderSectionManager;
+import net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer;
 import net.caffeinemc.mods.sodium.client.render.viewport.Viewport;
 import net.caffeinemc.mods.sodium.client.render.viewport.ViewportProvider;
 import net.minecraft.client.Camera;
@@ -79,13 +80,13 @@ final class PortalSecondarySodiumTerrainRenderer {
         Matrix4f modelView = frame.modelViewMatrix();
         var frustum = frame.frustum();
 
-        RenderSystem.setProjectionMatrix(projection, com.mojang.blaze3d.vertex.VertexSorting.DISTANCE_TO_ORIGIN);
+        RenderSystem.setProjectionMatrix(projection, VertexSorting.DISTANCE_TO_ORIGIN);
 
         var modelViewStack = RenderSystem.getModelViewStack();
         modelViewStack.identity();
         RenderSystem.applyModelViewMatrix();
 
-        RenderSystem.setProjectionMatrix(projection, com.mojang.blaze3d.vertex.VertexSorting.DISTANCE_TO_ORIGIN);
+        RenderSystem.setProjectionMatrix(projection, VertexSorting.DISTANCE_TO_ORIGIN);
         modelViewStack.identity();
         RenderSystem.applyModelViewMatrix();
 

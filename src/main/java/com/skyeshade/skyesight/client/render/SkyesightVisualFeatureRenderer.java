@@ -3,22 +3,25 @@ package com.skyeshade.skyesight.client.render;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexSorting;
+import com.skyeshade.skyesight.client.world.SkyesightRemoteChunkReceiver;
 import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.SkyesightDebugConfig;
-import com.skyeshade.skyesight.client.world.SkyesightRemoteChunkReceiver;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.Sheets;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.client.ClientHooks;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
@@ -36,7 +39,7 @@ public final class SkyesightVisualFeatureRenderer {
             Matrix4f projectionMatrix,
             float partialTick,
             int chunkRadius,
-            net.minecraft.client.renderer.culling.Frustum frustum
+            Frustum frustum
     ) {
         Minecraft minecraft = Minecraft.getInstance();
         if (level == null || minecraft.player == null || chunkRadius <= 0) {
@@ -96,7 +99,7 @@ public final class SkyesightVisualFeatureRenderer {
                         continue;
                     }
 
-                    if (!net.neoforged.neoforge.client.ClientHooks.isBlockEntityRendererVisible(
+                    if (!ClientHooks.isBlockEntityRendererVisible(
                             minecraft.getBlockEntityRenderDispatcher(), blockEntity, frustum)) continue;
                     Vec3 renderOffset = cameraRelativeOffset(blockEntityPos, cameraPos);
                     BlockState blockState = level.getBlockState(blockEntityPos);
@@ -198,7 +201,7 @@ public final class SkyesightVisualFeatureRenderer {
     }
 
     private static String blockStateFacing(BlockState state) {
-        for (net.minecraft.world.level.block.state.properties.Property<?> property : state.getProperties()) {
+        for (Property<?> property : state.getProperties()) {
             String name = property.getName();
             if ("facing".equals(name)
                     || "horizontal_facing".equals(name)

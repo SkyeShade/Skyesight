@@ -1,17 +1,18 @@
 package com.skyeshade.skyesight.client.render;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import com.skyeshade.skyesight.server.portal.PortalPathProximity;
 import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.SkyesightDebugConfig;
-import com.skyeshade.skyesight.server.portal.PortalPathProximity;
 import net.minecraft.client.Camera;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.world.level.Level;
@@ -145,7 +146,7 @@ public final class PortalProxyMarkerRenderer {
     }
 
     private static void drawBox(
-            com.mojang.blaze3d.vertex.BufferBuilder buffer,
+            BufferBuilder buffer,
             Matrix4f matrix,
             Vec3 cameraPosition,
             Vec3 center
@@ -175,7 +176,7 @@ public final class PortalProxyMarkerRenderer {
     }
 
     private static void drawCross(
-            com.mojang.blaze3d.vertex.BufferBuilder buffer,
+            BufferBuilder buffer,
             Matrix4f matrix,
             Vec3 cameraPosition,
             Vec3 center
@@ -187,7 +188,7 @@ public final class PortalProxyMarkerRenderer {
     }
 
     private static void drawLine(
-            com.mojang.blaze3d.vertex.BufferBuilder buffer,
+            BufferBuilder buffer,
             Matrix4f matrix,
             Vec3 cameraPosition,
             Vec3 from,
@@ -202,7 +203,7 @@ public final class PortalProxyMarkerRenderer {
     }
 
     private static void addVertex(
-            com.mojang.blaze3d.vertex.BufferBuilder buffer,
+            BufferBuilder buffer,
             Matrix4f matrix,
             Vec3 cameraPosition,
             Vec3 position,

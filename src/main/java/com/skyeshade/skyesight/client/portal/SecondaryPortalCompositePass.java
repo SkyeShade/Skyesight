@@ -1,21 +1,23 @@
 package com.skyeshade.skyesight.client.portal;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.VertexSorting;
-import net.minecraft.client.Minecraft;
+import com.skyeshade.skyesight.api.PortalStencilMask;
 import net.minecraft.client.Camera;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.phys.Vec3;
-import com.skyeshade.skyesight.api.PortalStencilMask;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL32;
 
 import static com.skyeshade.skyesight.client.portal.DirectStencilPortalRenderConfig.PORTAL_APERTURE_EDGE_INSET_BLOCKS;
 
@@ -285,14 +287,14 @@ public final class SecondaryPortalCompositePass {
             RenderSystem.setShader(GameRenderer::getPositionColorShader);
             RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
 
-            boolean depthClamp = GL11.glIsEnabled(org.lwjgl.opengl.GL32.GL_DEPTH_CLAMP);
+            boolean depthClamp = GL11.glIsEnabled(GL32.GL_DEPTH_CLAMP);
             try {
                 // The aperture must survive the eye's near plane. This is only stencil
                 // coverage; finite destination geometry keeps its ordinary/exit clipping.
-                GL11.glEnable(org.lwjgl.opengl.GL32.GL_DEPTH_CLAMP);
+                GL11.glEnable(GL32.GL_DEPTH_CLAMP);
                 drawPortalMask(poseStack, camera, portal, stencilMask, viewId);
             } finally {
-                if (!depthClamp) GL11.glDisable(org.lwjgl.opengl.GL32.GL_DEPTH_CLAMP);
+                if (!depthClamp) GL11.glDisable(GL32.GL_DEPTH_CLAMP);
             }
 
             GL11.glDisable(GL11.GL_STENCIL_TEST);
@@ -645,7 +647,7 @@ public final class SecondaryPortalCompositePass {
     }
 
     private static void addMarker(
-            com.mojang.blaze3d.vertex.BufferBuilder buffer,
+            BufferBuilder buffer,
             Matrix4f matrix,
             float centerX,
             float centerY,

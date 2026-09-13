@@ -3,18 +3,20 @@ package com.skyeshade.skyesight.client.render.fog;
 import com.mojang.blaze3d.shaders.FogShape;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Camera;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.FogRenderer;
+import net.minecraft.util.Mth;
 
 public final class SkyesightFogRenderer {
     private SkyesightFogRenderer() {}
 
     public static void setupForPlayerTerrain(ClientLevel level, Camera camera, float partialTick, int radius) {
-        var mc = net.minecraft.client.Minecraft.getInstance();
+        var mc = Minecraft.getInstance();
         FogRenderer.setupColor(camera, partialTick, level, radius, mc.gameRenderer.getDarkenWorldAmount(partialTick));
         FogRenderer.levelFogColor();
-        boolean foggy = level.effects().isFoggyAt(net.minecraft.util.Mth.floor(camera.getPosition().x),
-                net.minecraft.util.Mth.floor(camera.getPosition().y)) || mc.gui.getBossOverlay().shouldCreateWorldFog();
+        boolean foggy = level.effects().isFoggyAt(Mth.floor(camera.getPosition().x),
+                Mth.floor(camera.getPosition().y)) || mc.gui.getBossOverlay().shouldCreateWorldFog();
         FogRenderer.setupFog(camera, FogRenderer.FogMode.FOG_TERRAIN, radius * 16F, foggy, partialTick);
     }
 

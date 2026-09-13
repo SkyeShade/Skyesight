@@ -8,13 +8,13 @@ import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.VertexSorting;
-import com.skyeshade.skyesight.Skyesight;
-import com.skyeshade.skyesight.SkyesightDebugConfig;
 import com.skyeshade.skyesight.client.portal.PortalFrame;
 import com.skyeshade.skyesight.client.world.SkyesightVisualParticleManager;
 import com.skyeshade.skyesight.client.world.SkyesightVisualParticleWatch;
 import com.skyeshade.skyesight.mixin.client.ParticleAccessor;
 import com.skyeshade.skyesight.mixin.client.ParticleEngineAccessor;
+import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.SkyesightDebugConfig;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -31,6 +31,7 @@ import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL13;
 import org.lwjgl.opengl.GL30;
 
 import java.util.ArrayList;
@@ -112,8 +113,8 @@ public final class SecondaryParticlePass {
             RenderSystem.enableDepthTest();
             RenderSystem.depthMask(false);
             RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-            RenderSystem.activeTexture(org.lwjgl.opengl.GL13.GL_TEXTURE2);
-            RenderSystem.activeTexture(org.lwjgl.opengl.GL13.GL_TEXTURE0);
+            RenderSystem.activeTexture(GL13.GL_TEXTURE2);
+            RenderSystem.activeTexture(GL13.GL_TEXTURE0);
 
             for (Map.Entry<ParticleRenderType, Queue<Particle>> entry : particles.entrySet()) {
                 ParticleRenderType renderType = entry.getKey();
@@ -297,8 +298,8 @@ public final class SecondaryParticlePass {
             RenderSystem.disableCull();
             RenderSystem.colorMask(true, true, true, true);
             RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-            RenderSystem.activeTexture(org.lwjgl.opengl.GL13.GL_TEXTURE2);
-            RenderSystem.activeTexture(org.lwjgl.opengl.GL13.GL_TEXTURE0);
+            RenderSystem.activeTexture(GL13.GL_TEXTURE2);
+            RenderSystem.activeTexture(GL13.GL_TEXTURE0);
 
             for (SkyesightVisualParticleManager.VisualParticle particle : particleManager.particles()) {
                 totalParticles++;
@@ -541,8 +542,8 @@ public final class SecondaryParticlePass {
             RenderSystem.depthMask(false);
             RenderSystem.disableCull();
             RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
-            RenderSystem.activeTexture(org.lwjgl.opengl.GL13.GL_TEXTURE2);
-            RenderSystem.activeTexture(org.lwjgl.opengl.GL13.GL_TEXTURE0);
+            RenderSystem.activeTexture(GL13.GL_TEXTURE2);
+            RenderSystem.activeTexture(GL13.GL_TEXTURE0);
 
             for (Map.Entry<ParticleRenderType, Queue<Particle>> entry : particles.entrySet()) {
                 ParticleRenderType renderType = entry.getKey();

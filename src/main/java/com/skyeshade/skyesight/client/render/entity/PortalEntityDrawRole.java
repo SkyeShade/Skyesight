@@ -9,7 +9,13 @@ enum PortalEntityDrawRole {
 
     boolean suppressEntrySelf(boolean localPlayer, boolean firstPersonEntry,
                               ResourceLocation viewId, ResourceLocation generatingPortalId) {
+        return suppressEntrySelf(localPlayer, firstPersonEntry, viewId, generatingPortalId, false);
+    }
+
+    boolean suppressEntrySelf(boolean localPlayer, boolean firstPersonEntry,
+                              ResourceLocation viewId, ResourceLocation generatingPortalId, boolean nestedObserver) {
         return this == TRANSFORMED && localPlayer && firstPersonEntry
+                && !nestedObserver
                 && viewId != null && viewId.equals(generatingPortalId);
     }
 }

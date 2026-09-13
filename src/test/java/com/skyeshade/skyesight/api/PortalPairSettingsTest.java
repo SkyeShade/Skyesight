@@ -4,6 +4,7 @@ import com.skyeshade.skyesight.network.SkyesightTraversalPayload;
 import io.netty.buffer.Unpooled;
 import net.minecraft.core.*;
 import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.*;
 import org.junit.jupiter.api.Test;
@@ -20,7 +21,7 @@ class PortalPairSettingsTest {
         var b = SkyesightPortalApi.portalDirectionId(id, false);
         assertEquals(b, SkyesightTraversalPayload.pairedPortalId(a));
         assertEquals(a, SkyesightTraversalPayload.pairedPortalId(b));
-        assertNull(SkyesightTraversalPayload.pairedPortalId(net.minecraft.resources.ResourceLocation.parse("other:visual")));
+        assertNull(SkyesightTraversalPayload.pairedPortalId(ResourceLocation.parse("other:visual")));
     }
 
     @Test
@@ -37,7 +38,9 @@ class PortalPairSettingsTest {
         var shape = PortalAperture.grid(".###.", "#####", "#####", "#####", ".###.");
         var a = PortalEndpoint.of("a", Level.OVERWORLD, new Vec3(13, 81, -9), Direction.EAST, 5, 5);
         var b = PortalEndpoint.of("b", Level.NETHER, new Vec3(1000, 70, 4), Direction.NORTH, 5, 5);
-        var settings = PortalPairSettings.of(PortalBehavior.TRAVERSABLE).withApertures(shape, shape);
+        var settings = PortalPairSettings.of(PortalBehavior.TRAVERSABLE).withApertures(shape, shape)
+                .withSides(PortalSidedness.BACK_ONLY, PortalSidedness.FRONT_ONLY)
+                .withDirectionality(PortalDirectionality.A_TO_B);
         var p = new SkyesightTraversalPayload(UUID.randomUUID(), 47, 0, 0, true, a, b, Vec3.ZERO, settings);
         var buf = new RegistryFriendlyByteBuf(Unpooled.buffer(), RegistryAccess.EMPTY);
         try {
