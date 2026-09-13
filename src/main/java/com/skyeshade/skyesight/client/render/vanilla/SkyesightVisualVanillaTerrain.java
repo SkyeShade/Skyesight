@@ -2,28 +2,32 @@ package com.skyeshade.skyesight.client.render.vanilla;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.VertexSorting;
-import com.skyeshade.skyesight.Skyesight;
-import com.skyeshade.skyesight.SkyesightDebugConfig;
+import com.skyeshade.skyesight.client.render.SecondaryTerrainCoverage;
+import com.skyeshade.skyesight.client.render.SkyesightViewDistanceScope;
 import com.skyeshade.skyesight.client.world.SkyesightVisualClientLevel;
 import com.skyeshade.skyesight.client.world.SkyesightVisualTerrainBackend;
+import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.SkyesightDebugConfig;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.RenderBuffers;
 import net.minecraft.client.renderer.RenderType;
-import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.SectionPos;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
 
+import java.util.Set;
+
 public final class SkyesightVisualVanillaTerrain implements SkyesightVisualTerrainBackend {
-    @Override public java.util.Set<BlockPos> visibleTerrainSections() {
-        return com.skyeshade.skyesight.client.render.SecondaryTerrainCoverage.visibleVanilla(levelRenderer);
+    @Override public Set<BlockPos> visibleTerrainSections() {
+        return SecondaryTerrainCoverage.visibleVanilla(levelRenderer);
     }
     private static final int SECONDARY_RENDER_BUFFER_PACKS = 1;
     private static boolean failureLogged;
@@ -124,7 +128,7 @@ public final class SkyesightVisualVanillaTerrain implements SkyesightVisualTerra
             return;
         }
 
-        try (var distance = new com.skyeshade.skyesight.client.render.SkyesightViewDistanceScope(chunkRadius)) {
+        try (var distance = new SkyesightViewDistanceScope(chunkRadius)) {
             LevelRendererSecondaryTerrainBridge bridge = (LevelRendererSecondaryTerrainBridge) this.levelRenderer;
             RenderSystem.setProjectionMatrix(projectionMatrix, VertexSorting.DISTANCE_TO_ORIGIN);
             var modelViewStack = RenderSystem.getModelViewStack();

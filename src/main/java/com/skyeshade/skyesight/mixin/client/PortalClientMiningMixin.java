@@ -3,11 +3,12 @@ package com.skyeshade.skyesight.mixin.client;
 import com.skyeshade.skyesight.client.portal.PortalInteractionClient;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.*;
+import net.minecraft.client.multiplayer.prediction.PredictiveAction;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.protocol.Packet;
-import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.*;
 import org.spongepowered.asm.mixin.injection.callback.*;
+import org.spongepowered.asm.mixin.Mixin;
 
 @Mixin(MultiPlayerGameMode.class)
 public abstract class PortalClientMiningMixin {
@@ -19,7 +20,7 @@ public abstract class PortalClientMiningMixin {
     }
 
     @Inject(method = "startPrediction", at = @At("HEAD"), cancellable = true)
-    private void skyesight$prediction(ClientLevel level, net.minecraft.client.multiplayer.prediction.PredictiveAction action, CallbackInfo ci) {
+    private void skyesight$prediction(ClientLevel level, PredictiveAction action, CallbackInfo ci) {
         if (PortalInteractionClient.interactionLevel() != null) {
             PortalInteractionClient.routeAction(action.predict(0));
             ci.cancel();

@@ -1,20 +1,22 @@
 package com.skyeshade.skyesight.network;
 
-import com.skyeshade.skyesight.Skyesight;
-import com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics;
-import com.skyeshade.skyesight.SkyesightDebugConfig;
 import com.skyeshade.skyesight.client.chunk.SkyesightPortalChunkStorage;
+import com.skyeshade.skyesight.client.render.PlayerPerspectiveViews;
 import com.skyeshade.skyesight.client.world.SkyesightClientChunkRequester;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorld;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorldManager;
+import com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics;
 import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistration;
 import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry;
+import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.SkyesightDebugConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.chunk.LevelChunk;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 
@@ -58,8 +60,8 @@ public final class SkyesightClientChunkHandler {
             return;
         }
         // A retired standby lease must not recreate GPU/world resources from an in-flight response.
-        if (com.skyeshade.skyesight.client.render.PlayerPerspectiveViews.contains(payload.viewId())
-                && !com.skyeshade.skyesight.client.world.SkyesightClientChunkRequester.hasDemand(payload.viewId())) return;
+        if (PlayerPerspectiveViews.contains(payload.viewId())
+                && !SkyesightClientChunkRequester.hasDemand(payload.viewId())) return;
         boolean sameAsClientDimension = minecraft.level != null
                 && minecraft.level.dimension().equals(payload.dimension());
         boolean mainPlayerChunkStillExistsBefore = playerChunkStillExists(minecraft);
@@ -232,7 +234,7 @@ public final class SkyesightClientChunkHandler {
     private static void warnDroppedStalePayload(
             SkyesightChunkDataPayload payload,
             long currentGeneration,
-            net.minecraft.resources.ResourceKey<Level> currentTargetDimension,
+            ResourceKey<Level> currentTargetDimension,
             String reason
     ) {
         String key = payload.viewId() + "|" + reason + "|" + payload.viewGeneration() + "|" + currentGeneration;

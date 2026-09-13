@@ -1,14 +1,16 @@
 package com.skyeshade.skyesight.client.render;
 
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.VertexSorting;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexSorting;
+import com.skyeshade.skyesight.client.compat.iris.SkyesightIrisCompat;
+import com.skyeshade.skyesight.client.render.fog.SkyesightFogRenderer;
 import com.skyeshade.skyesight.mixin.client.CameraInvoker;
 import com.skyeshade.skyesight.mixin.client.LevelRendererAccessor;
 import com.skyeshade.skyesight.mixin.client.LevelRendererSkyInvoker;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.Camera;
 import net.minecraft.client.CloudStatus;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.DimensionSpecialEffects;
 import net.minecraft.client.renderer.FogRenderer;
@@ -16,6 +18,7 @@ import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
+import org.lwjgl.opengl.GL11;
 
 /** Shared destination sky and cloud draws; no aperture or projection construction. */
 public final class SecondarySceneEnvironmentRenderer {
@@ -45,7 +48,7 @@ public final class SecondarySceneEnvironmentRenderer {
         FogRenderer.setupColor(camera, partialTick, level, radius, minecraft.gameRenderer.getDarkenWorldAmount(partialTick));
         FogRenderer.levelFogColor();
         float[] color = new float[4];
-        org.lwjgl.opengl.GL11.glGetFloatv(org.lwjgl.opengl.GL11.GL_COLOR_CLEAR_VALUE, color);
+        GL11.glGetFloatv(GL11.GL_COLOR_CLEAR_VALUE, color);
         RenderSystem.clearColor(color[0], color[1], color[2], 1);
         return color;
     }
@@ -70,11 +73,11 @@ public final class SecondarySceneEnvironmentRenderer {
             if (!PlayerPerspectiveViews.contains(scene.viewId()))
                 ((CameraInvoker) camera).skyesight$setPosition(skyPosition(level, position));
             prepareBackground(minecraft, level, camera, scene.partialTick(), scene.options().terrainRadius());
-            RenderSystem.clear(org.lwjgl.opengl.GL11.GL_COLOR_BUFFER_BIT | org.lwjgl.opengl.GL11.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
+            RenderSystem.clear(GL11.GL_COLOR_BUFFER_BIT | GL11.GL_DEPTH_BUFFER_BIT, Minecraft.ON_OSX);
             renderSky(minecraft, level, camera, frame.modelViewMatrix(), frame.projectionMatrix(), scene.partialTick(),
                     scene.options().terrainRadius(), level == minecraft.level && level.effects().skyType() == DimensionSpecialEffects.SkyType.NORMAL);
             ((CameraInvoker) camera).skyesight$setPosition(position);
-            com.skyeshade.skyesight.client.render.fog.SkyesightFogRenderer.setupForPlayerTerrain(
+            SkyesightFogRenderer.setupForPlayerTerrain(
                     level, camera, scene.partialTick(), scene.options().terrainRadius());
             renderClouds(clouds, scene.viewId().toString(), minecraft, level, frame.modelViewMatrix(), frame.projectionMatrix(),
                     position, scene.partialTick(), minecraft.levelRenderer.getTicks(), scene.output().frameBufferId);
@@ -93,7 +96,7 @@ public final class SecondarySceneEnvironmentRenderer {
             String key, Minecraft minecraft, ClientLevel level, Matrix4f modelView, Matrix4f projection,
             Vec3 position, float partialTick, int renderFrame, int output) {
         if (minecraft.options.getCloudsType() == CloudStatus.OFF
-                || com.skyeshade.skyesight.client.compat.iris.SkyesightIrisCompat.isShaderPackInUse()) return null;
+                || SkyesightIrisCompat.isShaderPackInUse()) return null;
         var accessor = (LevelRendererAccessor) minecraft.levelRenderer;
         var previousLevel = accessor.skyesight$getLevel();
         try {

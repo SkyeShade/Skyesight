@@ -1,8 +1,8 @@
 package com.skyeshade.skyesight.client.world;
 
 import com.skyeshade.skyesight.network.SkyesightChunkRequestPayload;
-import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry;
 import com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics;
+import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceKey;
@@ -11,8 +11,11 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.network.PacketDistributor;
+
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public final class SkyesightClientChunkRequester {
     private static final Map<ResourceLocation, SkyesightChunkDemand> STATES = new HashMap<>();
@@ -95,7 +98,7 @@ public final class SkyesightClientChunkRequester {
     public static void reset(ResourceLocation id) { STATES.remove(id); }
     public static boolean hasDemand(ResourceLocation id) { return STATES.containsKey(id); }
     public static void reset() { STATES.clear(); }
-    public static void resetExcept(java.util.Set<ResourceLocation> retained) {
+    public static void resetExcept(Set<ResourceLocation> retained) {
         STATES.keySet().removeIf(id -> !retained.contains(id));
     }
     /** Renew a standby watch without retransmitting its already received chunks. */
@@ -105,7 +108,7 @@ public final class SkyesightClientChunkRequester {
         if (state == null || state.center == null || now - state.lastRequestNanos < 2_000_000_000L) return;
         state.lastRequestNanos = now;
         PacketDistributor.sendToServer(new SkyesightChunkRequestPayload(id, state.generation, 0, state.dimension,
-                state.center.x, state.center.z, state.radius, java.util.List.of()));
+                state.center.x, state.center.z, state.radius, List.of()));
     }
     public static ViewRequestDiagnostics diagnostics(ResourceLocation id) {
         var state = STATES.get(id);

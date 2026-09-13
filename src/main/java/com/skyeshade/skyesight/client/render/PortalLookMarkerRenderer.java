@@ -1,18 +1,19 @@
 package com.skyeshade.skyesight.client.render;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
-import com.skyeshade.skyesight.Skyesight;
-import com.skyeshade.skyesight.SkyesightDebugConfig;
 import com.skyeshade.skyesight.client.portal.PortalLookMarkerDebugData;
 import com.skyeshade.skyesight.client.portal.PortalRenderDebugStatus;
+import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.SkyesightDebugConfig;
 import net.minecraft.client.Camera;
-import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.resources.ResourceKey;
@@ -107,7 +108,7 @@ public final class PortalLookMarkerRenderer {
     }
 
     private static void drawMarker(
-            com.mojang.blaze3d.vertex.BufferBuilder buffer,
+            BufferBuilder buffer,
             Matrix4f matrix,
             Vec3 cameraPosition,
             PortalLookMarkerDebugData.PortalLookDebugMarker marker
@@ -177,7 +178,7 @@ public final class PortalLookMarkerRenderer {
     }
 
     private static void drawLine(
-            com.mojang.blaze3d.vertex.BufferBuilder buffer,
+            BufferBuilder buffer,
             Matrix4f matrix,
             Vec3 cameraPosition,
             Vec3 from,
@@ -189,7 +190,7 @@ public final class PortalLookMarkerRenderer {
     }
 
     private static void addVertex(
-            com.mojang.blaze3d.vertex.BufferBuilder buffer,
+            BufferBuilder buffer,
             Matrix4f matrix,
             Vec3 cameraPosition,
             Vec3 position,

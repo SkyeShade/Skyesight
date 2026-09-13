@@ -1,21 +1,27 @@
 package com.skyeshade.skyesight.client.render.entity;
 
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.client.render.slice.EntityClipContext;
 import com.skyeshade.skyesight.api.*;
+import com.skyeshade.skyesight.client.portal.PortalInteractionClient;
 import com.skyeshade.skyesight.client.transition.TraversalPortalClient;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorldManager;
+import com.skyeshade.skyesight.mixin.client.EntityRenderDispatcherAccessor;
+import com.skyeshade.skyesight.network.SkyesightTraversalPayload;
 import com.skyeshade.skyesight.portal.*;
+import com.skyeshade.skyesight.Skyesight;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
+import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.*;
 import net.neoforged.api.distmarker.Dist;
@@ -76,7 +82,7 @@ public final class PortalEntitySplicing {
         AABB local = PortalCollisionMath.map(bounds, v -> PortalTraversalMath.local(link.source(), v));
         if (local.minZ >= -1e-6 || local.maxZ <= 1e-6 || !overlapsAperture(link, local)) return null;
         int side = PortalTraversalMath.local(link.source(), p).z >= 0 ? 1 : -1;
-        if (!link.backface() && side < 0) return null;
+        if (!link.sidedness().allows(side)) return null;
         return new Split(e, link, p, side);
     }
 
@@ -97,15 +103,15 @@ public final class PortalEntitySplicing {
         // Inventory/GUI renderers also call the dispatcher. They do not use world-relative coordinates.
         if (position(entity, tick).subtract(dispatcher.camera.getPosition()).distanceToSqr(new Vec3(x, y, z)) > 1e-6)
             return false;
-        var renderLevel = ((com.skyeshade.skyesight.mixin.client.EntityRenderDispatcherAccessor) dispatcher).skyesight$getLevel();
+        var renderLevel = ((EntityRenderDispatcherAccessor) dispatcher).skyesight$getLevel();
         if (renderLevel == null) return false;
         for (var link : TraversalPortalClient.interactionLinks(renderLevel.dimension())) {
             var split = intersection(entity, tick, link);
             if (split == null) continue;
             var removedRegions = aperturePlanes(link, -split.side, dispatcher.camera, pose);
             drawing = true;
-            try (var clipped = new PortalEntityClipBuffer(output, removedRegions, false)) {
-                dispatcher.render(entity, x, y, z, yaw, tick, pose, clipped, light);
+            try (var clipped = EntityClipContext.regions(output, removedRegions, false)) {
+                dispatcher.render(entity, x, y, z, yaw, tick, pose, clipped.buffers(), light);
             } finally {
                 drawing = false;
             }
@@ -119,8 +125,7 @@ public final class PortalEntitySplicing {
      */
     private static Vector4f plane(PortalEndpoint endpoint, int side, Vec3 camera, Matrix4f vertexTransform) {
         Vec3 normal = PortalTraversalMath.normal(endpoint).scale(side);
-        var p = new Vector4f((float) normal.x, (float) normal.y, (float) normal.z, (float) normal.dot(camera.subtract(endpoint.center())));
-        return new Matrix4f(vertexTransform).invert().transpose().transform(p);
+        return EntityClipContext.vertexPlane(new SkyesightClipPlane(endpoint.center(), normal), ClipSide.POSITIVE, camera, vertexTransform);
     }
 
     private static Vector4f localPlane(PortalEndpoint endpoint, Vec3 n, double offset, Vec3 camera, Matrix4f pose) {
@@ -166,7 +171,7 @@ public final class PortalEntitySplicing {
         var dispatcher = mc.getEntityRenderDispatcher();
         var buffer = mc.renderBuffers().bufferSource();
         Set<UUID> rendered = new HashSet<>();
-        for (var reverse : TraversalPortalClient.interactionLinks(destination.dimension())) {
+        for (var reverse : TraversalPortalClient.splicingLinks(destination.dimension())) {
             if (camera.getPosition().distanceToSqr(reverse.source().center()) > 128 * 128) continue;
             var candidates = new LinkedHashMap<UUID, Entity>();
             var world = SkyesightVisualWorldManager.get(reverse.id());
@@ -177,7 +182,7 @@ public final class PortalEntitySplicing {
                 if (e != null) candidates.put(e.getUUID(), e);
             }
             if (mc.player != null && mc.player.level() instanceof ClientLevel physical && physical.dimension().equals(reverse.target().dimension())
-                    && com.skyeshade.skyesight.client.portal.PortalInteractionClient.loaded(physical, reverse.target().center().add(-2, -2, -2), reverse.target().center().add(2, 2, 2))) {
+                    && PortalInteractionClient.loaded(physical, reverse.target().center().add(-2, -2, -2), reverse.target().center().add(2, 2, 2))) {
                 // A loaded native source owns entity lifecycle, including absence after removal.
                 candidates.clear();
                 for (Entity e : physical.entitiesForRendering()) candidates.put(e.getUUID(), e);
@@ -188,33 +193,35 @@ public final class PortalEntitySplicing {
             }
             // Recover the actual source direction, including its independently defined aperture.
             var forward = TraversalPortalClient.interactionLinks(reverse.target().dimension()).stream()
-                    .filter(l -> l.id().equals(com.skyeshade.skyesight.network.SkyesightTraversalPayload.pairedPortalId(reverse.id()))).findFirst().orElse(null);
+                    .filter(l -> l.id().equals(SkyesightTraversalPayload.pairedPortalId(reverse.id()))).findFirst().orElse(null);
             if (forward == null) continue;
             for (Entity entity : candidates.values()) {
                 if (entity.isRemoved() || rendered.contains(entity.getUUID())) continue;
                 // Suppress only this entry portal's generated duplicate, never native geometry
                 // or a duplicate generated by another portal observed through this view.
                 if (entity == mc.player && PortalEntityDrawRole.TRANSFORMED.suppressEntrySelf(true,
-                        TraversalPortalClient.suppressEntrySelf(viewId), viewId, forward.id())) continue;
+                        TraversalPortalClient.suppressEntrySelf(viewId), viewId, forward.id(),
+                        PortalEntityRenderContextScope.nestedObserver())) continue;
                 var split = intersection(entity, tick, forward);
                 if (split == null) continue;
                 Vec3 target = PortalTraversalMath.position(forward.source(), forward.target(), split.position);
                 var rotation = PortalTraversalMath.rotation(forward.source().rotation(), forward.target().rotation());
                 var regions = aperturePlanes(reverse, split.side, camera, pose);
                 // Only actual geometry inside the aperture survives; feature bounds are broad-phase only.
-                var accessor = (com.skyeshade.skyesight.mixin.client.EntityRenderDispatcherAccessor) dispatcher;
+                var accessor = (EntityRenderDispatcherAccessor) dispatcher;
                 boolean shadow = accessor.skyesight$getShouldRenderShadow();
                 var orientation = new Quaternionf(accessor.skyesight$getCameraOrientation());
                 pose.pushPose();
+                PortalEntityRenderContextScope.register(entity, false, -1);
                 drawing = true;
                 dispatcher.setRenderShadow(false);
                 dispatcher.overrideCameraOrientation(new Quaternionf(rotation).conjugate().mul(orientation));
-                try (var clipped = new PortalEntityClipBuffer(buffer, regions, true)) {
+                try (var clipped = EntityClipContext.regions(buffer, regions, true)) {
                     Vec3 relative = target.subtract(camera.getPosition());
                     pose.translate(relative.x, relative.y, relative.z);
                     pose.mulPose(rotation);
-                    int light = net.minecraft.client.renderer.LevelRenderer.getLightColor(destination, net.minecraft.core.BlockPos.containing(target));
-                    dispatcher.render(entity, 0, 0, 0, Mth.lerp(tick, entity.yRotO, entity.getYRot()), tick, pose, clipped, light);
+                    int light = LevelRenderer.getLightColor(destination, BlockPos.containing(target));
+                    dispatcher.render(entity, 0, 0, 0, Mth.lerp(tick, entity.yRotO, entity.getYRot()), tick, pose, clipped.buffers(), light);
                 } finally {
                     dispatcher.setRenderShadow(shadow);
                     dispatcher.overrideCameraOrientation(orientation);

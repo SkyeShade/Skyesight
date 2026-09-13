@@ -1,5 +1,14 @@
 package com.skyeshade.skyesight.client.render.entity;
 
+import com.skyeshade.skyesight.api.PortalEndpoint;
+import com.skyeshade.skyesight.client.render.slice.EntityClipBuffer;
+import com.skyeshade.skyesight.api.SkyesightPortalRaycast;
+import com.skyeshade.skyesight.portal.PortalTraversalMath;
+import net.minecraft.core.Direction;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import org.joml.Vector4f;
 import org.junit.jupiter.api.Test;
 
@@ -12,7 +21,7 @@ class PortalEntityClipBufferTest {
     void sourceKeepsFeatureGeometryOutsideApertureWithoutOverlappingPieces() {
         var quad = List.of(new float[]{-2,-1,0},new float[]{2,-1,0},new float[]{2,1,0},new float[]{-2,1,0});
         var aperture = List.of(new Vector4f(1,0,0,1),new Vector4f(-1,0,0,1));
-        var remainder = PortalEntityClipBuffer.subtract(quad, aperture);
+        var remainder = EntityClipBuffer.subtract(quad, aperture);
         assertEquals(2, remainder.size());
         double area = remainder.stream().mapToDouble(PortalEntityClipBufferTest::area).sum();
         assertEquals(4,area,1e-6);
@@ -30,25 +39,25 @@ class PortalEntityClipBufferTest {
 
     @Test
     void featureBroadPhaseAllowsPartialApertureOverlapButNotWalkingBesideIt() {
-        var source = com.skyeshade.skyesight.api.PortalEndpoint.of("a",net.minecraft.world.level.Level.OVERWORLD,
-                net.minecraft.world.phys.Vec3.ZERO,net.minecraft.core.Direction.SOUTH,2,3);
-        var link = com.skyeshade.skyesight.api.SkyesightPortalRaycast.Link.rectangle(net.minecraft.resources.ResourceLocation.parse("test:a"),1,source,source,true);
-        assertTrue(PortalEntitySplicing.overlapsAperture(link,new net.minecraft.world.phys.AABB(.8,-.5,-1,2,.5,1)));
-        assertFalse(PortalEntitySplicing.overlapsAperture(link,new net.minecraft.world.phys.AABB(1.1,-.5,-1,2,.5,1)));
+        var source = PortalEndpoint.of("a",Level.OVERWORLD,
+                Vec3.ZERO,Direction.SOUTH,2,3);
+        var link = SkyesightPortalRaycast.Link.rectangle(ResourceLocation.parse("test:a"),1,source,source,true);
+        assertTrue(PortalEntitySplicing.overlapsAperture(link,new AABB(.8,-.5,-1,2,.5,1)));
+        assertFalse(PortalEntitySplicing.overlapsAperture(link,new AABB(1.1,-.5,-1,2,.5,1)));
     }
 
     @Test
     void oppositeClipHalvesMeetAtCanonicalTransformedPlane() {
-        var source = com.skyeshade.skyesight.api.PortalEndpoint.of("a", net.minecraft.world.level.Level.OVERWORLD,
-                new net.minecraft.world.phys.Vec3(3, 80, 4), net.minecraft.core.Direction.SOUTH, 2, 3);
-        for (var facing : java.util.List.of(net.minecraft.core.Direction.NORTH, net.minecraft.core.Direction.SOUTH, net.minecraft.core.Direction.EAST, net.minecraft.core.Direction.WEST)) {
-            var target = com.skyeshade.skyesight.api.PortalEndpoint.of("b", net.minecraft.world.level.Level.NETHER,
-                    new net.minecraft.world.phys.Vec3(1000, 70, -7), facing, 2, 3);
-            var link = com.skyeshade.skyesight.api.SkyesightPortalRaycast.Link.rectangle(net.minecraft.resources.ResourceLocation.parse("test:pair"), 1, source, target, true);
+        var source = PortalEndpoint.of("a", Level.OVERWORLD,
+                new Vec3(3, 80, 4), Direction.SOUTH, 2, 3);
+        for (var facing : List.of(Direction.NORTH, Direction.SOUTH, Direction.EAST, Direction.WEST)) {
+            var target = PortalEndpoint.of("b", Level.NETHER,
+                    new Vec3(1000, 70, -7), facing, 2, 3);
+            var link = SkyesightPortalRaycast.Link.rectangle(ResourceLocation.parse("test:pair"), 1, source, target, true);
             for (int side : new int[]{-1, 1}) {
                 var split = new PortalEntitySplicing.Split(null, link, source.center(), side);
-                var sourceBeyond = source.center().add(com.skyeshade.skyesight.portal.PortalTraversalMath.normal(source).scale(-side * .1));
-                var mapped = com.skyeshade.skyesight.portal.PortalTraversalMath.position(source, target, sourceBeyond);
+                var sourceBeyond = source.center().add(PortalTraversalMath.normal(source).scale(-side * .1));
+                var mapped = PortalTraversalMath.position(source, target, sourceBeyond);
                 assertEquals(target.center(), split.transformedPosition());
                 assertTrue(sourceBeyond.subtract(split.sourcePlane().point()).dot(split.sourcePlane().normal()) < 0);
                 assertTrue(mapped.subtract(split.destinationPlane().point()).dot(split.destinationPlane().normal()) > 0);
@@ -59,10 +68,10 @@ class PortalEntityClipBufferTest {
     @Test
     void cutsQuadAndInterpolatesTextureCoordinates() {
         var quad = List.of(new float[]{-1, -1, 0, 0}, new float[]{1, -1, 0, 1}, new float[]{1, 1, 0, 1}, new float[]{-1, 1, 0, 0});
-        var clipped = PortalEntityClipBuffer.clip(quad, new Vector4f(1, 0, 0, 0));
+        var clipped = EntityClipBuffer.clip(quad, new Vector4f(1, 0, 0, 0));
         assertEquals(4, clipped.size());
         assertTrue(clipped.stream().allMatch(v -> v[0] >= 0));
         assertEquals(2, clipped.stream().filter(v -> v[0] == 0 && v[3] == .5f).count());
-        assertTrue(PortalEntityClipBuffer.clip(quad, new Vector4f(1, 0, 0, -2)).isEmpty());
+        assertTrue(EntityClipBuffer.clip(quad, new Vector4f(1, 0, 0, -2)).isEmpty());
     }
 }

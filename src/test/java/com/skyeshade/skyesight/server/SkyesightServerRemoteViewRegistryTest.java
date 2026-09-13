@@ -1,12 +1,18 @@
 package com.skyeshade.skyesight.server;
 
+import com.skyeshade.skyesight.api.PortalEndpoint;
+import com.skyeshade.skyesight.api.SkyesightPortalApi;
+import net.minecraft.core.Direction;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+
 import java.util.UUID;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class SkyesightServerRemoteViewRegistryTest {
@@ -47,21 +53,21 @@ class SkyesightServerRemoteViewRegistryTest {
     @Test void retiredLanObserverCannotFallBackToHostsMatchingPortalGeneration() {
         String id = "test:lan_portal";
         var key = ResourceLocation.parse(id);
-        var source = com.skyeshade.skyesight.api.PortalEndpoint.of(id, Level.OVERWORLD,
-                net.minecraft.world.phys.Vec3.ZERO, net.minecraft.core.Direction.NORTH, 5, 5);
-        var target = com.skyeshade.skyesight.api.PortalEndpoint.of("test:destination", DECAY,
-                net.minecraft.world.phys.Vec3.ZERO, net.minecraft.core.Direction.SOUTH, 5, 5);
-        com.skyeshade.skyesight.api.SkyesightPortalApi.registerPortal(id, source, target);
+        var source = PortalEndpoint.of(id, Level.OVERWORLD,
+                Vec3.ZERO, Direction.NORTH, 5, 5);
+        var target = PortalEndpoint.of("test:destination", DECAY,
+                Vec3.ZERO, Direction.SOUTH, 5, 5);
+        SkyesightPortalApi.registerPortal(id, source, target);
         try {
-            long generation = com.skyeshade.skyesight.api.SkyesightPortalApi.getPortal(id).generation();
+            long generation = SkyesightPortalApi.getPortal(id).generation();
             UUID a = UUID.randomUUID(), b = UUID.randomUUID();
             assertTrue(SkyesightServerRemoteViewRegistry.register(a, key, DECAY, generation));
             assertTrue(SkyesightServerRemoteViewRegistry.register(b, key, DECAY, generation));
             assertTrue(SkyesightServerRemoteViewRegistry.unregister(a, key, generation).isPresent());
             assertTrue(SkyesightServerRemoteViewRegistry.resolve(a, key).isEmpty());
             assertTrue(SkyesightServerRemoteViewRegistry.resolve(b, key).isPresent());
-            assertNotNull(com.skyeshade.skyesight.api.SkyesightPortalApi.getPortal(id));
-        } finally { com.skyeshade.skyesight.api.SkyesightPortalApi.removePortal(id); }
+            assertNotNull(SkyesightPortalApi.getPortal(id));
+        } finally { SkyesightPortalApi.removePortal(id); }
     }
 
 }

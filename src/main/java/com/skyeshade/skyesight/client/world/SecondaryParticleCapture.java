@@ -1,6 +1,7 @@
 package com.skyeshade.skyesight.client.world;
 
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.particle.Particle;
 import net.minecraft.core.particles.ParticleOptions;
 
 /** Redirects only synchronous particle creation belonging to one secondary simulation. */
@@ -33,7 +34,7 @@ public final class SecondaryParticleCapture implements AutoCloseable {
         var current = CURRENT.get();
         return current == null ? fallback : current.level;
     }
-    public static boolean captureInstance(net.minecraft.client.particle.Particle particle) {
+    public static boolean captureInstance(Particle particle) {
         var current = CURRENT.get();
         if (current == null) return false;
         current.particles.addClientParticle(particle);

@@ -1,17 +1,19 @@
 package com.skyeshade.skyesight.mixin.client;
 
 import com.mojang.blaze3d.vertex.VertexBuffer;
+import it.unimi.dsi.fastutil.objects.ObjectArrayList;
 import net.minecraft.client.CloudStatus;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.chunk.SectionRenderDispatcher;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.world.phys.Vec3;
-import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.gen.Accessor;
+import org.spongepowered.asm.mixin.Mixin;
 
 @Mixin(LevelRenderer.class)
 public interface LevelRendererAccessor {
     @Accessor("visibleSections")
-    it.unimi.dsi.fastutil.objects.ObjectArrayList<net.minecraft.client.renderer.chunk.SectionRenderDispatcher.RenderSection> skyesight$getVisibleSections();
+    ObjectArrayList<SectionRenderDispatcher.RenderSection> skyesight$getVisibleSections();
     @Accessor("level")
     ClientLevel skyesight$getLevel();
 

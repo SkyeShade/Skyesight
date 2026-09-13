@@ -4,7 +4,7 @@ import com.skyeshade.skyesight.client.render.PortalSecondaryWorldRenderer;
 import com.skyeshade.skyesight.api.RegisteredPortalView;
 import com.skyeshade.skyesight.api.PortalEndpoint;
 import com.skyeshade.skyesight.server.SkyesightSecondaryWatchRegion;
-import com.skyeshade.skyesight.server.SkyesightServerViewTracker;
+
 import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistration;
 import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry;
 import net.minecraft.client.Camera;
@@ -156,9 +156,9 @@ public final class CrossDimPortalViewUpdater {
         if (registration == null || !registration.targets(dimension)) {
             return;
         }
-        BlockPos centerBlock = BlockPos.containing(center);
-        ChunkPos centerChunk = new ChunkPos(centerBlock);
-        List<ChunkPos> watchedChunks = buildSquareChunkList(centerChunk, radiusChunks);
+
+
+
         server.execute(() -> {
             ServerPlayer player = server.getPlayerList().getPlayer(playerId);
 
@@ -173,16 +173,7 @@ public final class CrossDimPortalViewUpdater {
                     center,
                     radius
             );
-            SkyesightServerViewTracker.updateWatch(
-                    player,
-                    regionId,
-                    registration.generation(),
-                    dimension,
-                    centerChunk.x,
-                    centerChunk.z,
-                    radiusChunks,
-                    watchedChunks
-            );
+            // Entity tracking must not overwrite the terrain streamer's watch or tickets.
         });
     }
 

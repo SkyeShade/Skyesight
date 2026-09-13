@@ -1,9 +1,9 @@
 package com.skyeshade.skyesight.network;
 
-import com.skyeshade.skyesight.SkyesightPortalEntityPoolConfig;
-import com.skyeshade.skyesight.SkyesightNativeVisualEntityRoutingDebug;
 import com.skyeshade.skyesight.api.RegisteredPortalView;
 import com.skyeshade.skyesight.api.SkyesightPortalApi;
+import com.skyeshade.skyesight.client.render.PlayerPerspectiveViews;
+import com.skyeshade.skyesight.client.world.SkyesightClientChunkRequester;
 import com.skyeshade.skyesight.client.world.SkyesightPortalEntityPool;
 import com.skyeshade.skyesight.client.world.SkyesightPortalEntityPoolLeakTripwire;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorld;
@@ -12,9 +12,10 @@ import com.skyeshade.skyesight.entity.PortalMultipartEntityUtil;
 import com.skyeshade.skyesight.entity.SkyesightEntityDimensionContext;
 import com.skyeshade.skyesight.mixin.common.ClientboundEntityEventPacketAccessor;
 import com.skyeshade.skyesight.mixin.common.ClientboundRotateHeadPacketAccessor;
+import com.skyeshade.skyesight.SkyesightNativeVisualEntityRoutingDebug;
+import com.skyeshade.skyesight.SkyesightPortalEntityPoolConfig;
 import io.netty.buffer.Unpooled;
 import net.minecraft.client.Minecraft;
-import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundAnimatePacket;
 import net.minecraft.network.protocol.game.ClientboundEntityEventPacket;
@@ -24,13 +25,14 @@ import net.minecraft.network.protocol.game.ClientboundSetEntityDataPacket;
 import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
 import net.minecraft.network.protocol.game.ClientboundSetEquipmentPacket;
 import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
-import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.InteractionHand;
 
 public final class SkyesightPortalEntityPacketApplier {
     /*
@@ -79,8 +81,8 @@ public final class SkyesightPortalEntityPacketApplier {
             return;
         }
 
-        if (com.skyeshade.skyesight.client.render.PlayerPerspectiveViews.contains(payload.viewId())
-                && !com.skyeshade.skyesight.client.world.SkyesightClientChunkRequester.hasDemand(payload.viewId())) return;
+        if (PlayerPerspectiveViews.contains(payload.viewId())
+                && !SkyesightClientChunkRequester.hasDemand(payload.viewId())) return;
         SkyesightVisualWorld world =
                 SkyesightVisualWorldManager.getOrCreateIfCurrent(payload.viewId(), payload.targetDimension());
         if (world == null || world.isClosed() || world.level() == null) {

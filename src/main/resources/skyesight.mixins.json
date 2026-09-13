@@ -44,6 +44,9 @@
     "server.spawn.ServerChunkCachePortalSimulationMixin"
   ],
   "client": [
+    "client.ModelPartCapPolicyMixin",
+    "client.PlayerModelCapPolicyMixin",
+    "client.LivingEntityCapLayerMixin",
     "client.PortalOutlineInvoker",
     "client.MinecraftPortalInteractionMixin",
     "client.GameRendererPortalPickMixin",

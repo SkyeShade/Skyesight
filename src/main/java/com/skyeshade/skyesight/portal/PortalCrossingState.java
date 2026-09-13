@@ -3,6 +3,8 @@ package com.skyeshade.skyesight.portal;
 import com.skyeshade.skyesight.api.PortalEndpoint;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.function.Predicate;
+
 /** One player's history for one fixed aperture. Contact is not a change of stable side. */
 public final class PortalCrossingState {
     public static final double ENTER_PLANE = .001;
@@ -23,7 +25,7 @@ public final class PortalCrossingState {
         return update(endpoint, feet, point -> fits(endpoint, point, width, height));
     }
     /** Shared sweep/side history; callers choose body containment or player overlap policy. */
-    public Vec3 update(PortalEndpoint endpoint, Vec3 feet, java.util.function.Predicate<Vec3> aperture) {
+    public Vec3 update(PortalEndpoint endpoint, Vec3 feet, Predicate<Vec3> aperture) {
         double d = PortalTraversalMath.local(endpoint, feet).z;
         if (previous == null) {
             previous = feet; pending = null;

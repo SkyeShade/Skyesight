@@ -1,17 +1,18 @@
 package com.skyeshade.skyesight.client.world;
 
-import com.skyeshade.skyesight.Skyesight;
-import com.skyeshade.skyesight.SkyesightDebugConfig;
+import com.skyeshade.skyesight.network.SkyesightClientEnvironmentHandler;
 import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry;
 import com.skyeshade.skyesight.server.portal.PortalPathProximity;
+import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.SkyesightDebugConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
 
+import java.util.function.BiConsumer;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.function.BiConsumer;
 
 public final class SkyesightVisualWorldManager {
     private static final Map<ResourceLocation, SkyesightVisualWorld> WORLDS = new HashMap<>();
@@ -136,7 +137,7 @@ public final class SkyesightVisualWorldManager {
         if (skyesightLevel == null) {
             return null; // Retry creation on a later frame after authoritative identity arrives.
         }
-        com.skyeshade.skyesight.network.SkyesightClientEnvironmentHandler.initialize(viewId, skyesightLevel);
+        SkyesightClientEnvironmentHandler.initialize(viewId, skyesightLevel);
         SkyesightVisualWorld world = new SkyesightVisualWorld(dimension, skyesightLevel);
         PortalPathProximity.registerVisualLevel(
                 skyesightLevel,
@@ -160,7 +161,7 @@ public final class SkyesightVisualWorldManager {
     }
 
     public static void close(ResourceLocation viewId) {
-        com.skyeshade.skyesight.network.SkyesightClientEnvironmentHandler.remove(viewId);
+        SkyesightClientEnvironmentHandler.remove(viewId);
         SecondaryParticleViews.close(viewId);
         SkyesightVisualWorld world = WORLDS.remove(viewId);
 
@@ -172,7 +173,7 @@ public final class SkyesightVisualWorldManager {
     }
 
     public static void closeAll() {
-        com.skyeshade.skyesight.network.SkyesightClientEnvironmentHandler.clear();
+        SkyesightClientEnvironmentHandler.clear();
         SecondaryParticleViews.clear();
         SkyesightPortalEntityPool.clearAll();
         for (SkyesightVisualWorld world : WORLDS.values()) {

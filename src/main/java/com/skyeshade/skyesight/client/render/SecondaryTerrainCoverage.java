@@ -1,9 +1,14 @@
 package com.skyeshade.skyesight.client.render;
 
-import com.skyeshade.skyesight.mixin.client.LevelRendererAccessor;
 import com.skyeshade.skyesight.client.compat.sodium.SkyesightSodiumCompat;
+import com.skyeshade.skyesight.client.render.sodium.SodiumSecondaryViewState;
+import com.skyeshade.skyesight.client.render.sodium.SodiumTerrainCoverage;
+import com.skyeshade.skyesight.mixin.client.LevelRendererAccessor;
+import net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer;
+import net.minecraft.client.renderer.chunk.SectionRenderDispatcher;
 import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.core.BlockPos;
+
 import java.util.HashSet;
 import java.util.Set;
 
@@ -13,7 +18,7 @@ public final class SecondaryTerrainCoverage {
     public static Set<BlockPos> visibleVanilla(LevelRenderer renderer) {
         var result = new HashSet<BlockPos>();
         for (var section : ((LevelRendererAccessor) renderer).skyesight$getVisibleSections()) {
-            if (section.compiled.get() != net.minecraft.client.renderer.chunk.SectionRenderDispatcher.CompiledSection.UNCOMPILED
+            if (section.compiled.get() != SectionRenderDispatcher.CompiledSection.UNCOMPILED
                     && !section.compiled.get().hasNoRenderableLayers()) result.add(section.getOrigin().immutable());
         }
         return result;
@@ -25,7 +30,7 @@ public final class SecondaryTerrainCoverage {
                 ? visibleVanilla(state.rendererFor(scene.level())) : Set.of();
     }
     public static Set<BlockPos> physicalVisible(LevelRenderer renderer) {
-        if (SkyesightSodiumCompat.isLoaded()) return com.skyeshade.skyesight.client.render.sodium.SodiumTerrainCoverage.physicalVisible();
+        if (SkyesightSodiumCompat.isLoaded()) return SodiumTerrainCoverage.physicalVisible();
         var result = new HashSet<BlockPos>();
         for (var section : ((LevelRendererAccessor) renderer).skyesight$getVisibleSections()) result.add(section.getOrigin().immutable());
         return result;
@@ -37,12 +42,12 @@ public final class SecondaryTerrainCoverage {
     }
     private static final class SodiumAccess {
         static Set<BlockPos> physicalDrawn() {
-            return com.skyeshade.skyesight.client.render.sodium.SodiumTerrainCoverage.visible(
-                    net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer.instanceNullable());
+            return SodiumTerrainCoverage.visible(
+                    SodiumWorldRenderer.instanceNullable());
         }
         static Set<BlockPos> visible(SecondaryViewContext context) {
-            var state = com.skyeshade.skyesight.client.render.sodium.SodiumSecondaryViewState.get(context);
-            return state == null ? Set.of() : com.skyeshade.skyesight.client.render.sodium.SodiumTerrainCoverage.visible(state.renderer());
+            var state = SodiumSecondaryViewState.get(context);
+            return state == null ? Set.of() : SodiumTerrainCoverage.visible(state.renderer());
         }
     }
 }

@@ -1,9 +1,11 @@
 package com.skyeshade.skyesight.portal;
 
+import com.skyeshade.skyesight.api.PortalAperture;
 import com.skyeshade.skyesight.api.PortalEndpoint;
+import com.skyeshade.skyesight.api.SkyesightPortalRaycast;
 import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.*;
+import net.minecraft.world.phys.Vec3;
 
 import java.util.function.Function;
 
@@ -55,8 +57,8 @@ public final class PortalCollisionMath {
                 source.width() / 2, source.height() / 2, side > 0 ? 0 : depth);
         return Shapes.create(map(local, p -> source.center().add(PortalTraversalMath.rotate(p, source.rotation()))));
     }
-    public static VoxelShape apertureHalf(com.skyeshade.skyesight.api.SkyesightPortalRaycast.Link link, int side, double depth) {
-        if (!(link.aperture() instanceof com.skyeshade.skyesight.api.PortalAperture.Bound bound)) return apertureHalf(link.source(),side,depth);
+    public static VoxelShape apertureHalf(SkyesightPortalRaycast.Link link, int side, double depth) {
+        if (!(link.aperture() instanceof PortalAperture.Bound bound)) return apertureHalf(link.source(),side,depth);
         var source=link.source(); var rows=bound.shape().rows(); int columns=rows.getFirst().length();
         VoxelShape result=Shapes.empty(); double w=source.width(),h=source.height();
         for(int y=0;y<rows.size();y++) for(int x=0;x<columns;x++) {

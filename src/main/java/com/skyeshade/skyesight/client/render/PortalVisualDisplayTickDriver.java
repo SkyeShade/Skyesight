@@ -2,10 +2,12 @@ package com.skyeshade.skyesight.client.render;
 
 import com.skyeshade.skyesight.client.world.SecondaryParticleCapture;
 import com.skyeshade.skyesight.client.world.SkyesightVisualParticleManager;
+import com.skyeshade.skyesight.mixin.client.ClientLevelDisplayTickInvoker;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.phys.Vec3;
 
@@ -27,9 +29,9 @@ public final class PortalVisualDisplayTickDriver {
         return new Result(sampled);
     }
     private static int sample(ClientLevel level, Vec3 center, int range, RandomSource random, BlockPos.MutableBlockPos pos) {
-        pos.set(net.minecraft.util.Mth.floor(center.x) + random.nextInt(range) - random.nextInt(range),
-                net.minecraft.util.Mth.floor(center.y) + random.nextInt(range) - random.nextInt(range),
-                net.minecraft.util.Mth.floor(center.z) + random.nextInt(range) - random.nextInt(range));
+        pos.set(Mth.floor(center.x) + random.nextInt(range) - random.nextInt(range),
+                Mth.floor(center.y) + random.nextInt(range) - random.nextInt(range),
+                Mth.floor(center.z) + random.nextInt(range) - random.nextInt(range));
         if (level.isOutsideBuildHeight(pos) || !level.hasChunk(pos.getX() >> 4, pos.getZ() >> 4)) return 0;
         var state = level.getBlockState(pos);
         state.getBlock().animateTick(state, level, pos, random);
@@ -39,7 +41,7 @@ public final class PortalVisualDisplayTickDriver {
             var drip = fluid.getDripParticle();
             if (drip != null && random.nextInt(10) == 0) {
                 var below = pos.below();
-                ((com.skyeshade.skyesight.mixin.client.ClientLevelDisplayTickInvoker) level).skyesight$trySpawnDripParticles(
+                ((ClientLevelDisplayTickInvoker) level).skyesight$trySpawnDripParticles(
                         below, level.getBlockState(below), drip, state.isFaceSturdy(level, pos, Direction.DOWN));
             }
         }

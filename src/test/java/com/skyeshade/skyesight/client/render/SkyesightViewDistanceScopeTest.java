@@ -1,5 +1,8 @@
 package com.skyeshade.skyesight.client.render;
 import org.junit.jupiter.api.Test;
+
+import java.util.concurrent.atomic.AtomicInteger;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 class SkyesightViewDistanceScopeTest {
@@ -11,7 +14,7 @@ class SkyesightViewDistanceScopeTest {
                 assertEquals(8, SkyesightViewDistanceScope.resolve(19));
             }
             assertEquals(38, SkyesightViewDistanceScope.resolve(19));
-            var observed = new java.util.concurrent.atomic.AtomicInteger();
+            var observed = new AtomicInteger();
             Thread t = new Thread(() -> observed.set(SkyesightViewDistanceScope.resolve(19)));
             t.start(); t.join();
             assertEquals(19, observed.get());

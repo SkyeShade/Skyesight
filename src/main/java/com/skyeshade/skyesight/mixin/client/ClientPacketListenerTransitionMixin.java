@@ -1,12 +1,13 @@
 package com.skyeshade.skyesight.mixin.client;
 
 import com.skyeshade.skyesight.client.transition.SecondaryTransition;
+import com.skyeshade.skyesight.client.transition.TraversalPortalClient;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.network.protocol.game.ClientboundRespawnPacket;
-import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.Mixin;
 
 @Mixin(ClientPacketListener.class)
 public abstract class ClientPacketListenerTransitionMixin {
@@ -18,6 +19,6 @@ public abstract class ClientPacketListenerTransitionMixin {
     @Inject(method = "handleMovePlayer", at = @At("TAIL"))
     private void skyesight$position(CallbackInfo ci) {
         SecondaryTransition.authoritativePosition();
-        com.skyeshade.skyesight.client.transition.TraversalPortalClient.authoritativePosition();
+        TraversalPortalClient.authoritativePosition();
     }
 }

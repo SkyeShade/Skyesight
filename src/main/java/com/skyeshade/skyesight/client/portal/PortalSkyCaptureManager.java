@@ -5,20 +5,25 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
+import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.Tesselator;
-import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.VertexBuffer;
+import com.mojang.blaze3d.vertex.VertexFormat;
 import com.mojang.blaze3d.vertex.VertexSorting;
+import com.skyeshade.skyesight.client.compat.iris.SkyesightIrisCompat;
+import com.skyeshade.skyesight.client.render.fog.SkyesightFogRenderer;
+import com.skyeshade.skyesight.client.render.PlayerPerspectiveViews;
+import com.skyeshade.skyesight.client.render.PortalCloudTerrainFrameDiagnostics;
+import com.skyeshade.skyesight.client.render.SecondarySceneEnvironmentRenderer;
+import com.skyeshade.skyesight.client.render.SkyesightIsolatedCloudRenderer;
+import com.skyeshade.skyesight.client.render.SkyesightSecondaryRenderContext;
+import com.skyeshade.skyesight.client.world.SkyesightVisualClientLevel;
+import com.skyeshade.skyesight.mixin.client.CameraInvoker;
 import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.SkyesightClientConfig;
 import com.skyeshade.skyesight.SkyesightDebugConfig;
-import com.skyeshade.skyesight.client.compat.iris.SkyesightIrisCompat;
-import com.skyeshade.skyesight.client.render.PortalCloudTerrainFrameDiagnostics;
-import com.skyeshade.skyesight.client.render.SkyesightIsolatedCloudRenderer;
-import com.skyeshade.skyesight.mixin.client.CameraInvoker;
-import com.mojang.blaze3d.vertex.PoseStack;
-import net.minecraft.client.CloudStatus;
 import net.minecraft.client.Camera;
+import net.minecraft.client.CloudStatus;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.DimensionSpecialEffects;
@@ -32,6 +37,7 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
+import org.joml.Vector3f;
 import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL14;
@@ -196,7 +202,7 @@ public final class PortalSkyCaptureManager {
     ) {
         ClientLevel level = targetLevel;
         var mainTarget = minecraft.getMainRenderTarget();
-        if (level == null || (level instanceof com.skyeshade.skyesight.client.world.SkyesightVisualClientLevel visual
+        if (level == null || (level instanceof SkyesightVisualClientLevel visual
                 && visual.skyesightLastEnvironmentUpdateMillis() == 0)
                 || mainTarget == null || mainTarget.width <= 0 || mainTarget.height <= 0) {
             Capture capture = invalid(Mode.PORTAL_CAMERA_RENDER, key, event.getRenderTick(), "invalid level/main target");
@@ -260,8 +266,8 @@ public final class PortalSkyCaptureManager {
             boolean cameraYAdjusted = false;
             double effectiveCameraY = originalCameraY;
             if (FORCE_SKY_CAMERA_ABOVE_HORIZON && originalBelowHorizon
-                    && !com.skyeshade.skyesight.client.render.PlayerPerspectiveViews.contains(diagnosticViewId)) {
-                effectiveCameraY = com.skyeshade.skyesight.client.render.SecondarySceneEnvironmentRenderer.skyPosition(level, truePortalCameraPosition).y;
+                    && !PlayerPerspectiveViews.contains(diagnosticViewId)) {
+                effectiveCameraY = SecondarySceneEnvironmentRenderer.skyPosition(level, truePortalCameraPosition).y;
                 ((CameraInvoker) camera).skyesight$setPosition(new Vec3(
                         truePortalCameraPosition.x(),
                         effectiveCameraY,
@@ -320,7 +326,7 @@ public final class PortalSkyCaptureManager {
                 cameraPositionAdjustedForSky = false;
             }
             // Vanilla switches from sky fog to terrain fog before its cloud pass.
-            com.skyeshade.skyesight.client.render.fog.SkyesightFogRenderer.setupForPlayerTerrain(
+            SkyesightFogRenderer.setupForPlayerTerrain(
                     level, camera, partialTick, renderDistanceChunks);
             // The portal environment texture contains sky first, then first-pass clouds.
             // Clouds are background-only here and may appear behind all portal terrain;
@@ -445,13 +451,13 @@ public final class PortalSkyCaptureManager {
 
     private static String renderVanillaSkyCapture(Minecraft minecraft, ClientLevel level, Camera camera,
             Matrix4f frustum, Matrix4f projection, float partialTick, int renderDistanceChunks) {
-        return com.skyeshade.skyesight.client.render.SecondarySceneEnvironmentRenderer.renderSky(
+        return SecondarySceneEnvironmentRenderer.renderSky(
                 minecraft, level, camera, frustum, projection, partialTick, renderDistanceChunks, true);
     }
 
     private static String renderClonedTargetLevelSkyCapture(Minecraft minecraft, ClientLevel level, Camera camera,
             Matrix4f frustum, Matrix4f projection, float partialTick, int renderDistanceChunks) {
-        return com.skyeshade.skyesight.client.render.SecondarySceneEnvironmentRenderer.renderSky(
+        return SecondarySceneEnvironmentRenderer.renderSky(
                 minecraft, level, camera, frustum, projection, partialTick, renderDistanceChunks, false);
     }
     private CloudCaptureResult capturePortalClouds(
@@ -491,7 +497,7 @@ public final class PortalSkyCaptureManager {
 
         // Sodium's cloud replacement reads getMainCamera(), ignoring vanilla's XYZ
         // arguments. Scope both the camera and output for that same destination draw.
-        try (var cloudScope = com.skyeshade.skyesight.client.render.SkyesightSecondaryRenderContext.push(
+        try (var cloudScope = SkyesightSecondaryRenderContext.push(
                 target, cloudCamera, minecraft.getMainRenderTarget())) {
             target.bindWrite(true);
             RenderSystem.viewport(0, 0, target.width, target.height);
@@ -509,7 +515,7 @@ public final class PortalSkyCaptureManager {
 
             PoseStack poseStack = new PoseStack();
             SkyesightIsolatedCloudRenderer.RenderResult renderResult =
-                    com.skyeshade.skyesight.client.render.SecondarySceneEnvironmentRenderer.renderClouds(
+                    SecondarySceneEnvironmentRenderer.renderClouds(
                             this.isolatedCloudRenderer, cacheKey, minecraft, level, frustum, projection,
                             truePortalCameraPosition, partialTick, renderFrame, target.frameBufferId);
             return CloudCaptureResult.succeeded(
@@ -528,7 +534,7 @@ public final class PortalSkyCaptureManager {
 
     private static RgbaSample setupVanillaCallerClearState(Minecraft minecraft, ClientLevel level, Camera camera,
             float partialTick, int radius) {
-        float[] color = com.skyeshade.skyesight.client.render.SecondarySceneEnvironmentRenderer.prepareBackground(
+        float[] color = SecondarySceneEnvironmentRenderer.prepareBackground(
                 minecraft, level, camera, partialTick, radius);
         return RgbaSample.fromUnit(color[0], color[1], color[2], 1);
     }
@@ -730,7 +736,7 @@ public final class PortalSkyCaptureManager {
             Quaternionf cameraRotation,
             double cloudY
     ) {
-        org.joml.Vector3f rotatedForward = new org.joml.Vector3f(0.0F, 0.0F, -1.0F)
+        Vector3f rotatedForward = new Vector3f(0.0F, 0.0F, -1.0F)
                 .rotate(new Quaternionf(cameraRotation));
         Vec3 forward = new Vec3(rotatedForward.x(), 0.0D, rotatedForward.z());
         if (forward.lengthSqr() < 1.0E-8D) {

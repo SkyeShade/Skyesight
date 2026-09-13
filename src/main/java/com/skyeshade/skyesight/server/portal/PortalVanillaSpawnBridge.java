@@ -2,14 +2,15 @@ package com.skyeshade.skyesight.server.portal;
 
 import com.skyeshade.skyesight.server.PortalSimulationCoordinator;
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ChunkMap;
 import net.minecraft.server.level.DistanceManager;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.MobCategory;
-import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.ChunkPos;
 
 public final class PortalVanillaSpawnBridge extends PortalSimulationCoordinator {
     private PortalVanillaSpawnBridge() {
@@ -103,7 +104,7 @@ public final class PortalVanillaSpawnBridge extends PortalSimulationCoordinator 
         PortalSimulationCoordinator.beginServerChunkCacheTick(level);
     }
 
-    public static void recordPortalSpawnedMob(ServerLevel level, net.minecraft.world.entity.Mob mob) {
+    public static void recordPortalSpawnedMob(ServerLevel level, Mob mob) {
         PortalSimulationCoordinator.recordPortalSpawnedMob(level, mob);
     }
 

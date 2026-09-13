@@ -139,6 +139,15 @@ public class PortalSimulationCoordinator {
             return;
         }
 
+        if (previous != null && previous.dimension().equals(dimension)
+                && previous.centerChunkX() == centerChunkX && previous.centerChunkZ() == centerChunkZ
+                && previous.loadRadiusChunks() == radius && previous.sameDim() == sameDim) {
+            // Renew the lease without removing and re-adding an unchanged ticket region.
+            PortalRegionTracker.put(new Region(previous.playerId(), previous.viewId(), previous.dimension(),
+                    centerChunkX, centerChunkZ, previous.loadRadiusChunks(), previous.entityTickRadiusChunks(),
+                    previous.mobSpawnRadiusChunks(), previous.chunks(), server.getTickCount(), sameDim));
+            return;
+        }
         LongSet nextChunks = PortalRegionTracker.buildChunkSet(centerChunkX, centerChunkZ, radius);
 
         if (previous != null) {

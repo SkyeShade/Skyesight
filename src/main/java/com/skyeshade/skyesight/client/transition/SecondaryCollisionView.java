@@ -3,16 +3,19 @@ package com.skyeshade.skyesight.client.transition;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.level.BlockGetter;
-import net.minecraft.world.level.CollisionGetter;
-import net.minecraft.world.level.border.WorldBorder;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.level.border.WorldBorder;
+import net.minecraft.world.level.chunk.EmptyLevelChunk;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.CollisionGetter;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.shapes.VoxelShape;
+
 import java.util.List;
 import java.util.Map;
 
@@ -24,11 +27,11 @@ final class SecondaryCollisionView implements CollisionGetter {
     static LevelChunk received(ClientLevel level, int x, int z) {
         // ClientLevel.hasChunk() always returns true, even before the first terrain packet.
         var chunk = level.getChunkSource().getChunk(x, z, false);
-        return chunk instanceof net.minecraft.world.level.chunk.EmptyLevelChunk ? null : chunk;
+        return chunk instanceof EmptyLevelChunk ? null : chunk;
     }
     @Override public BlockGetter getChunkForCollisions(int x, int z) {
         var chunk = received(physical, x, z);
-        return chunk != null ? chunk : warmed.get(net.minecraft.world.level.ChunkPos.asLong(x, z));
+        return chunk != null ? chunk : warmed.get(ChunkPos.asLong(x, z));
     }
     @Override public BlockState getBlockState(BlockPos pos) {
         var chunk = getChunkForCollisions(pos.getX() >> 4, pos.getZ() >> 4);

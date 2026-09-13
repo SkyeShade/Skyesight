@@ -1,15 +1,19 @@
 package com.skyeshade.skyesight.mixin.client;
 
-import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.client.world.SecondaryParticleCapture;
+import com.skyeshade.skyesight.client.world.SecondaryParticleViews;
 import com.skyeshade.skyesight.client.world.SkyesightVisualClientLevel;
 import com.skyeshade.skyesight.client.world.SkyesightVisualParticleWatch;
+import com.skyeshade.skyesight.Skyesight;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.core.registries.BuiltInRegistries;
-import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.Mixin;
+
+import java.util.Locale;
 
 @Mixin(ClientLevel.class)
 public abstract class ClientLevelParticleCaptureMixin {
@@ -28,11 +32,11 @@ public abstract class ClientLevelParticleCaptureMixin {
             CallbackInfo callbackInfo
     ) {
         ClientLevel level = (ClientLevel) (Object) this;
-        if (com.skyeshade.skyesight.client.world.SecondaryParticleCapture.capture(level, particleData, x, y, z, xSpeed, ySpeed, zSpeed)) {
+        if (SecondaryParticleCapture.capture(level, particleData, x, y, z, xSpeed, ySpeed, zSpeed)) {
             callbackInfo.cancel();
             return;
         }
-        if (!(level instanceof SkyesightVisualClientLevel)) com.skyeshade.skyesight.client.world.SecondaryParticleViews.capturePhysical(
+        if (!(level instanceof SkyesightVisualClientLevel)) SecondaryParticleViews.capturePhysical(
                 level, particleData, x, y, z, xSpeed, ySpeed, zSpeed);
         if ((Object) this instanceof SkyesightVisualClientLevel visualLevel) {
             visualLevel.skyesight$captureParticleFromGenericPath(
@@ -67,11 +71,11 @@ public abstract class ClientLevelParticleCaptureMixin {
             CallbackInfo callbackInfo
     ) {
         ClientLevel level = (ClientLevel) (Object) this;
-        if (com.skyeshade.skyesight.client.world.SecondaryParticleCapture.capture(level, particleData, x, y, z, xSpeed, ySpeed, zSpeed)) {
+        if (SecondaryParticleCapture.capture(level, particleData, x, y, z, xSpeed, ySpeed, zSpeed)) {
             callbackInfo.cancel();
             return;
         }
-        if (!(level instanceof SkyesightVisualClientLevel)) com.skyeshade.skyesight.client.world.SecondaryParticleViews.capturePhysical(
+        if (!(level instanceof SkyesightVisualClientLevel)) SecondaryParticleViews.capturePhysical(
                 level, particleData, x, y, z, xSpeed, ySpeed, zSpeed);
         if ((Object) this instanceof SkyesightVisualClientLevel visualLevel) {
             visualLevel.skyesight$captureParticleFromGenericPath(
@@ -105,11 +109,11 @@ public abstract class ClientLevelParticleCaptureMixin {
             CallbackInfo callbackInfo
     ) {
         ClientLevel level = (ClientLevel) (Object) this;
-        if (com.skyeshade.skyesight.client.world.SecondaryParticleCapture.capture(level, particleData, x, y, z, xSpeed, ySpeed, zSpeed)) {
+        if (SecondaryParticleCapture.capture(level, particleData, x, y, z, xSpeed, ySpeed, zSpeed)) {
             callbackInfo.cancel();
             return;
         }
-        if (!(level instanceof SkyesightVisualClientLevel)) com.skyeshade.skyesight.client.world.SecondaryParticleViews.capturePhysical(
+        if (!(level instanceof SkyesightVisualClientLevel)) SecondaryParticleViews.capturePhysical(
                 level, particleData, x, y, z, xSpeed, ySpeed, zSpeed);
         if ((Object) this instanceof SkyesightVisualClientLevel visualLevel) {
             visualLevel.skyesight$captureParticleFromGenericPath(
@@ -144,11 +148,11 @@ public abstract class ClientLevelParticleCaptureMixin {
             CallbackInfo callbackInfo
     ) {
         ClientLevel level = (ClientLevel) (Object) this;
-        if (com.skyeshade.skyesight.client.world.SecondaryParticleCapture.capture(level, particleData, x, y, z, xSpeed, ySpeed, zSpeed)) {
+        if (SecondaryParticleCapture.capture(level, particleData, x, y, z, xSpeed, ySpeed, zSpeed)) {
             callbackInfo.cancel();
             return;
         }
-        if (!(level instanceof SkyesightVisualClientLevel)) com.skyeshade.skyesight.client.world.SecondaryParticleViews.capturePhysical(
+        if (!(level instanceof SkyesightVisualClientLevel)) SecondaryParticleViews.capturePhysical(
                 level, particleData, x, y, z, xSpeed, ySpeed, zSpeed);
         if ((Object) this instanceof SkyesightVisualClientLevel visualLevel) {
             visualLevel.skyesight$captureParticleFromGenericPath(
@@ -207,6 +211,6 @@ public abstract class ClientLevelParticleCaptureMixin {
     }
 
     private static String format(double value) {
-        return String.format(java.util.Locale.ROOT, "%.2f", value);
+        return String.format(Locale.ROOT, "%.2f", value);
     }
 }

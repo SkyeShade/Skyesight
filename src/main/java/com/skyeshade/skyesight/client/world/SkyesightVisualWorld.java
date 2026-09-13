@@ -2,7 +2,9 @@ package com.skyeshade.skyesight.client.world;
 
 import com.skyeshade.skyesight.client.compat.sodium.SkyesightSodiumCompat;
 import com.skyeshade.skyesight.client.render.SkyesightVisualFeatureRenderer;
+import com.skyeshade.skyesight.client.render.sodium.SkyesightVisualSodiumTerrain;
 import com.skyeshade.skyesight.client.render.vanilla.SkyesightVisualVanillaTerrain;
+import com.skyeshade.skyesight.client.transition.SecondaryTransition;
 import net.minecraft.client.Camera;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.culling.Frustum;
@@ -10,7 +12,10 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.Level;
+import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
+
+import java.util.Set;
 
 public final class SkyesightVisualWorld implements AutoCloseable {
     private final SecondaryDestroyProgress destroyProgress = new SecondaryDestroyProgress();
@@ -22,7 +27,7 @@ public final class SkyesightVisualWorld implements AutoCloseable {
     private final SkyesightRemoteChunkReceiver chunkReceiver;
     private final SkyesightVisualEntityStore entityStore;
     private final SkyesightVisualParticleManager particles;
-    @org.jetbrains.annotations.Nullable
+    @Nullable
     public static SkyesightVisualWorld create(ResourceKey<Level> dimension) {
         SkyesightVisualClientLevel level = SkyesightClientLevelFactory.create(dimension);
         return level == null ? null : new SkyesightVisualWorld(dimension, level);
@@ -156,8 +161,8 @@ public final class SkyesightVisualWorld implements AutoCloseable {
         }
         return this.terrainBackend.visibleChunkCount();
     }
-    public java.util.Set<BlockPos> visibleTerrainSections() {
-        return terrainBackend == null ? java.util.Set.of() : terrainBackend.visibleTerrainSections();
+    public Set<BlockPos> visibleTerrainSections() {
+        return terrainBackend == null ? Set.of() : terrainBackend.visibleTerrainSections();
     }
     public String terrainBackendName() {
         return this.terrainBackend == null
@@ -181,7 +186,7 @@ public final class SkyesightVisualWorld implements AutoCloseable {
 
     @Override
     public void close() {
-        if (com.skyeshade.skyesight.client.transition.SecondaryTransition.deferClose(this, this::close)) return;
+        if (SecondaryTransition.deferClose(this, this::close)) return;
         if (this.closed) {
             return;
         }
@@ -213,7 +218,7 @@ public final class SkyesightVisualWorld implements AutoCloseable {
         private SodiumVisualMethods() {}
 
         private static SkyesightVisualTerrainBackend create(SkyesightVisualClientLevel level) {
-            return (SkyesightVisualTerrainBackend) com.skyeshade.skyesight.client.render.sodium.SkyesightVisualSodiumTerrain.create(level);
+            return (SkyesightVisualTerrainBackend) SkyesightVisualSodiumTerrain.create(level);
         }
     }
 }

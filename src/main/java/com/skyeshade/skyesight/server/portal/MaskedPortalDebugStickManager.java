@@ -1,24 +1,24 @@
 package com.skyeshade.skyesight.server.portal;
 
-import com.skyeshade.skyesight.Skyesight;
-import com.skyeshade.skyesight.SkyesightItems;
 import com.skyeshade.skyesight.api.PortalEndpoint;
 import com.skyeshade.skyesight.api.PortalRegistrationResult;
 import com.skyeshade.skyesight.api.PortalRenderSettings;
 import com.skyeshade.skyesight.api.PortalStencilMask;
 import com.skyeshade.skyesight.api.RegisteredPortalView;
 import com.skyeshade.skyesight.api.SkyesightPortalApi;
+import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.SkyesightItems;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
@@ -31,6 +31,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.UUID;
 
 @EventBusSubscriber(modid = Skyesight.MODID)
@@ -275,7 +276,7 @@ public final class MaskedPortalDebugStickManager {
     private static String compactRemovedIds(List<ResourceLocation> ids) {
         return ids.stream()
                 .map(id -> Skyesight.MODID.equals(id.getNamespace()) ? id.getPath() : id.toString())
-                .collect(java.util.stream.Collectors.joining("/"));
+                .collect(Collectors.joining("/"));
     }
 
     private static final class StickState {

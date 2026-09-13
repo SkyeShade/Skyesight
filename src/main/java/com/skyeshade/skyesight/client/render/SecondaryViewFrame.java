@@ -14,6 +14,7 @@ public final class SecondaryViewFrame {
     private final Matrix4f projectionMatrix;
     private final Matrix4f modelViewMatrix;
     private final Matrix4f cullProjectionMatrix;
+    private final Matrix4f baseProjectionMatrix;
     private final Frustum frustum;
     private final Diagnostics diagnostics = new Diagnostics();
 
@@ -27,6 +28,13 @@ public final class SecondaryViewFrame {
             Matrix4f cullProjectionMatrix,
             Frustum frustum
     ) {
+        this(camera, colorTarget, viewportWidth, viewportHeight, projectionMatrix, modelViewMatrix,
+                cullProjectionMatrix, frustum, cullProjectionMatrix);
+    }
+
+    public SecondaryViewFrame(Camera camera, TextureTarget colorTarget, int viewportWidth, int viewportHeight,
+                              Matrix4f projectionMatrix, Matrix4f modelViewMatrix, Matrix4f cullProjectionMatrix,
+                              Frustum frustum, Matrix4f baseProjectionMatrix) {
         this.camera = camera;
         this.colorTarget = colorTarget;
         this.viewportWidth = viewportWidth;
@@ -34,6 +42,7 @@ public final class SecondaryViewFrame {
         this.projectionMatrix = new Matrix4f(projectionMatrix);
         this.modelViewMatrix = new Matrix4f(modelViewMatrix);
         this.cullProjectionMatrix = new Matrix4f(cullProjectionMatrix);
+        this.baseProjectionMatrix = new Matrix4f(baseProjectionMatrix);
         this.frustum = frustum;
     }
 
@@ -63,6 +72,12 @@ public final class SecondaryViewFrame {
 
     public Matrix4f cullProjectionMatrix() {
         return new Matrix4f(this.cullProjectionMatrix);
+    }
+
+    /** Fresh rendering lens before exit clipping. Culling may intentionally use a different FOV.
+     * Includes the root frame's effective FOV/zoom/bob exactly once; never a parent's oblique row. */
+    public Matrix4f baseProjectionMatrix() {
+        return new Matrix4f(this.baseProjectionMatrix);
     }
 
     public Frustum frustum() {

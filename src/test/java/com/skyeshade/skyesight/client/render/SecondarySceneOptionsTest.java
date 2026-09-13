@@ -1,7 +1,10 @@
 package com.skyeshade.skyesight.client.render;
 
+import org.joml.Matrix4f;
 import org.junit.jupiter.api.Test;
+
 import java.util.List;
+
 import static com.skyeshade.skyesight.client.render.SecondarySceneOptions.Pass.*;
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -15,8 +18,8 @@ class SecondarySceneOptionsTest {
     }
 
     @Test void framePolicyIsCapturedBeforeLegacyDiagnosticsChange() {
-        var frame = new SecondaryViewFrame(null, null, 320, 180, new org.joml.Matrix4f(),
-                new org.joml.Matrix4f(), new org.joml.Matrix4f(), null);
+        var frame = new SecondaryViewFrame(null, null, 320, 180, new Matrix4f(),
+                new Matrix4f(), new Matrix4f(), null);
         frame.diagnostics().setTerrainChunkRadius(4);
         frame.diagnostics().setEntityChunkRadius(3);
         frame.diagnostics().setBlockEntityChunkRadius(2);

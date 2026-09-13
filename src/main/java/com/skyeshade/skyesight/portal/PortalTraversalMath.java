@@ -1,7 +1,9 @@
 package com.skyeshade.skyesight.portal;
 
 import com.skyeshade.skyesight.api.PortalEndpoint;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Quaterniond;
 import org.joml.Quaternionf;
 import org.joml.Vector3d;
 
@@ -13,7 +15,7 @@ public final class PortalTraversalMath {
                 .mul(new Quaternionf(source).conjugate()).normalize();
     }
     public static Vec3 rotate(Vec3 vector, Quaternionf rotation) {
-        Vector3d result = new Vector3d(vector.x, vector.y, vector.z).rotate(new org.joml.Quaterniond(rotation));
+        Vector3d result = new Vector3d(vector.x, vector.y, vector.z).rotate(new Quaterniond(rotation));
         return new Vec3(result.x, result.y, result.z);
     }
     public static Vec3 local(PortalEndpoint endpoint, Vec3 point) {
@@ -47,7 +49,7 @@ public final class PortalTraversalMath {
         return new Pose(position(source, target, position), rotate(velocity, rotation), yaw(look), pitch(look));
     }
     /** Conservative full AABB containment projected into the aperture basis. */
-    public static boolean fitsBody(PortalEndpoint source, net.minecraft.world.phys.AABB box) {
+    public static boolean fitsBody(PortalEndpoint source, AABB box) {
         for (double x : new double[]{box.minX, box.maxX})
             for (double y : new double[]{box.minY, box.maxY})
                 for (double z : new double[]{box.minZ, box.maxZ}) {

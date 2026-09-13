@@ -1,10 +1,15 @@
 package com.skyeshade.skyesight.network;
 
-import com.skyeshade.skyesight.Skyesight;
-import com.skyeshade.skyesight.SkyesightDebugConfig;
+import com.skyeshade.skyesight.client.portal.PortalInteractionClient;
+import com.skyeshade.skyesight.client.transition.TraversalPortalClient;
+import com.skyeshade.skyesight.client.world.SkyesightClientDimensionMetadata;
+import com.skyeshade.skyesight.server.portal.PortalInteractions;
+import com.skyeshade.skyesight.server.portal.PortalProxyArmorStandDebugManager;
+import com.skyeshade.skyesight.server.SkyesightParticleWatches;
 import com.skyeshade.skyesight.server.SkyesightRemoteViewLifecycleHandler;
 import com.skyeshade.skyesight.server.SkyesightServerChunkSender;
-import com.skyeshade.skyesight.server.portal.PortalProxyArmorStandDebugManager;
+import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.SkyesightDebugConfig;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.network.registration.PayloadRegistrar;
@@ -18,27 +23,27 @@ public final class SkyesightPayloads {
         }
 
         PayloadRegistrar registrar = event.registrar(Skyesight.MODID)
-                .versioned("12");
+                .versioned("13");
 
         registrar.playToServer(SkyesightPortalInteractionPayload.TYPE, SkyesightPortalInteractionPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> {
                     if (context.player() instanceof ServerPlayer player)
-                        com.skyeshade.skyesight.server.portal.PortalInteractions.handle(player, payload);
+                        PortalInteractions.handle(player, payload);
                 }));
         registrar.playToClient(SkyesightLevelEventPayload.TYPE, SkyesightLevelEventPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> SkyesightClientLevelEventHandler.handle(payload)));
         registrar.playToClient(SkyesightPortalMiningPayload.TYPE, SkyesightPortalMiningPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() ->
-                        com.skyeshade.skyesight.client.portal.PortalInteractionClient.receive(payload)));
+                        PortalInteractionClient.receive(payload)));
 
         registrar.playToClient(SkyesightTraversalPayload.TYPE, SkyesightTraversalPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() ->
-                        com.skyeshade.skyesight.client.transition.TraversalPortalClient.receive(payload)));
+                        TraversalPortalClient.receive(payload)));
 
         registrar.playToServer(SkyesightParticleWatchPayload.TYPE, SkyesightParticleWatchPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> {
                     if (context.player() instanceof ServerPlayer player)
-                        com.skyeshade.skyesight.server.SkyesightParticleWatches.update(player, payload);
+                        SkyesightParticleWatches.update(player, payload);
                 }));
 
         registrar.playToServer(
@@ -114,7 +119,7 @@ public final class SkyesightPayloads {
                 SkyesightDimensionMetadataPayload.TYPE,
                 SkyesightDimensionMetadataPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(
-                        () -> com.skyeshade.skyesight.client.world.SkyesightClientDimensionMetadata.accept(payload)
+                        () -> SkyesightClientDimensionMetadata.accept(payload)
                 )
         );
         registrar.playToClient(

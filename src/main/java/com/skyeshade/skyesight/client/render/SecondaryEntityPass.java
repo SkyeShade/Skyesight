@@ -3,17 +3,19 @@ package com.skyeshade.skyesight.client.render;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexSorting;
-import com.skyeshade.skyesight.entity.PortalMultipartEntityUtil;
 import com.skyeshade.skyesight.client.render.entity.PortalEntityRenderContextScope;
+import com.skyeshade.skyesight.client.render.entity.PortalEntitySplicing;
 import com.skyeshade.skyesight.client.render.entity.PortalMultipartPartEligibility;
 import com.skyeshade.skyesight.client.render.entity.PortalRenderableEntity;
+import com.skyeshade.skyesight.client.transition.TraversalPortalClient;
+import com.skyeshade.skyesight.entity.PortalMultipartEntityUtil;
 import com.skyeshade.skyesight.mixin.client.EntityRenderDispatcherAccessor;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.ShaderInstance;
-import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
@@ -135,7 +137,7 @@ public final class SecondaryEntityPass {
         Set<String> renderedParentSignatures = new HashSet<>();
         int framebufferBeforePass = GL30.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
         List<PortalRenderableEntity> renderableList = materializeRenderables(renderableEntities);
-        if (renderableList.isEmpty() && com.skyeshade.skyesight.client.transition.TraversalPortalClient.interactionLinks(renderLevel.dimension()).isEmpty()) {
+        if (renderableList.isEmpty() && TraversalPortalClient.splicingLinks(renderLevel.dimension()).isEmpty()) {
             return Result.skipped("source empty");
         }
 
@@ -171,10 +173,11 @@ public final class SecondaryEntityPass {
                             ? null
                             : ResourceLocation.tryParse(frame.diagnostics().portalInstanceId()),
                     renderLevel.dimension(),
-                    scopeSource
+                    scopeSource,
+                    RecursivePortalRenderer.isNestedScene()
             )) {
                 for (PortalRenderableEntity originalEntity : renderableList) {
-                    PortalRenderableEntity renderableEntity = com.skyeshade.skyesight.client.render.entity.PortalEntitySplicing.localPose(originalEntity, renderLevel.dimension());
+                    PortalRenderableEntity renderableEntity = PortalEntitySplicing.localPose(originalEntity, renderLevel.dimension());
                     if (renderableEntity == null) continue;
                     total++;
                     if (!renderableEntity.standalonePart()
@@ -272,11 +275,12 @@ public final class SecondaryEntityPass {
                         }
                     }
                 }
+                // Keep generated halves and their feature/entity lookups in this scene's scope.
+                bufferSource.endBatch();
+                PortalEntitySplicing.projections(renderLevel, frame.camera(), poseStack, partialTick,
+                        frame.diagnostics().portalInstanceId() == null ? frame.diagnostics().entityWatchRegionId()
+                                : ResourceLocation.tryParse(frame.diagnostics().portalInstanceId()));
             }
-
-            bufferSource.endBatch();
-            com.skyeshade.skyesight.client.render.entity.PortalEntitySplicing.projections(renderLevel,frame.camera(),poseStack,partialTick,
-                    frame.diagnostics().portalInstanceId() == null ? frame.diagnostics().entityWatchRegionId() : ResourceLocation.tryParse(frame.diagnostics().portalInstanceId()));
             PortalProxyMarkerRenderer.renderMarkers(renderLevel, frame.camera(), poseStack, true);
             PortalLookMarkerRenderer.renderMarkers(renderLevel, frame.camera(), poseStack, true);
 

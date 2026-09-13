@@ -10,39 +10,44 @@ import com.skyeshade.skyesight.api.SkyesightViewHandle;
 import com.skyeshade.skyesight.api.SkyesightViewOutput;
 import com.skyeshade.skyesight.api.SkyesightViewRenderOptions;
 import com.skyeshade.skyesight.api.SkyesightViewSpec;
-import com.skyeshade.skyesight.Skyesight;
-import com.skyeshade.skyesight.SkyesightDebugConfig;
-import com.skyeshade.skyesight.client.SkyesightClientThreading;
+import com.skyeshade.skyesight.client.chunk.SkyesightPortalChunkStorage;
 import com.skyeshade.skyesight.client.render.PortalSecondaryWorldRenderer;
 import com.skyeshade.skyesight.client.render.SecondarySceneEnvironmentRenderer;
 import com.skyeshade.skyesight.client.render.SecondarySceneFrame;
 import com.skyeshade.skyesight.client.render.SecondarySceneOutputState;
 import com.skyeshade.skyesight.client.render.SecondarySceneRenderer;
-import com.skyeshade.skyesight.client.render.SecondaryViewFrame;
 import com.skyeshade.skyesight.client.render.SecondaryViewContext;
+import com.skyeshade.skyesight.client.render.SecondaryViewFrame;
 import com.skyeshade.skyesight.client.render.SkyesightCameraMatrices;
 import com.skyeshade.skyesight.client.render.SkyesightCameraOutput;
 import com.skyeshade.skyesight.client.render.SkyesightFrustumFactory;
 import com.skyeshade.skyesight.client.render.SkyesightProjectionMatrices;
 import com.skyeshade.skyesight.client.render.SkyesightProjectionScope;
+import com.skyeshade.skyesight.client.render.state.PortalSecondaryRenderState;
+import com.skyeshade.skyesight.client.SkyesightClientThreading;
 import com.skyeshade.skyesight.client.world.SkyesightClientChunkRequester;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorld;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorldManager;
+import com.skyeshade.skyesight.network.SkyesightClientChunkHandler;
 import com.skyeshade.skyesight.network.SkyesightRemoteViewLifecyclePayload;
+import com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics;
+import com.skyeshade.skyesight.remote.SkyesightRemoteRadiusPolicy;
 import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry;
+import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.SkyesightDebugConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.network.PacketDistributor;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.lwjgl.opengl.GL11;
-import net.neoforged.neoforge.network.PacketDistributor;
 
-import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.Objects;
 
 public final class SkyesightView implements SkyesightViewHandle {
     private static final AtomicLong NEXT_CAMERA_GENERATION = new AtomicLong(1L);
@@ -151,8 +156,8 @@ public final class SkyesightView implements SkyesightViewHandle {
 
         retireRemoteRegistration();
         SkyesightVisualWorldManager.close(this.id);
-        com.skyeshade.skyesight.client.chunk.SkyesightPortalChunkStorage.clearView(this.id);
-        com.skyeshade.skyesight.network.SkyesightClientChunkHandler.invalidateView(this.id);
+        SkyesightPortalChunkStorage.clearView(this.id);
+        SkyesightClientChunkHandler.invalidateView(this.id);
 
         this.dimension = dimension;
     }
@@ -349,7 +354,7 @@ public final class SkyesightView implements SkyesightViewHandle {
             visualWorld = SkyesightVisualWorldManager.getOrCreate(this.id, this.dimension);
             if (visualWorld == null || visualWorld.isClosed()) return;
             SkyesightClientChunkRequester.requestChunksFor(this.id, this.dimension, this.camera.minecraftCamera(),
-                    com.skyeshade.skyesight.remote.SkyesightRemoteRadiusPolicy.loadRadius(this.renderDistanceChunks, this.remoteLoadRadiusLimit));
+                    SkyesightRemoteRadiusPolicy.loadRadius(this.renderDistanceChunks, this.remoteLoadRadiusLimit));
             if (!visualWorld.environmentReady()) return;
             logRemoteDiagnostics(visualWorld);
         }
@@ -387,9 +392,9 @@ public final class SkyesightView implements SkyesightViewHandle {
         var scene = new SecondarySceneFrame(this.id, level, visualWorld, frame, this.secondaryViewContext,
                 partialTick, this.target, () -> {});
         var saved = SecondarySceneOutputState.capture();
-        boolean previousSecondary = com.skyeshade.skyesight.client.render.state.PortalSecondaryRenderState.renderingSecondaryView;
+        boolean previousSecondary = PortalSecondaryRenderState.renderingSecondaryView;
         try {
-            com.skyeshade.skyesight.client.render.state.PortalSecondaryRenderState.renderingSecondaryView = true;
+            PortalSecondaryRenderState.renderingSecondaryView = true;
             this.target.bindWrite(true);
             RenderSystem.disableScissor();
             GL11.glDisable(GL11.GL_STENCIL_TEST);
@@ -402,7 +407,7 @@ public final class SkyesightView implements SkyesightViewHandle {
             SecondarySceneRenderer.renderContents(scene);
             if (this.renderMode == SkyesightRenderMode.WORLD) SkyesightCameraOutput.makeOpaque(this.target);
         } finally {
-            com.skyeshade.skyesight.client.render.state.PortalSecondaryRenderState.renderingSecondaryView = previousSecondary;
+            PortalSecondaryRenderState.renderingSecondaryView = previousSecondary;
             saved.restore();
         }
     }
@@ -431,7 +436,7 @@ public final class SkyesightView implements SkyesightViewHandle {
                 this.remoteGeneration
         );
         sendRemoteLifecycle(true);
-        com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics.log("register",this.id,this.remoteGeneration,"target="+this.remoteDimension.location());
+        SkyesightRemoteCenterDiagnostics.log("register",this.id,this.remoteGeneration,"target="+this.remoteDimension.location());
 
         // Registration and chunk requests share the same network channel. Wait
         // one frame so the server authorizes this generation before warmup.
@@ -442,7 +447,7 @@ public final class SkyesightView implements SkyesightViewHandle {
         if (this.remoteGeneration <= 0L || this.remoteDimension == null) {
             return;
         }
-        com.skyeshade.skyesight.remote.SkyesightRemoteCenterDiagnostics.log("retire",this.id,this.remoteGeneration,"target="+this.remoteDimension.location());
+        SkyesightRemoteCenterDiagnostics.log("retire",this.id,this.remoteGeneration,"target="+this.remoteDimension.location());
         SkyesightClientChunkRequester.reset(this.id, this.remoteGeneration);
         sendRemoteLifecycle(false);
         SkyesightRemoteViewRegistry.unregister(this.id, this.remoteGeneration);
@@ -519,8 +524,8 @@ public final class SkyesightView implements SkyesightViewHandle {
         }
 
         SkyesightVisualWorldManager.close(this.id);
-        com.skyeshade.skyesight.client.chunk.SkyesightPortalChunkStorage.clearView(this.id);
-        com.skyeshade.skyesight.network.SkyesightClientChunkHandler.invalidateView(this.id);
+        SkyesightPortalChunkStorage.clearView(this.id);
+        SkyesightClientChunkHandler.invalidateView(this.id);
         SkyesightClientThreading.runOnRenderThread(() -> { this.secondaryViewContext.close(); });
     }
     @Override

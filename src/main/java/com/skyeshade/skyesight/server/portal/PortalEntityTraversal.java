@@ -1,32 +1,48 @@
 package com.skyeshade.skyesight.server.portal;
 
-import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.api.PortalAperture;
+import com.skyeshade.skyesight.api.PortalEndpoint;
 import com.skyeshade.skyesight.api.SkyesightPortalRaycast.Link;
+import com.skyeshade.skyesight.mixin.common.ProjectileTraversalInvoker;
+import com.skyeshade.skyesight.network.SkyesightTraversalPayload;
+import com.skyeshade.skyesight.portal.PortalCollisionMath;
 import com.skyeshade.skyesight.portal.PortalCrossingState;
 import com.skyeshade.skyesight.portal.PortalTraversalMath;
+import com.skyeshade.skyesight.Skyesight;
+import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Marker;
 import net.minecraft.world.entity.projectile.Projectile;
+import net.minecraft.world.entity.projectile.ProjectileUtil;
+import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.portal.DimensionTransition;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
+import net.neoforged.neoforge.event.entity.ProjectileImpactEvent;
+import net.neoforged.neoforge.event.EventHooks;
+import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 import net.neoforged.neoforge.event.tick.EntityTickEvent;
+
 import java.util.*;
 
 /** Server tick sweeps for non-player roots. Player accepted-packet traversal remains independent. */
 @EventBusSubscriber(modid = Skyesight.MODID)
 public final class PortalEntityTraversal {
     private record Sample(ServerLevel level, Vec3 position) {}
-    private record Key(net.minecraft.resources.ResourceLocation id, long revision) {}
+    private record Key(ResourceLocation id, long revision) {}
     private static final Map<Entity, Sample> SAMPLES = new WeakHashMap<>();
     private static final Map<Entity, Map<Key, PortalCrossingState>> SIDES = new WeakHashMap<>();
-    private static final Map<Entity, net.minecraft.world.phys.HitResult> DEFERRED_IMPACTS = new WeakHashMap<>();
+    private static final Map<Entity, HitResult> DEFERRED_IMPACTS = new WeakHashMap<>();
     private static final Map<Entity, Integer> ARRIVED_TICK = new WeakHashMap<>();
-    private static final Map<Entity, com.skyeshade.skyesight.api.PortalEndpoint> EXIT_GUARDS = new WeakHashMap<>();
+    private static final Map<Entity, PortalEndpoint> EXIT_GUARDS = new WeakHashMap<>();
     private PortalEntityTraversal() {}
     private static boolean eligible(Entity entity) {
         return entity.level() instanceof ServerLevel && !(entity instanceof ServerPlayer)
@@ -46,7 +62,7 @@ public final class PortalEntityTraversal {
         if (eligible(entity) && !TraversalPortalManager.links(entity.level().dimension()).isEmpty())
             SAMPLES.put(entity, new Sample((ServerLevel) entity.level(), entity.position()));
     }
-    @SubscribeEvent public static void leave(net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent event) {
+    @SubscribeEvent public static void leave(EntityLeaveLevelEvent event) {
         if (!(event.getLevel() instanceof ServerLevel)) return;
         SAMPLES.remove(event.getEntity()); SIDES.remove(event.getEntity()); DEFERRED_IMPACTS.remove(event.getEntity()); ARRIVED_TICK.remove(event.getEntity()); EXIT_GUARDS.remove(event.getEntity());
     }
@@ -63,7 +79,7 @@ public final class PortalEntityTraversal {
         states.keySet().removeIf(key -> links.stream().noneMatch(link -> key.equals(new Key(link.id(), link.revision()))));
         Link closest = null; Vec3 closestHit = null;
         for (Link link : links) {
-            if (link.source().equals(EXIT_GUARDS.get(entity)) || !link.backface() && PortalTraversalMath.local(link.source(),sample.position).z < 0) continue;
+            if (link.source().equals(EXIT_GUARDS.get(entity)) || !link.sidedness().allows(PortalTraversalMath.local(link.source(),sample.position).z)) continue;
             var a = PortalTraversalMath.local(link.source(), sample.position);
             var b = PortalTraversalMath.local(link.source(), entity.position());
             if (Math.min(Math.abs(a.z), Math.abs(b.z)) > entity.getBbWidth() + .1 && a.z * b.z > 0) {
@@ -86,7 +102,7 @@ public final class PortalEntityTraversal {
             finishImpact((Projectile) entity, sample.position, deferred);
         }
     }
-    @SubscribeEvent public static void impact(net.neoforged.neoforge.event.entity.ProjectileImpactEvent event) {
+    @SubscribeEvent public static void impact(ProjectileImpactEvent event) {
         var entity = event.getProjectile();
         if (!(entity.level() instanceof ServerLevel)) return;
         var sample = SAMPLES.get(entity);
@@ -95,7 +111,7 @@ public final class PortalEntityTraversal {
         // its drag/gravity update, then perform the ordered dimension transition at tick end.
         Vec3 end = sample.position.add(entity.getDeltaMovement());
         for (Link link : TraversalPortalManager.links(entity.level().dimension())) {
-            if (link.source().equals(EXIT_GUARDS.get(entity)) || !link.backface() && PortalTraversalMath.local(link.source(),sample.position).z < 0) continue;
+            if (link.source().equals(EXIT_GUARDS.get(entity)) || !link.sidedness().allows(PortalTraversalMath.local(link.source(),sample.position).z)) continue;
             Vec3 a = PortalTraversalMath.local(link.source(), sample.position), b = PortalTraversalMath.local(link.source(), end);
             if (a.z * b.z >= 0 || a.z == b.z) continue;
             Vec3 hit = sample.position.lerp(end, a.z / (a.z - b.z));
@@ -108,7 +124,7 @@ public final class PortalEntityTraversal {
         }
     }
     private static boolean fits(Entity entity, Link link, Vec3 at) {
-        return com.skyeshade.skyesight.api.PortalAperture.fits(link, entity.getBoundingBox().move(at.subtract(entity.position())));
+        return PortalAperture.fits(link, entity.getBoundingBox().move(at.subtract(entity.position())));
     }
     private static boolean teleport(Entity entity, Link link, Vec3 intersection) {
         var source = (ServerLevel) entity.level();
@@ -118,10 +134,10 @@ public final class PortalEntityTraversal {
                 entity.getDeltaMovement(), entity.getYRot(), entity.getXRot());
         var exit = PortalTraversalMath.position(link.source(), link.target(), intersection);
                 var exitLink=TraversalPortalManager.links(link.target().dimension()).stream()
-                .filter(l -> l.id().equals(com.skyeshade.skyesight.network.SkyesightTraversalPayload.pairedPortalId(link.id()))).findFirst().orElse(null);
-        var exitBounds=com.skyeshade.skyesight.portal.PortalCollisionMath.transform(entity.getBoundingBox().move(intersection.subtract(entity.position())),link.source(),link.target());
-        if(exitLink==null || !com.skyeshade.skyesight.api.PortalAperture.fits(exitLink,exitBounds)) return false;
-        destination.getChunkAt(net.minecraft.core.BlockPos.containing(pose.position()));
+                .filter(l -> l.id().equals(SkyesightTraversalPayload.pairedPortalId(link.id()))).findFirst().orElse(null);
+        var exitBounds=PortalCollisionMath.transform(entity.getBoundingBox().move(intersection.subtract(entity.position())),link.source(),link.target());
+        if(exitLink==null || !PortalAperture.fits(exitLink,exitBounds)) return false;
+        destination.getChunkAt(BlockPos.containing(pose.position()));
         Entity owner = entity instanceof Projectile projectile ? projectile.getOwner() : null;
         float head = entity.getYHeadRot();
         float body = entity instanceof LivingEntity living ? living.yBodyRot : entity.getYRot();
@@ -143,16 +159,16 @@ public final class PortalEntityTraversal {
         if (moved instanceof Projectile projectile) {
             // Check the remainder of this SAME sweep in its destination, so a fast projectile
             // cannot tunnel through destination blocks/entities while source impacts are deferred.
-            var invoker = (com.skyeshade.skyesight.mixin.common.ProjectileTraversalInvoker) projectile;
-            net.minecraft.world.phys.HitResult hit = destination.clip(new net.minecraft.world.level.ClipContext(
-                    exit, pose.position(), net.minecraft.world.level.ClipContext.Block.COLLIDER,
-                    net.minecraft.world.level.ClipContext.Fluid.NONE, projectile));
-            Vec3 end = hit.getType() == net.minecraft.world.phys.HitResult.Type.MISS ? pose.position() : hit.getLocation();
-            var entityHit = net.minecraft.world.entity.projectile.ProjectileUtil.getEntityHitResult(destination, projectile,
-                    exit, end, new net.minecraft.world.phys.AABB(exit, end).inflate(1), invoker::skyesight$canHit);
+            var invoker = (ProjectileTraversalInvoker) projectile;
+            HitResult hit = destination.clip(new ClipContext(
+                    exit, pose.position(), ClipContext.Block.COLLIDER,
+                    ClipContext.Fluid.NONE, projectile));
+            Vec3 end = hit.getType() == HitResult.Type.MISS ? pose.position() : hit.getLocation();
+            var entityHit = ProjectileUtil.getEntityHitResult(destination, projectile,
+                    exit, end, new AABB(exit, end).inflate(1), invoker::skyesight$canHit);
             if (entityHit != null) hit = entityHit;
-            if (hit.getType() != net.minecraft.world.phys.HitResult.Type.MISS
-                    && !net.neoforged.neoforge.event.EventHooks.onProjectileImpact(projectile, hit)) {
+            if (hit.getType() != HitResult.Type.MISS
+                    && !EventHooks.onProjectileImpact(projectile, hit)) {
                 finishImpact(projectile, exit, hit);
             }
         }
@@ -167,15 +183,15 @@ public final class PortalEntityTraversal {
                 moved.getUUID(), moved.getType(), link.id(), intersection, moved.position(), moved.getDeltaMovement(), moved != entity);
         return true;
     }
-    private static void finishImpact(Projectile projectile, Vec3 start, net.minecraft.world.phys.HitResult hit) {
+    private static void finishImpact(Projectile projectile, Vec3 start, HitResult hit) {
         projectile.setPos(start);
-        ((com.skyeshade.skyesight.mixin.common.ProjectileTraversalInvoker) projectile).skyesight$impact(hit);
+        ((ProjectileTraversalInvoker) projectile).skyesight$impact(hit);
         // Native projectile ticks advance AFTER impact handling. In particular AbstractArrow
         // replaces velocity with (hit - start) and backs its position up by .05 before embedding.
         // We are already at tick end, so omitting this step embeds the arrow at the portal instead.
         if (!projectile.isRemoved()) projectile.setPos(projectile.position().add(projectile.getDeltaMovement()));
     }
-    @SubscribeEvent public static void stopped(net.neoforged.neoforge.event.server.ServerStoppedEvent event) {
+    @SubscribeEvent public static void stopped(ServerStoppedEvent event) {
         SAMPLES.clear(); SIDES.clear(); DEFERRED_IMPACTS.clear(); ARRIVED_TICK.clear(); EXIT_GUARDS.clear();
     }
 }

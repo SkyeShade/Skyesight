@@ -1,8 +1,10 @@
 package com.skyeshade.skyesight.client.render;
 
 import com.skyeshade.skyesight.client.compat.sodium.SkyesightSodiumCompat;
-import net.minecraft.core.BlockPos;
+import com.skyeshade.skyesight.client.render.sodium.SodiumSecondaryViewState;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.core.BlockPos;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 
 public final class SecondarySodiumTerrainPass {
@@ -44,7 +46,7 @@ public final class SecondarySodiumTerrainPass {
     }
 
     /** Conservative prewarm check; never allocates or adopts a renderer. */
-    public static boolean hasRenderedTerrain(SecondaryViewContext context, net.minecraft.client.multiplayer.ClientLevel level) {
+    public static boolean hasRenderedTerrain(SecondaryViewContext context, ClientLevel level) {
         if (SkyesightSodiumCompat.isLoaded()) return SodiumMethods.hasRenderedTerrain(context);
         return context.vanillaState() instanceof VanillaSecondaryViewState state
                 && state.hasRenderedTerrain(level);
@@ -110,7 +112,7 @@ public final class SecondarySodiumTerrainPass {
         private SodiumMethods() {}
 
         private static boolean hasRenderedTerrain(SecondaryViewContext context) {
-            var state = com.skyeshade.skyesight.client.render.sodium.SodiumSecondaryViewState.get(context);
+            var state = SodiumSecondaryViewState.get(context);
             return state != null && state.renderer() != null && state.renderer().getVisibleChunkCount() > 0;
         }
 

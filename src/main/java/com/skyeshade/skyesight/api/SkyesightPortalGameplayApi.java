@@ -1,6 +1,8 @@
 package com.skyeshade.skyesight.api;
 
-import com.skyeshade.skyesight.server.portal.TraversalPortalManager;
+import com.skyeshade.skyesight.network.SkyesightTraversalPayload;
+import com.skyeshade.skyesight.portal.PortalCollisionMath;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 
 import java.util.UUID;
@@ -19,7 +21,7 @@ public final class SkyesightPortalGameplayApi {
             throw new IllegalStateException("Portal gameplay registration requires the server thread");
         if (server.getLevel(a.dimension()) == null || server.getLevel(b.dimension()) == null)
             throw new IllegalArgumentException("Missing portal dimension");
-        if (!com.skyeshade.skyesight.portal.PortalCollisionMath.supported(a) || !com.skyeshade.skyesight.portal.PortalCollisionMath.supported(b))
+        if (!PortalCollisionMath.supported(a) || !PortalCollisionMath.supported(b))
             throw new IllegalArgumentException("Gameplay pairs currently require upright cardinal endpoints");
         SkyesightPortalApi.registerPortalPair(server, identity, a, b, PortalPairSettings.of(PortalBehavior.TRAVERSABLE));
     }
@@ -30,8 +32,8 @@ public final class SkyesightPortalGameplayApi {
         SkyesightPortalApi.removePortalPair(server, identity);
     }
 
-    public static net.minecraft.resources.ResourceLocation directionId(UUID identity, boolean fromA) {
-        return net.minecraft.resources.ResourceLocation.parse(com.skyeshade.skyesight.network.SkyesightTraversalPayload.portalId(identity, fromA));
+    public static ResourceLocation directionId(UUID identity, boolean fromA) {
+        return ResourceLocation.parse(SkyesightTraversalPayload.portalId(identity, fromA));
     }
 }
 

@@ -5,6 +5,8 @@ import com.skyeshade.skyesight.client.world.SkyesightVisualWorld;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.resources.ResourceLocation;
 
+import java.util.Objects;
+
 /** Resolved scene inputs. Projection, aperture and camera transforms belong to the caller. */
 public record SecondarySceneFrame(
         ResourceLocation viewId,
@@ -24,11 +26,11 @@ public record SecondarySceneFrame(
     }
 
     public SecondarySceneFrame {
-        java.util.Objects.requireNonNull(level);
-        java.util.Objects.requireNonNull(view);
-        java.util.Objects.requireNonNull(context);
-        java.util.Objects.requireNonNull(output);
-        java.util.Objects.requireNonNull(prepareOutput);
-        java.util.Objects.requireNonNull(options);
+        Objects.requireNonNull(level);
+        Objects.requireNonNull(view);
+        Objects.requireNonNull(context);
+        Objects.requireNonNull(output);
+        Objects.requireNonNull(prepareOutput);
+        Objects.requireNonNull(options);
     }
 }

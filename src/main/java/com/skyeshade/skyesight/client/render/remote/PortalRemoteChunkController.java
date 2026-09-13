@@ -1,31 +1,32 @@
 package com.skyeshade.skyesight.client.render.remote;
 
-import com.skyeshade.skyesight.Skyesight;
-import com.skyeshade.skyesight.SkyesightDebugConfig;
 import com.skyeshade.skyesight.client.render.config.PortalRemoteChunkConfig;
 import com.skyeshade.skyesight.client.render.state.PortalRemoteChunkRuntimeState;
 import com.skyeshade.skyesight.client.render.state.PortalSecondaryRenderState;
+import com.skyeshade.skyesight.client.world.SkyesightClientChunkRequester;
 import com.skyeshade.skyesight.network.SkyesightChunkDataPayload;
 import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistration;
 import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry;
 import com.skyeshade.skyesight.server.SkyesightSecondaryChunkWatchRegion;
+import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.SkyesightDebugConfig;
 import net.minecraft.client.Minecraft;
-import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkPacketData;
+import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
 import net.minecraft.network.protocol.game.ClientboundLightUpdatePacketData;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.core.BlockPos;
-import net.minecraft.world.level.Level;
-import net.minecraft.world.level.ChunkPos;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkAccess;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.status.ChunkStatus;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
 import net.neoforged.neoforge.network.PacketDistributor;
 
 import java.util.UUID;
@@ -43,178 +44,14 @@ public final class PortalRemoteChunkController {
             ChunkPos center,
             int radius
     ) {
-        MinecraftServer server = minecraft == null ? null : minecraft.getSingleplayerServer();
-
         if (minecraft == null || minecraft.player == null || regionId == null || targetDimension == null || center == null) return;
-        if (server == null || server.isPublished()) {
-            if (PortalNetworkStreaming.ensure(minecraft, regionId, targetDimension)) {
-                com.skyeshade.skyesight.client.world.SkyesightClientChunkRequester.requestChunksFor(
-                        regionId, targetDimension, center, radius);
-            }
-            return;
-        }
-
-        ChunkPos lastSentCenter = PortalSecondaryRenderState.SECONDARY_CHUNK_WATCH_SENT_CENTERS.get(regionId);
-        Integer lastSentRadius = PortalSecondaryRenderState.SECONDARY_CHUNK_WATCH_SENT_RADII.get(regionId);
-        boolean centerChanged = !center.equals(lastSentCenter);
-        boolean radiusChanged = lastSentRadius == null || lastSentRadius != radius;
-
-        if (!centerChanged && !radiusChanged) {
-            return;
-        }
-
-        PortalSecondaryRenderState.SECONDARY_CHUNK_WATCH_SENT_CENTERS.put(regionId, center);
-        PortalSecondaryRenderState.SECONDARY_CHUNK_WATCH_SENT_RADII.put(regionId, radius);
-
-        UUID playerId = minecraft.player.getUUID();
-        server.execute(() -> {
-            ServerPlayer player = server.getPlayerList().getPlayer(playerId);
-
-            if (player == null || player.isRemoved()) {
-                return;
-            }
-
-            ServerLevel targetLevel = server.getLevel(targetDimension);
-            if (targetLevel == null) {
-                SkyesightSecondaryChunkWatchRegion.recordInitialChunkSend(
-                        player,
-                        regionId,
-                        targetDimension,
-                        center,
-                        radius,
-                        0,
-                        0,
-                        0,
-                        "target level missing"
-                );
-                Skyesight.LOGGER.warn(
-                    "[Skyesight] Cross-dim portal watch: portal={} region={} sourceDim={} targetDim={} targetServerLevelFound=no cameraBlock=n/a cameraChunk={} radius={} requested=0 forceLoaded=0 payloadsSent=0 first=-",
-                        portalName,
-                        regionId,
-                        sourceDimension == null ? "n/a" : sourceDimension.location(),
-                        targetDimension.location(),
-                        center,
-                        radius
-                );
-                return;
-            }
-
-            SkyesightSecondaryChunkWatchRegion.setRegion(player, regionId, targetDimension, center, radius);
-            sendCrossDimensionPortalChunksToClient(
-                    targetLevel,
-                    player,
-                    portalName,
-                    regionId,
-                    sourceDimension,
-                    cameraBlock,
-                    center,
-                    radius
-            );
-        });
-    }
-
-    private static void sendCrossDimensionPortalChunksToClient(
-            ServerLevel targetLevel,
-            ServerPlayer player,
-            String portalName,
-            ResourceLocation regionId,
-            ResourceKey<Level> sourceDimension,
-            BlockPos cameraBlock,
-            ChunkPos center,
-            int radius
-    ) {
-        int requested = 0;
-        int forced = 0;
-        int payloadsSent = 0;
-        StringBuilder firstChunks = new StringBuilder();
-        String exception = "-";
-        SkyesightRemoteViewRegistration registration =
-                SkyesightRemoteViewRegistry.get(regionId).orElse(null);
-        long viewGeneration = registration == null ? -1L : registration.generation();
-
-        try {
-            for (int dz = -radius; dz <= radius; dz++) {
-                for (int dx = -radius; dx <= radius; dx++) {
-                    int chunkX = center.x + dx;
-                    int chunkZ = center.z + dz;
-                    requested++;
-                    targetLevel.setChunkForced(chunkX, chunkZ, true);
-
-                    ChunkAccess access = targetLevel.getChunkSource().getChunk(chunkX, chunkZ, ChunkStatus.FULL, true);
-                    LevelChunk chunk = access instanceof LevelChunk levelChunk
-                            ? levelChunk
-                            : getServerLevelChunk(targetLevel, chunkX, chunkZ);
-
-                    if (chunk == null) {
-                        continue;
-                    }
-
-                    forced++;
-                    if (firstChunks.length() < 80) {
-                        if (!firstChunks.isEmpty()) {
-                            firstChunks.append(' ');
-                        }
-                        firstChunks.append(chunkX).append(',').append(chunkZ);
-                    }
-
-                    PacketDistributor.sendToPlayer(
-                            player,
-                            new SkyesightChunkDataPayload(
-                                    regionId,
-                                    viewGeneration,
-                                    targetLevel.dimension(),
-                                    center.x,
-                                    center.z,
-                                    radius,
-                                    chunkX,
-                                    chunkZ,
-                                    new ClientboundLevelChunkPacketData(chunk),
-                                    new ClientboundLightUpdatePacketData(
-                                            chunk.getPos(),
-                                            targetLevel.getLightEngine(),
-                                            null,
-                                            null
-                                    )
-                            )
-                    );
-                    payloadsSent++;
-                }
-            }
-        } catch (RuntimeException runtimeException) {
-            exception = runtimeException.getClass().getSimpleName() + ": " + runtimeException.getMessage();
-            Skyesight.LOGGER.warn("[Skyesight] Cross-dim portal chunk payload send failed", runtimeException);
-        }
-
-        SkyesightSecondaryChunkWatchRegion.recordInitialChunkSend(
-                player,
-                regionId,
-                targetLevel.dimension(),
-                center,
-                radius,
-                requested,
-                forced,
-                payloadsSent,
-                firstChunks.isEmpty() ? "-" : firstChunks.toString()
-        );
-        if (SkyesightDebugConfig.WATCH_DEBUG) {
-            Skyesight.LOGGER.info(
-                    "[Skyesight] Cross-dim portal watch: portal={} region={} sourceDim={} targetDim={} targetServerLevelFound=yes cameraBlock={} cameraChunk={} radius={} requested={} forceLoaded={} payloadsSent={} first='{}' exceptions={}",
-                    portalName,
-                    regionId,
-                    sourceDimension == null ? "n/a" : sourceDimension.location(),
-                    targetLevel.dimension().location(),
-                    cameraBlock == null ? "n/a" : cameraBlock.toShortString(),
-                    center,
-                    radius,
-                    requested,
-                    forced,
-                    payloadsSent,
-                    firstChunks.isEmpty() ? "-" : firstChunks,
-                    exception
-            );
+        // Integrated and remote servers share one demand owner. The old direct sender
+        // resent every chunk at a center change alongside the standby network stream.
+        if (PortalNetworkStreaming.ensure(minecraft, regionId, targetDimension)) {
+            SkyesightClientChunkRequester.requestChunksFor(regionId, targetDimension, center,
+                    com.skyeshade.skyesight.client.render.PlayerPerspectiveViews.radius(regionId, radius));
         }
     }
-
     public static void sendSecondaryWatchChunksToLocalClient(
             MinecraftServer server,
             ServerLevel level,

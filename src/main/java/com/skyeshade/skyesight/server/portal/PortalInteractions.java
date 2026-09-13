@@ -1,23 +1,33 @@
 package com.skyeshade.skyesight.server.portal;
 
-import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.api.*;
 import com.skyeshade.skyesight.mixin.server.PortalInteractionGameModeAccessor;
 import com.skyeshade.skyesight.network.*;
+import com.skyeshade.skyesight.portal.PortalInteractionPolicy;
+import com.skyeshade.skyesight.portal.PortalTraversalMath;
+import com.skyeshade.skyesight.Skyesight;
+import net.minecraft.advancements.CriteriaTriggers;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket.Action;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.server.level.ServerPlayerGameMode;
+import net.minecraft.world.entity.ExperienceOrb;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.*;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.event.tick.ServerTickEvent;
-import net.neoforged.neoforge.network.PacketDistributor;
+import net.neoforged.neoforge.common.CommonHooks;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 
 import java.util.*;
+import java.util.function.Predicate;
 
 /**
  * Server-owned, one-hop interaction sessions. Every action and mining tick revalidates the ray.
@@ -28,7 +38,7 @@ public final class PortalInteractions {
     private static final Map<ServerPlayer, Long> SEQUENCES = new WeakHashMap<>();
     private static final Map<ServerPlayer, Integer> ACTION_TICKS = new WeakHashMap<>();
 
-    private record MenuAnchor(net.minecraft.world.inventory.AbstractContainerMenu menu,
+    private record MenuAnchor(AbstractContainerMenu menu,
                               SkyesightPortalRaycast.Link link, Vec3 position) {
     }
 
@@ -38,7 +48,7 @@ public final class PortalInteractions {
     }
 
     private record Session(SkyesightPortalInteractionPayload intent, BlockHitResult hit,
-                           SkyesightPortalRaycast.Link link, net.minecraft.server.level.ServerLevel destination) {
+                           SkyesightPortalRaycast.Link link, ServerLevel destination) {
     }
 
     private static Target target(ServerPlayer player, SkyesightPortalInteractionPayload intent) {
@@ -48,7 +58,7 @@ public final class PortalInteractions {
         var ray = SkyesightPortalRaycast.trace(new SkyesightServerPortalRays(player.server, player,
                         TraversalPortalManager::links, e -> e != player), player.level().dimension(),
                 player.getEyePosition(), player.getLookAngle(), reach, 1);
-        if (!com.skyeshade.skyesight.portal.PortalInteractionPolicy.matches(ray, intent.portal(), intent.revision(),
+        if (!PortalInteractionPolicy.matches(ray, intent.portal(), intent.revision(),
                 player.blockInteractionRange(), player.entityInteractionRange())) return null;
         var step = ray.chain().getFirst();
         var link = TraversalPortalManager.links(player.level().dimension()).stream()
@@ -107,8 +117,8 @@ public final class PortalInteractions {
         try (var scope = PortalInteractionContext.open(player, level, target.link)) {
             if (intent.action() == SkyesightPortalInteractionPayload.Action.ATTACK && target.ray.hit() instanceof EntityHitResult hit) {
                 if (hit.getEntity() != player && hit.getEntity().isAttackable()
-                        && !(hit.getEntity() instanceof net.minecraft.world.entity.item.ItemEntity)
-                        && !(hit.getEntity() instanceof net.minecraft.world.entity.ExperienceOrb)
+                        && !(hit.getEntity() instanceof ItemEntity)
+                        && !(hit.getEntity() instanceof ExperienceOrb)
                         && player.getMainHandItem().isItemEnabled(level.enabledFeatures()))
                     player.attack(hit.getEntity());
             } else if (intent.action() == SkyesightPortalInteractionPayload.Action.USE) {
@@ -120,11 +130,11 @@ public final class PortalInteractions {
                         result = player.gameMode.useItemOn(player, level, player.getItemInHand(hand), hand, hit);
                     } else if (target.ray.hit() instanceof EntityHitResult hit) {
                         var local = hit.getLocation().subtract(hit.getEntity().position());
-                        var hook = net.neoforged.neoforge.common.CommonHooks.onInteractEntityAt(player, hit.getEntity(), local, hand);
+                        var hook = CommonHooks.onInteractEntityAt(player, hit.getEntity(), local, hand);
                         result = hook != null ? hook : hit.getEntity().interactAt(player, local, hand);
                         if (!result.consumesAction()) result = player.interactOn(hit.getEntity(), hand);
                         if (result.consumesAction())
-                            net.minecraft.advancements.CriteriaTriggers.PLAYER_INTERACTED_WITH_ENTITY.trigger(player,
+                            CriteriaTriggers.PLAYER_INTERACTED_WITH_ENTITY.trigger(player,
                                     result.indicateItemUse() ? itemBefore : ItemStack.EMPTY, hit.getEntity());
                     }
                     if (result.consumesAction() || result == InteractionResult.FAIL) break;
@@ -139,7 +149,7 @@ public final class PortalInteractions {
     /**
      * Preserve vanilla menu validity, but evaluate its destination distance in the same validated portal context.
      */
-    public static boolean menuValid(ServerPlayer player, net.minecraft.world.inventory.AbstractContainerMenu menu) {
+    public static boolean menuValid(ServerPlayer player, AbstractContainerMenu menu) {
         var anchor = MENUS.get(player);
         if (anchor == null) return menu.stillValid(player);
         if (anchor.menu != menu) {
@@ -152,7 +162,7 @@ public final class PortalInteractions {
             MENUS.remove(player);
             return false;
         }
-        Vec3 virtual = com.skyeshade.skyesight.portal.PortalTraversalMath.position(link.target(), link.source(), anchor.position);
+        Vec3 virtual = PortalTraversalMath.position(link.target(), link.source(), anchor.position);
         Vec3 direction = virtual.subtract(player.getEyePosition());
         double menuReach = player.blockInteractionRange() + 4.0; // Container.stillValidBlockEntity's native allowance.
         if (direction.lengthSqr() > menuReach * menuReach || direction.lengthSqr() < 1e-12) return false;
@@ -166,9 +176,9 @@ public final class PortalInteractions {
         }
     }
 
-    public static List<ServerPlayer> remoteOpeners(net.minecraft.world.level.Level level, BlockPos pos,
-                                                   java.util.function.Predicate<net.minecraft.world.entity.player.Player> owns) {
-        if (!(level instanceof net.minecraft.server.level.ServerLevel)) return List.of();
+    public static List<ServerPlayer> remoteOpeners(Level level, BlockPos pos,
+                                                   Predicate<Player> owns) {
+        if (!(level instanceof ServerLevel)) return List.of();
         var result = new ArrayList<ServerPlayer>();
         for (var entry : List.copyOf(MENUS.entrySet())) {
             var player = entry.getKey();
@@ -236,7 +246,7 @@ public final class PortalInteractions {
     }
 
     @SubscribeEvent
-    public static void stopped(net.neoforged.neoforge.event.server.ServerStoppedEvent event) {
+    public static void stopped(ServerStoppedEvent event) {
         MINING.clear();
         SEQUENCES.clear();
         ACTION_TICKS.clear();
@@ -244,7 +254,7 @@ public final class PortalInteractions {
     }
 
     @SubscribeEvent
-    public static void logout(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedOutEvent event) {
+    public static void logout(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             stop(player);
             MENUS.remove(player);

@@ -5,6 +5,8 @@ import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.core.BlockPos;
 import org.joml.Matrix4f;
 
+import java.util.Set;
+
 public interface SkyesightVisualTerrainBackend extends AutoCloseable {
     void onChunkStatusAdded(int chunkX, int chunkZ);
 
@@ -26,7 +28,7 @@ public interface SkyesightVisualTerrainBackend extends AutoCloseable {
     );
 
     int visibleChunkCount();
-    java.util.Set<BlockPos> visibleTerrainSections();
+    Set<BlockPos> visibleTerrainSections();
 
     @Override
     void close();

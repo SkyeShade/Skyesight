@@ -1,16 +1,21 @@
 package com.skyeshade.skyesight.client.render;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.skyeshade.skyesight.client.portal.PortalInteractionClient;
 import com.skyeshade.skyesight.client.render.entity.PortalDimensionEntitySources;
 import com.skyeshade.skyesight.client.render.entity.PortalRenderableEntity;
 import com.skyeshade.skyesight.client.render.fog.SkyesightFogRenderer;
 import com.skyeshade.skyesight.client.render.light.SkyesightLightTextureUpdater;
+import com.skyeshade.skyesight.client.transition.SecondaryTransition;
+import com.skyeshade.skyesight.client.world.SecondaryParticleViews;
 import net.minecraft.client.Minecraft;
-import net.minecraft.world.level.ChunkPos;
+import net.minecraft.client.renderer.FogRenderer;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.phys.AABB;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
+
 import java.util.List;
 
 /** Scene contents shared by every secondary view, independent of its projection and aperture. */
@@ -24,7 +29,7 @@ public final class SecondarySceneRenderer {
         var frame = scene.view();
         var options = scene.options();
         float partialTick = scene.partialTick();
-        if (!options.particles()) com.skyeshade.skyesight.client.world.SecondaryParticleViews.close(scene.viewId());
+        if (!options.particles()) SecondaryParticleViews.close(scene.viewId());
         float fogStart = RenderSystem.getShaderFogStart();
         float fogEnd = RenderSystem.getShaderFogEnd();
         var fogShape = RenderSystem.getShaderFogShape();
@@ -65,7 +70,7 @@ public final class SecondarySceneRenderer {
                     }
                     case PARTICLES -> {
                         prepare(scene);
-                        var particles = com.skyeshade.skyesight.client.world.SecondaryParticleViews.touch(scene);
+                        var particles = SecondaryParticleViews.touch(scene);
                         if (particles != null && particles.usesMainParticles()) {
                             SecondaryParticlePass.render(frame, minecraft, partialTick, SecondaryParticlePass.RenderGroup.ALL);
                         } else if (particles != null) {
@@ -77,13 +82,14 @@ public final class SecondarySceneRenderer {
             }
             if (terrainRendered) {
                 prepare(scene);
-                com.skyeshade.skyesight.client.portal.PortalInteractionClient.render(scene);
+                PortalInteractionClient.render(scene);
+                RecursivePortalRenderer.render(scene);
             }
         } finally {
             minecraft.gameRenderer.lightTexture().turnOffLightLayer();
             SkyesightLightTextureUpdater.restoreMain(partialTick);
             if (minecraft.level != null && minecraft.player != null) {
-                net.minecraft.client.renderer.FogRenderer.setupColor(minecraft.gameRenderer.getMainCamera(), partialTick,
+                FogRenderer.setupColor(minecraft.gameRenderer.getMainCamera(), partialTick,
                         minecraft.level, minecraft.options.getEffectiveRenderDistance(),
                         minecraft.gameRenderer.getDarkenWorldAmount(partialTick));
             }
@@ -92,7 +98,7 @@ public final class SecondarySceneRenderer {
             RenderSystem.setShaderFogShape(fogShape);
             RenderSystem.setShaderFogColor(fogColor[0], fogColor[1], fogColor[2], fogColor[3]);
         }
-        if (terrainRendered) com.skyeshade.skyesight.client.transition.SecondaryTransition.capture(scene);
+        if (terrainRendered && !RecursivePortalRenderer.isNestedScene()) SecondaryTransition.capture(scene);
         return terrainRendered;
     }
 
@@ -121,7 +127,7 @@ public final class SecondarySceneRenderer {
             entities = PortalDimensionEntitySources.renderableVisualEntitiesForDimension(scene.viewId(), scene.visualWorld(),
                     scene.level().dimension(), bounds, frame.frustum());
         }
-        if (com.skyeshade.skyesight.client.transition.SecondaryTransition.renderingPrimaryPresentation() && Minecraft.getInstance().player != null
+        if (!RecursivePortalRenderer.isNestedScene() && SecondaryTransition.renderingPrimaryPresentation() && Minecraft.getInstance().player != null
                 && Minecraft.getInstance().options.getCameraType().isFirstPerson())
             entities = entities.stream().filter(entry -> !entry.entity().getUUID().equals(Minecraft.getInstance().player.getUUID())).toList();
         SecondaryEntityPass.renderSceneEntities(frame, Minecraft.getInstance(), scene.level(), entities,

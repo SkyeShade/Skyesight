@@ -1,22 +1,24 @@
 package com.skyeshade.skyesight.network;
 
-import com.skyeshade.skyesight.Skyesight;
-import com.skyeshade.skyesight.SkyesightDebugConfig;
 import com.skyeshade.skyesight.client.world.SkyesightVisualClientLevel;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorld;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorldManager;
 import com.skyeshade.skyesight.remote.SkyesightRemoteViewRegistry;
+import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.SkyesightDebugConfig;
+import net.minecraft.client.Minecraft;
+import net.minecraft.resources.ResourceLocation;
 
 public final class SkyesightClientEnvironmentHandler {
     private static final SkyesightEnvironmentCache LATEST = new SkyesightEnvironmentCache();
     private SkyesightClientEnvironmentHandler() {}
 
-    public static void initialize(net.minecraft.resources.ResourceLocation id, SkyesightVisualClientLevel level) {
-        var payload = LATEST.get(net.minecraft.client.Minecraft.getInstance().getConnection(), id, level.dimension());
+    public static void initialize(ResourceLocation id, SkyesightVisualClientLevel level) {
+        var payload = LATEST.get(Minecraft.getInstance().getConnection(), id, level.dimension());
         if (payload != null)
             level.applySkyesightEnvironment(payload);
     }
-    public static void remove(net.minecraft.resources.ResourceLocation id) { LATEST.remove(id); }
+    public static void remove(ResourceLocation id) { LATEST.remove(id); }
     public static void clear() { LATEST.clear(); }
 
     public static void handle(SkyesightEnvironmentPayload payload) {
@@ -31,7 +33,7 @@ public final class SkyesightClientEnvironmentHandler {
         }
 
         // Environment can precede chunk-driven world creation on the same ordered connection.
-        LATEST.put(net.minecraft.client.Minecraft.getInstance().getConnection(), payload);
+        LATEST.put(Minecraft.getInstance().getConnection(), payload);
         SkyesightVisualWorld world = SkyesightVisualWorldManager.get(payload.viewId());
         if (world == null
                 || world.isClosed()

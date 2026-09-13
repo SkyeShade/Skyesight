@@ -1,40 +1,51 @@
 package com.skyeshade.skyesight.client.portal;
-import com.skyeshade.skyesight.client.render.state.PortalSecondaryRenderState;
-
+import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexSorting;
-import com.skyeshade.skyesight.Skyesight;
-import com.skyeshade.skyesight.SkyesightClientConfig;
 import com.skyeshade.skyesight.api.PortalEndpoint;
 import com.skyeshade.skyesight.api.PortalRenderSettings;
 import com.skyeshade.skyesight.api.RegisteredPortalView;
 import com.skyeshade.skyesight.api.SkyesightClipPlane;
 import com.skyeshade.skyesight.api.SkyesightPortalApi;
 import com.skyeshade.skyesight.client.render.MainTerrainStateSnapshot;
+import com.skyeshade.skyesight.client.render.PlayerPerspectiveViews;
 import com.skyeshade.skyesight.client.render.PortalSecondaryWorldRenderer;
 import com.skyeshade.skyesight.client.render.SecondaryParticlePass;
+import com.skyeshade.skyesight.client.render.SecondarySceneFrame;
+import com.skyeshade.skyesight.client.render.SecondarySceneOptions;
+import com.skyeshade.skyesight.client.render.SecondarySceneOutputState;
+import com.skyeshade.skyesight.client.render.SecondarySceneRenderer;
 import com.skyeshade.skyesight.client.render.SecondarySodiumTerrainPass;
 import com.skyeshade.skyesight.client.render.SecondaryViewContext;
 import com.skyeshade.skyesight.client.render.SecondaryViewFrame;
 import com.skyeshade.skyesight.client.render.SkyesightSecondaryRenderContext;
+import com.skyeshade.skyesight.client.render.state.PortalSecondaryRenderState;
+import com.skyeshade.skyesight.client.transition.SecondaryTransition;
+import com.skyeshade.skyesight.client.transition.TraversalPortalClient;
+import com.skyeshade.skyesight.client.transition.TraversalPortalStandby;
+import com.skyeshade.skyesight.client.world.SkyesightClientChunkRequester;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorld;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorldManager;
+import com.skyeshade.skyesight.portal.PortalTraversalMath;
+import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.SkyesightClientConfig;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.ShaderInstance;
-import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
-import net.minecraft.resources.ResourceLocation;
-import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
-import org.joml.Matrix4f;
 import org.joml.Matrix3f;
+import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
@@ -101,7 +112,7 @@ public final class PortalDirectStencilRenderer {
             PortalSecondaryRotationMode.OLD_EXIT_PORTAL_RENDER_ROTATION;
 
     private static final Map<ResourceLocation, SecondaryViewContext> PORTAL_VIEW_CONTEXTS = new LinkedHashMap<>();
-    private static com.mojang.blaze3d.pipeline.TextureTarget standbyTarget;
+    private static TextureTarget standbyTarget;
     public static void closeStandbyTarget() {
         if (standbyTarget != null) { standbyTarget.destroyBuffers(); standbyTarget = null; }
     }
@@ -133,11 +144,11 @@ public final class PortalDirectStencilRenderer {
     }
 
     public static int invalidateLevelBoundCaches(String reason) {
-        return invalidateLevelBoundCaches(reason, java.util.Set.of());
+        return invalidateLevelBoundCaches(reason, Set.of());
     }
-    public static int invalidateLevelBoundCaches(String reason, java.util.Set<ResourceLocation> retained) {
+    public static int invalidateLevelBoundCaches(String reason, Set<ResourceLocation> retained) {
         int contextCount = PORTAL_VIEW_CONTEXTS.size();
-        for (var id : java.util.List.copyOf(PORTAL_VIEW_CONTEXTS.keySet()))
+        for (var id : List.copyOf(PORTAL_VIEW_CONTEXTS.keySet()))
             if (!retained.contains(id)) invalidateViewCaches(id);
         portalMaskWroteThisFrameByView.clear();
         portalMainViewProjectionByView.clear();
@@ -159,11 +170,11 @@ public final class PortalDirectStencilRenderer {
         var world = SkyesightVisualWorldManager.getOrCreate(portal.id(), portal.target().dimension());
         if (world == null || !world.environmentReady()) return;
         var context = registeredRenderView(portal).renderView().viewContext();
-        var saved = com.skyeshade.skyesight.client.render.SecondarySceneOutputState.capture();
+        var saved = SecondarySceneOutputState.capture();
         boolean previous = PortalSecondaryRenderState.renderingSecondaryView;
         try {
             PortalSecondaryRenderState.renderingSecondaryView = true;
-            if (standbyTarget == null) standbyTarget = new com.mojang.blaze3d.pipeline.TextureTarget(64, 64, true, Minecraft.ON_OSX);
+            if (standbyTarget == null) standbyTarget = new TextureTarget(64, 64, true, Minecraft.ON_OSX);
             var target = standbyTarget;
             var camera = context.camera();
             camera.setup(world.level(), minecraft.player, false, false, 0);
@@ -172,7 +183,7 @@ public final class PortalDirectStencilRenderer {
             int radius = minecraft.options.getEffectiveRenderDistance();
             var projection = new Matrix4f().perspective((float) Math.toRadians(120), 1, .05f, radius * 32f);
             var model = new Matrix4f().rotation(new Quaternionf(camera.rotation()).conjugate());
-            var frustum = new net.minecraft.client.renderer.culling.Frustum(model, projection);
+            var frustum = new Frustum(model, projection);
             var position = camera.getPosition();
             frustum.prepare(position.x, position.y, position.z);
             target.bindWrite(true);
@@ -181,15 +192,15 @@ public final class PortalDirectStencilRenderer {
             target.clear(Minecraft.ON_OSX);
             target.bindWrite(true);
             world.renderTerrain(camera, frustum, model, projection, radius, false);
-            var frame = new com.skyeshade.skyesight.client.render.SecondaryViewFrame(camera, target, 64, 64,
+            var frame = new SecondaryViewFrame(camera, target, 64, 64,
                     projection, model, projection, frustum);
             frame.diagnostics().setTerrainChunkRadius(radius);
             var settings = portal.renderSettings();
-            var options = new com.skyeshade.skyesight.client.render.SecondarySceneOptions(radius,
+            var options = new SecondarySceneOptions(radius,
                     settings.entityChunkRadius(), settings.blockEntityChunkRadius(), settings.renderTerrain(),
                     settings.renderTranslucent(), settings.renderBlockEntities(), settings.renderEntities(), settings.renderParticles());
-            com.skyeshade.skyesight.client.transition.SecondaryTransition.captureStandby(
-                    new com.skyeshade.skyesight.client.render.SecondarySceneFrame(portal.id(), world.level(), world,
+            SecondaryTransition.captureStandby(
+                    new SecondarySceneFrame(portal.id(), world.level(), world,
                             frame, context, minecraft.getTimer().getGameTimeDeltaPartialTick(true), target, () -> {}, options));
         } finally {
             PortalSecondaryRenderState.renderingSecondaryView = previous;
@@ -227,7 +238,7 @@ public final class PortalDirectStencilRenderer {
         double maxRenderDistance = SkyesightClientConfig.portalRenderDistanceBlocks();
 
         for (RegisteredPortalView view : SkyesightPortalApi.getAllPortals()) {
-            if (com.skyeshade.skyesight.client.transition.TraversalPortalClient.suppressArrivalPortal(view.id())) continue;
+            if (TraversalPortalClient.suppressArrivalPortal(view.id())) continue;
             PortalRenderSettings settings = view.renderSettings();
             if (settings == null || !settings.enabled() || !settings.rendersView() || !view.active()) {
                 continue;
@@ -309,14 +320,11 @@ public final class PortalDirectStencilRenderer {
     }
 
     private static boolean portalPhysicalSideVisible(RegisteredPortalView view, Camera camera, String stage) {
-        if (view == null || view.renderBackface() || view.source() == null || camera == null) {
+        if (view == null || view.source() == null || camera == null) {
             return true;
         }
-        Vec3 normal = facingNormal(view.source().facing());
-        Vec3 cameraOffset = camera.getPosition().subtract(view.source().center());
-        double signedSide = cameraOffset.dot(normal);
-        boolean visible = signedSide <= 0.01D;
-        return visible;
+        return TraversalPortalClient.sides(view).allows(
+                PortalTraversalMath.local(view.source(), camera.getPosition()).z);
     }
 
     private static Vec3 facingNormal(Direction facing) {
@@ -470,8 +478,8 @@ public final class PortalDirectStencilRenderer {
                 settings.enabled(),
                 settings.rendersView(),
                 settings.stencilRef(),
-                com.skyeshade.skyesight.client.render.PlayerPerspectiveViews.radius(view.id(), settings.terrainChunkRadius()),
-                com.skyeshade.skyesight.client.render.PlayerPerspectiveViews.radius(view.id(), settings.portalOwnedRenderRadiusChunks()),
+                PlayerPerspectiveViews.radius(view.id(), settings.terrainChunkRadius()),
+                PlayerPerspectiveViews.radius(view.id(), settings.portalOwnedRenderRadiusChunks()),
                 settings.sameDimPlayerLoadedReuseRadiusChunks(),
                 settings.reusePlayerLoadedChunksForSameDim(),
                 settings.entityChunkRadius(),
@@ -683,18 +691,18 @@ public final class PortalDirectStencilRenderer {
     }
 
     /** The transition is a primary presentation: draw its portals with the normal stencil passes. */
-    public static void renderPrimaryPresentation(com.skyeshade.skyesight.client.render.SecondarySceneFrame scene) {
+    public static void renderPrimaryPresentation(SecondarySceneFrame scene) {
         var minecraft = Minecraft.getInstance();
         if (!RENDER_SECONDARY_PORTAL_COMPOSITE || minecraft.level == null
                 || !minecraft.level.dimension().equals(scene.level().dimension())) return;
         var frame = scene.view();
-        var saved = com.skyeshade.skyesight.client.render.SecondarySceneOutputState.capture();
+        var saved = SecondarySceneOutputState.capture();
         try (var ignored = SkyesightSecondaryRenderContext.push(scene.output(), frame.camera(), minecraft.getMainRenderTarget())) {
             scene.output().bindWrite(true);
-            RenderSystem.setProjectionMatrix(frame.projectionMatrix(), com.mojang.blaze3d.vertex.VertexSorting.DISTANCE_TO_ORIGIN);
+            RenderSystem.setProjectionMatrix(frame.projectionMatrix(), VertexSorting.DISTANCE_TO_ORIGIN);
             RenderSystem.getModelViewStack().identity();
             RenderSystem.applyModelViewMatrix();
-            var poses = new com.mojang.blaze3d.vertex.PoseStack();
+            var poses = new PoseStack();
             poses.mulPose(frame.modelViewMatrix());
             var event = new RenderLevelStageEvent(RenderLevelStageEvent.Stage.AFTER_LEVEL, minecraft.levelRenderer,
                     poses, frame.modelViewMatrix(), frame.projectionMatrix(), minecraft.levelRenderer.getTicks(),
@@ -853,7 +861,7 @@ public final class PortalDirectStencilRenderer {
         if (minecraft.level != null
                 && targetDimension != null
                 && (!targetDimension.equals(minecraft.level.dimension())
-                    || com.skyeshade.skyesight.client.transition.TraversalPortalStandby.contains(viewId))) {
+                    || TraversalPortalStandby.contains(viewId))) {
             SkyesightVisualWorld visualWorld =
                     SkyesightVisualWorldManager.getOrCreate(viewId, targetDimension);
 
@@ -1098,7 +1106,7 @@ public final class PortalDirectStencilRenderer {
         }
 
         float partialTick = event.getPartialTick().getGameTimeDeltaPartialTick(true);
-        com.skyeshade.skyesight.client.world.SkyesightClientChunkRequester.requestChunksFor(
+        SkyesightClientChunkRequester.requestChunksFor(
                 regionId, targetDimension, frame.camera(), instance.renderConfig().terrainChunkRadius());
         var world = SkyesightVisualWorldManager.getOrCreate(regionId, targetDimension);
         if (world == null || world.isClosed()) return;
@@ -1114,8 +1122,8 @@ public final class PortalDirectStencilRenderer {
         options.setRenderEntities(instance.renderConfig().renderEntities());
         options.setRenderBlockEntities(instance.renderConfig().renderBlockEntities());
         options.setRenderParticles(instance.renderConfig().renderParticles() && CROSS_DIM_PORTAL_PARTICLES_ENABLED);
-        com.skyeshade.skyesight.client.render.SecondarySceneRenderer.renderContents(
-                new com.skyeshade.skyesight.client.render.SecondarySceneFrame(regionId, world.level(), world,
+        SecondarySceneRenderer.renderContents(
+                new SecondarySceneFrame(regionId, world.level(), world,
                         frame, instance.viewContext(), partialTick, minecraft.getMainRenderTarget(),
                         () -> beginPortalStencilReadOrThrow(directStencilBits, stencilRef)));
     }
@@ -1132,7 +1140,7 @@ public final class PortalDirectStencilRenderer {
         ResourceLocation behaviorViewId = regionId;
         RegisteredPortalView registeredView = behaviorViewId == null ? null : SkyesightPortalApi.getPortal(behaviorViewId.toString());
         boolean crossDimView = registeredView != null && (registeredView.isCrossDimension()
-                || com.skyeshade.skyesight.client.transition.TraversalPortalStandby.contains(behaviorViewId));
+                || TraversalPortalStandby.contains(behaviorViewId));
         ResourceKey<Level> targetDimension = registeredView == null ? null : registeredView.target().dimension();
         Minecraft minecraft = Minecraft.getInstance();
         DirectMainState state = DirectMainState.capture(minecraft);

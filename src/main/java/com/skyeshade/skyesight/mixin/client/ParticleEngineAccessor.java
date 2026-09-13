@@ -1,14 +1,16 @@
 package com.skyeshade.skyesight.mixin.client;
 
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.particle.Particle;
 import net.minecraft.client.particle.ParticleEngine;
+import net.minecraft.client.particle.ParticleProvider;
 import net.minecraft.client.particle.ParticleRenderType;
-import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.core.particles.ParticleOptions;
 import net.minecraft.client.renderer.texture.TextureManager;
-import org.spongepowered.asm.mixin.Mixin;
+import net.minecraft.core.particles.ParticleOptions;
+import net.minecraft.resources.ResourceLocation;
 import org.spongepowered.asm.mixin.gen.Accessor;
 import org.spongepowered.asm.mixin.gen.Invoker;
+import org.spongepowered.asm.mixin.Mixin;
 
 import java.util.Map;
 import java.util.Queue;
@@ -16,7 +18,7 @@ import java.util.Queue;
 @Mixin(ParticleEngine.class)
 public interface ParticleEngineAccessor {
     @Accessor("providers")
-    Map<net.minecraft.resources.ResourceLocation, net.minecraft.client.particle.ParticleProvider<?>> skyesight$getProviders();
+    Map<ResourceLocation, ParticleProvider<?>> skyesight$getProviders();
     @Accessor("particles")
     Map<ParticleRenderType, Queue<Particle>> skyesight$getParticles();
 

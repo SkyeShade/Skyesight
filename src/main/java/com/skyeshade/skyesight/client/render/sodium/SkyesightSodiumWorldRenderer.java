@@ -3,35 +3,34 @@ package com.skyeshade.skyesight.client.render.sodium;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexSorting;
-import com.skyeshade.skyesight.Skyesight;
-import com.skyeshade.skyesight.SkyesightDebugConfig;
 import com.skyeshade.skyesight.client.render.entity.SkyesightNameTagSuppressor;
 import com.skyeshade.skyesight.client.world.SkyesightRemoteChunkReceiver;
 import com.skyeshade.skyesight.client.world.SkyesightVisualEntity;
+import com.skyeshade.skyesight.Skyesight;
+import com.skyeshade.skyesight.SkyesightDebugConfig;
 import net.caffeinemc.mods.sodium.client.gl.device.RenderDevice;
-import net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer;
 import net.caffeinemc.mods.sodium.client.render.chunk.ChunkRenderMatrices;
 import net.caffeinemc.mods.sodium.client.render.chunk.map.ChunkTracker;
+import net.caffeinemc.mods.sodium.client.render.SodiumWorldRenderer;
 import net.caffeinemc.mods.sodium.client.render.viewport.Viewport;
 import net.caffeinemc.mods.sodium.client.render.viewport.ViewportProvider;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.Sheets;
-import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.level.ChunkPos;
-import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.LightLayer;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
@@ -374,7 +373,7 @@ public final class SkyesightSodiumWorldRenderer implements AutoCloseable {
     }
 
     private static String blockStateFacing(BlockState state) {
-        for (net.minecraft.world.level.block.state.properties.Property<?> property : state.getProperties()) {
+        for (Property<?> property : state.getProperties()) {
             String name = property.getName();
             if ("facing".equals(name)
                     || "horizontal_facing".equals(name)
@@ -451,7 +450,7 @@ public final class SkyesightSodiumWorldRenderer implements AutoCloseable {
 
     private void drawTerrainLayer(RenderType renderType, ChunkRenderMatrices matrices, Vec3 cameraPos) {
         RenderSystem.enableDepthTest();
-        RenderSystem.depthFunc(org.lwjgl.opengl.GL11.GL_LEQUAL);
+        RenderSystem.depthFunc(GL11.GL_LEQUAL);
         RenderSystem.depthMask(true);
         RenderSystem.enableCull();
         renderType.setupRenderState();

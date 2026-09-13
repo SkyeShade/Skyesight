@@ -3,9 +3,9 @@ package com.skyeshade.skyesight.client.render;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexBuffer;
+import com.skyeshade.skyesight.mixin.client.LevelRendererAccessor;
 import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.SkyesightDebugConfig;
-import com.skyeshade.skyesight.mixin.client.LevelRendererAccessor;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.GameRenderer;
@@ -19,6 +19,7 @@ import org.joml.Vector4f;
 import org.lwjgl.opengl.GL30;
 
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
 
 public final class CloudVertexNdcDiagnostics {
@@ -282,11 +283,11 @@ public final class CloudVertexNdcDiagnostics {
     }
 
     private static String compact(float x, float y) {
-        return String.format(java.util.Locale.ROOT, "(%.6f,%.6f)", x, y);
+        return String.format(Locale.ROOT, "(%.6f,%.6f)", x, y);
     }
 
     private static String compact(float x, float y, float z) {
-        return String.format(java.util.Locale.ROOT, "(%.4f,%.4f,%.4f)", x, y, z);
+        return String.format(Locale.ROOT, "(%.4f,%.4f,%.4f)", x, y, z);
     }
 
     public interface Scope extends AutoCloseable {

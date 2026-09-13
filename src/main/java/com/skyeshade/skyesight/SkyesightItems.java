@@ -2,6 +2,7 @@ package com.skyeshade.skyesight;
 
 import com.skyeshade.skyesight.item.DebugPortalStickItem;
 import com.skyeshade.skyesight.item.MaskedPortalDebugStickItem;
+import com.skyeshade.skyesight.item.TraversalPortalStickItem;
 import net.minecraft.world.item.Item;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredItem;
@@ -20,7 +21,7 @@ public final class SkyesightItems {
             () -> new MaskedPortalDebugStickItem(new Item.Properties().stacksTo(1))
     );
 
-    public static final DeferredItem<Item> TRAVERSAL_PORTAL_STICK = ITEMS.register("traversal_portal_stick", () -> new com.skyeshade.skyesight.item.TraversalPortalStickItem(new Item.Properties().stacksTo(1)));
+    public static final DeferredItem<Item> TRAVERSAL_PORTAL_STICK = ITEMS.register("traversal_portal_stick", () -> new TraversalPortalStickItem(new Item.Properties().stacksTo(1)));
 
     private SkyesightItems() {
     }

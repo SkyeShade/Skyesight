@@ -1,17 +1,39 @@
 package com.skyeshade.skyesight.client.transition;
 
-import com.skyeshade.skyesight.Skyesight;
 import com.skyeshade.skyesight.api.*;
+import com.skyeshade.skyesight.client.portal.PortalDirectStencilRenderer;
+import com.skyeshade.skyesight.client.portal.PortalInteractionClient;
+import com.skyeshade.skyesight.client.render.entity.PortalEntitySplicing;
+import com.skyeshade.skyesight.client.render.PlayerPerspectiveViews;
+import com.skyeshade.skyesight.client.render.RecursivePortalRenderer;
+import com.skyeshade.skyesight.mixin.common.LivingEntityAnimationAccessor;
 import com.skyeshade.skyesight.network.SkyesightTraversalPayload;
+import com.skyeshade.skyesight.portal.PortalCollisions;
+import com.skyeshade.skyesight.portal.PortalCrossingState;
 import com.skyeshade.skyesight.portal.PortalTraversalMath;
+import com.skyeshade.skyesight.Skyesight;
+import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
+import net.minecraft.Util;
+import net.minecraft.world.entity.Pose;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
+
 import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
 
 @EventBusSubscriber(modid = Skyesight.MODID, value = Dist.CLIENT)
 public final class TraversalPortalClient {
@@ -21,33 +43,33 @@ public final class TraversalPortalClient {
     private static SkyesightTransition prepared;
     private static String selected;
     private static long lastSequence;
-    private record Motion(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension,
-                          net.minecraft.world.phys.Vec3 position, net.minecraft.world.phys.Vec3 velocity,
+    private record Motion(ResourceKey<Level> dimension,
+                          Vec3 position, Vec3 velocity,
                           long deadline, Object connection, boolean onGround, float fallDistance,
-                          net.minecraft.world.entity.Pose pose, float headYaw, float bodyYaw,
+                          Pose pose, float headYaw, float bodyYaw,
                           float walkDist, float walkDistO, float bob, float oBob, boolean sprinting,
-                          net.minecraft.world.phys.Vec3 previousOffset, net.minecraft.world.phys.Vec3 oldOffset,
+                          Vec3 previousOffset, Vec3 oldOffset,
                           float previousYaw, float previousPitch, FirstPersonState firstPerson) {}
     private record FirstPersonState(float xBob, float xBobO, float yBob, float yBobO,
                                     int attackTicks, float attack, float oldAttack, int swingTime,
-                                    boolean swinging, net.minecraft.world.InteractionHand hand) {
-        static FirstPersonState capture(RegisteredPortalView portal, net.minecraft.client.player.LocalPlayer player) {
+                                    boolean swinging, InteractionHand hand) {
+        static FirstPersonState capture(RegisteredPortalView portal, LocalPlayer player) {
             return new FirstPersonState(player.xBob, player.xBobO, transformedYaw(portal, player.yBob),
                     transformedYaw(portal, player.yBobO),
-                    ((com.skyeshade.skyesight.mixin.common.LivingEntityAnimationAccessor) player).skyesight$getAttackStrengthTicker(),
+                    ((LivingEntityAnimationAccessor) player).skyesight$getAttackStrengthTicker(),
                     player.attackAnim, player.oAttackAnim, player.swingTime, player.swinging, player.swingingArm);
         }
-        void restore(net.minecraft.client.player.LocalPlayer player) {
+        void restore(LocalPlayer player) {
             player.xBob = xBob; player.xBobO = xBobO;
-            player.yBob = player.getYRot() + net.minecraft.util.Mth.wrapDegrees(yBob - player.getYRot());
-            player.yBobO = player.yBob + net.minecraft.util.Mth.wrapDegrees(yBobO - player.yBob);
-            ((com.skyeshade.skyesight.mixin.common.LivingEntityAnimationAccessor) player).skyesight$setAttackStrengthTicker(attackTicks);
+            player.yBob = player.getYRot() + Mth.wrapDegrees(yBob - player.getYRot());
+            player.yBobO = player.yBob + Mth.wrapDegrees(yBobO - player.yBob);
+            ((LivingEntityAnimationAccessor) player).skyesight$setAttackStrengthTicker(attackTicks);
             player.attackAnim = attack; player.oAttackAnim = oldAttack; player.swingTime = swingTime;
             player.swinging = swinging; player.swingingArm = hand;
         }
     }
     private static Motion motion;
-    private static com.skyeshade.skyesight.portal.PortalCrossingState eyeSide = new com.skyeshade.skyesight.portal.PortalCrossingState();
+    private static PortalCrossingState eyeSide = new PortalCrossingState();
     private static double predictedSourceSide;
     private static String guardedPortal;
     private static PortalEndpoint guardedExit;
@@ -55,26 +77,42 @@ public final class TraversalPortalClient {
     private static int arrivalSide;
     private static long arrivalDeadline;
     private TraversalPortalClient() {}
+    public static PortalSidedness sides(RegisteredPortalView portal) {
+        for (var entry : DEFINITIONS.entrySet()) {
+            for (boolean fromA : new boolean[]{true, false})
+                if (portal.id().toString().equals(SkyesightTraversalPayload.portalId(entry.getKey(), fromA)))
+                    return entry.getValue().sides(fromA);
+        }
+        return portal.renderBackface() ? PortalSidedness.BOTH : PortalSidedness.FRONT_ONLY;
+    }
     /** Server-defined traversal links only; render-only camera/portal registrations confer no gameplay authority. */
-    public static java.util.List<SkyesightPortalRaycast.Link> interactionLinks(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension) {
-        var result = new java.util.ArrayList<SkyesightPortalRaycast.Link>();
+    public static List<SkyesightPortalRaycast.Link> interactionLinks(ResourceKey<Level> dimension) {
+        return links(dimension, false);
+    }
+    /** Exit-only endpoint geometry is still needed to render the other endpoint's projected half. */
+    public static List<SkyesightPortalRaycast.Link> splicingLinks(ResourceKey<Level> dimension) {
+        return links(dimension, true);
+    }
+    private static List<SkyesightPortalRaycast.Link> links(ResourceKey<Level> dimension, boolean includeExits) {
+        var result = new ArrayList<SkyesightPortalRaycast.Link>();
         REVISIONS.forEach((owner, revision) -> {
             if (!gameplay(owner)) return;
             for (boolean fromA : new boolean[]{true, false}) {
+                if (!includeExits && !DEFINITIONS.get(owner).directionality().allows(fromA)) continue;
                 var portal = SkyesightPortalApi.getPortal(SkyesightTraversalPayload.portalId(owner, fromA));
-                if (portal != null && portal.active() && portal.source().dimension().equals(dimension))
-                    result.add(new SkyesightPortalRaycast.Link(portal.id(), revision, portal.source(), portal.target(), portal.renderBackface(), (fromA ? DEFINITIONS.get(owner).apertureA() : DEFINITIONS.get(owner).apertureB()).bind(portal.source())));
+                if (portal != null && (portal.active() || includeExits) && portal.source().dimension().equals(dimension))
+                    result.add(new SkyesightPortalRaycast.Link(portal.id(), revision, portal.source(), portal.target(), portal.renderBackface(), (fromA ? DEFINITIONS.get(owner).apertureA() : DEFINITIONS.get(owner).apertureB()).bind(portal.source()), DEFINITIONS.get(owner).sides(fromA)));
             }
         });
-        return java.util.List.copyOf(result);
+        return List.copyOf(result);
     }
     public static void receive(SkyesightTraversalPayload message) {
-        com.skyeshade.skyesight.portal.PortalCollisions.clientAccess(new com.skyeshade.skyesight.portal.PortalCollisions.ClientAccess() {
-            public Iterable<SkyesightPortalRaycast.Link> links(net.minecraft.world.level.Level source) { return interactionLinks(source.dimension()); }
-            public net.minecraft.world.level.Level destination(SkyesightPortalRaycast.Link link) { return com.skyeshade.skyesight.client.portal.PortalInteractionClient.destination(link); }
-            public boolean loaded(net.minecraft.world.level.Level level,net.minecraft.world.phys.AABB box) {
-                return level instanceof net.minecraft.client.multiplayer.ClientLevel client && com.skyeshade.skyesight.client.portal.PortalInteractionClient.loaded(client,
-                        new net.minecraft.world.phys.Vec3(box.minX,box.minY,box.minZ),new net.minecraft.world.phys.Vec3(box.maxX,box.maxY,box.maxZ));
+        PortalCollisions.clientAccess(new PortalCollisions.ClientAccess() {
+            public Iterable<SkyesightPortalRaycast.Link> links(Level source) { return interactionLinks(source.dimension()); }
+            public Level destination(SkyesightPortalRaycast.Link link) { return PortalInteractionClient.destination(link); }
+            public boolean loaded(Level level,AABB box) {
+                return level instanceof ClientLevel client && PortalInteractionClient.loaded(client,
+                        new Vec3(box.minX,box.minY,box.minZ),new Vec3(box.maxX,box.maxY,box.maxZ));
             }
         });
         UUID owner = message.owner();
@@ -92,24 +130,29 @@ public final class TraversalPortalClient {
             SkyesightPortalApi.registerPortalPair(a, message.a(), b, message.b(),
                     settings.renderA().withStencilMask(PortalStencilMask.aperture(settings.apertureA())),
                     settings.renderB().withStencilMask(PortalStencilMask.aperture(settings.apertureB())),
-                    true,true,settings.sourceTag(),true,settings.renderBackface());
-            com.skyeshade.skyesight.client.render.PlayerPerspectiveViews.remove(a);
-            com.skyeshade.skyesight.client.render.PlayerPerspectiveViews.remove(b);
+                    true,settings.directionality().allows(false),settings.sourceTag(),true,settings.renderBackface());
+            PlayerPerspectiveViews.remove(a);
+            PlayerPerspectiveViews.remove(b);
             if (gameplay(owner)) {
-                com.skyeshade.skyesight.client.render.PlayerPerspectiveViews.register(a);
-                com.skyeshade.skyesight.client.render.PlayerPerspectiveViews.register(b);
+                PlayerPerspectiveViews.register(a);
+                PlayerPerspectiveViews.register(b);
             }
             REVISIONS.put(owner, message.revision());
-        } else if (Objects.equals(REVISIONS.get(owner), message.revision())) {
-            if (message.action() == SkyesightTraversalPayload.REMOVE) {
-                DEFINITIONS.remove(owner);
-                TraversalPortalStandby.remove(a); TraversalPortalStandby.remove(b);
-                SkyesightPortalApi.removePortalPair(a, b);
-                com.skyeshade.skyesight.client.render.PlayerPerspectiveViews.remove(a);
-                com.skyeshade.skyesight.client.render.PlayerPerspectiveViews.remove(b);
-                if (a.equals(selected) || b.equals(selected)) cancel();
-                if (a.equals(guardedPortal) || b.equals(guardedPortal)) { guardedPortal = null; guardedExit = null; }
-            } else if (message.action() == SkyesightTraversalPayload.BEGIN && message.sequence() > lastSequence) {
+        } else if (message.action() == SkyesightTraversalPayload.REMOVE) {
+            if (message.revision() < REVISIONS.getOrDefault(owner, -1L)) return;
+            // Keep a tombstone even if REMOVE precedes DEFINE. An old definition cannot revive it.
+            REVISIONS.put(owner, message.revision());
+            DEFINITIONS.remove(owner);
+            TraversalPortalStandby.remove(a); TraversalPortalStandby.remove(b);
+            SkyesightPortalApi.removePortalPair(a, b);
+            PlayerPerspectiveViews.remove(a);
+            PlayerPerspectiveViews.remove(b);
+            if (a.equals(selected) || b.equals(selected)) cancel();
+            if (a.equals(guardedPortal) || b.equals(guardedPortal)) {
+                guardedPortal = null; guardedExit = null; awaitingArrivalEye = false; motion = null;
+            }
+        } else if (Objects.equals(REVISIONS.get(owner), message.revision()) && DEFINITIONS.containsKey(owner)) {
+            if (message.action() == SkyesightTraversalPayload.BEGIN && message.sequence() > lastSequence) {
                 lastSequence = message.sequence();
                 String source = message.fromA() ? a : b;
                 var mc = Minecraft.getInstance();
@@ -120,18 +163,18 @@ public final class TraversalPortalClient {
                     guardedExit = portal.target();
                     arrivalSide = PortalTraversalMath.local(guardedExit, message.destinationFeet()).z >= 0 ? 1 : -1;
                     awaitingArrivalEye = true;
-                    arrivalDeadline = net.minecraft.Util.getMillis() + 2000;
+                    arrivalDeadline = Util.getMillis() + 2000;
                     // Vanilla absolute position packets zero velocity. Preserve the actual local
                     // motion (server player deltaMovement omits walking) across this ordered teleport.
                     motion = new Motion(portal.target().dimension(), message.destinationFeet(),
                             PortalTraversalMath.rotate(mc.player.getDeltaMovement(), PortalTraversalMath.rotation(
                                     portal.source().rotation(), portal.target().rotation())),
-                            net.minecraft.Util.getMillis() + 2000, mc.getConnection(), mc.player.onGround(), mc.player.fallDistance,
+                            Util.getMillis() + 2000, mc.getConnection(), mc.player.onGround(), mc.player.fallDistance,
                             mc.player.getPose(), transformedYaw(portal, mc.player.getYHeadRot()), transformedYaw(portal, mc.player.yBodyRot),
                             mc.player.walkDist, mc.player.walkDistO, mc.player.bob, mc.player.oBob, mc.player.isSprinting(),
-                            PortalTraversalMath.rotate(new net.minecraft.world.phys.Vec3(mc.player.xo, mc.player.yo, mc.player.zo).subtract(mc.player.position()),
+                            PortalTraversalMath.rotate(new Vec3(mc.player.xo, mc.player.yo, mc.player.zo).subtract(mc.player.position()),
                                     PortalTraversalMath.rotation(portal.source().rotation(), portal.target().rotation())),
-                            PortalTraversalMath.rotate(new net.minecraft.world.phys.Vec3(mc.player.xOld, mc.player.yOld, mc.player.zOld).subtract(mc.player.position()),
+                            PortalTraversalMath.rotate(new Vec3(mc.player.xOld, mc.player.yOld, mc.player.zOld).subtract(mc.player.position()),
                                     PortalTraversalMath.rotation(portal.source().rotation(), portal.target().rotation())),
                             transformedYaw(portal, mc.player.yRotO), mc.player.xRotO, FirstPersonState.capture(portal, mc.player));
                     if (Boolean.getBoolean("skyesight.debugTraversal")) Skyesight.LOGGER.info(
@@ -148,7 +191,7 @@ public final class TraversalPortalClient {
                 // A fast reverse packet can beat the next render/tick preparation. Bootstrap
                 // from its already-hot scene before processing the following vanilla teleport.
                 if (portal != null && prepared != null && prepared.status() == SkyesightTransition.Status.PREPARING)
-                    com.skyeshade.skyesight.client.portal.PortalDirectStencilRenderer.warmStandby(portal);
+                    PortalDirectStencilRenderer.warmStandby(portal);
                 boolean began = source.equals(selected) && prepared != null && prepared.beginLive();
                 if (!began) cancel();
                 if (Boolean.getBoolean("skyesight.debugTraversal")) Skyesight.LOGGER.info(
@@ -160,7 +203,7 @@ public final class TraversalPortalClient {
         var pending = motion; motion = null;
         var mc = Minecraft.getInstance();
         if (pending != null && mc.player != null && mc.level != null && mc.getConnection() == pending.connection
-                && net.minecraft.Util.getMillis() <= pending.deadline && mc.level.dimension().equals(pending.dimension)
+                && Util.getMillis() <= pending.deadline && mc.level.dimension().equals(pending.dimension)
                 && mc.player.position().distanceToSqr(pending.position) < .01) {
             mc.player.setDeltaMovement(pending.velocity);
             // Respawn creates a new LocalPlayer with zero attack/equip and arm-bob phase.
@@ -186,7 +229,7 @@ public final class TraversalPortalClient {
             var old = mc.player.position().add(pending.oldOffset);
             mc.player.xo = previous.x; mc.player.yo = previous.y; mc.player.zo = previous.z;
             mc.player.xOld = old.x; mc.player.yOld = old.y; mc.player.zOld = old.z;
-            mc.player.yRotO = mc.player.getYRot() + net.minecraft.util.Mth.wrapDegrees(pending.previousYaw - mc.player.getYRot());
+            mc.player.yRotO = mc.player.getYRot() + Mth.wrapDegrees(pending.previousYaw - mc.player.getYRot());
             mc.player.xRotO = pending.previousPitch;
             if (Boolean.getBoolean("skyesight.debugTraversal")) Skyesight.LOGGER.info(
                     "[Traversal] restored local momentum={} feet={} requestedDelta={} ground={} fall={} receivedCollisionChunk={}",
@@ -195,7 +238,7 @@ public final class TraversalPortalClient {
         }
     }
     private static float transformedYaw(RegisteredPortalView portal, float yaw) {
-        return PortalTraversalMath.yaw(PortalTraversalMath.rotate(net.minecraft.world.phys.Vec3.directionFromRotation(0, yaw),
+        return PortalTraversalMath.yaw(PortalTraversalMath.rotate(Vec3.directionFromRotation(0, yaw),
                 PortalTraversalMath.rotation(portal.source().rotation(), portal.target().rotation())));
     }
     @SubscribeEvent public static void tick(ClientTickEvent.Post event) {
@@ -224,7 +267,7 @@ public final class TraversalPortalClient {
             if (!SecondaryTransition.canPrepareSuccessor()) return;
             // Keep the current live presentation until a separately warmed reverse view begins.
             prepared = null; selected = null;
-            eyeSide = new com.skyeshade.skyesight.portal.PortalCrossingState();
+            eyeSide = new PortalCrossingState();
         }
         String nearest = null; double distance = 36;
         for (UUID owner : REVISIONS.keySet()) for (boolean a : new boolean[]{true, false}) {
@@ -254,9 +297,9 @@ public final class TraversalPortalClient {
         TraversalPortalStandby.warmFrame();
     }
     /** Resolve against the Camera actually passed to LevelRenderer, before any primary world draw. */
-    public static void beforeWorld(net.minecraft.client.Camera camera) {
+    public static void beforeWorld(Camera camera) {
         var mc = Minecraft.getInstance();
-        if (awaitingArrivalEye && (net.minecraft.Util.getMillis() > arrivalDeadline || guardedExit == null))
+        if (awaitingArrivalEye && (Util.getMillis() > arrivalDeadline || guardedExit == null))
             awaitingArrivalEye = false;
         if (awaitingArrivalEye && motion == null && mc.level != null && guardedExit.dimension().equals(mc.level.dimension())
                 && PortalTraversalMath.local(guardedExit, camera.getPosition()).z * arrivalSide >= 0) {
@@ -278,7 +321,7 @@ public final class TraversalPortalClient {
                 point -> ((PortalAperture.Bound)gameplayLink.aperture()).shape().fitsPlayer(portal.source(),point,mc.player.getBbWidth(),mc.player.getBbHeight()));
         if (stableSide == 0 && (confirmed != null || eyeSide.hasPendingCrossing()))
             stableSide = confirmed != null ? -eyeSide.stableSide() : eyeSide.stableSide();
-        if (!gameplayLink.backface() && stableSide < 0) return;
+        if (!gameplayLink.sidedness().allows(stableSide)) return;
         if (prepared.status() == SkyesightTransition.Status.PREDICTING) {
             // Render interpolation can briefly revisit the source side after correction.
             // Roll back only a meaningful retreat of the actual local body, not eye jitter.
@@ -291,7 +334,7 @@ public final class TraversalPortalClient {
                 predictedSourceSide = stableSide;
                 boolean predicted = prepared.predictCrossing();
                 if (Boolean.getBoolean("skyesight.debugTraversal")) Skyesight.LOGGER.info(
-                        "[LiveTransition] eyeCross time={} signedDistance={} predicted={}", net.minecraft.Util.getMillis(), distance, predicted);
+                        "[LiveTransition] eyeCross time={} signedDistance={} predicted={}", Util.getMillis(), distance, predicted);
             }
         }
         // Keep the last unambiguous side across the on-plane tolerance band.
@@ -308,7 +351,7 @@ public final class TraversalPortalClient {
         var link = interactionLinks(portal.source().dimension()).stream().filter(l -> l.id().equals(id)).findFirst().orElse(null);
         // Use exactly the existing render-feature intersection, not an eye-distance gate.
         // A selected candidate with no potentially spliced geometry is merely nearby.
-        return link != null && com.skyeshade.skyesight.client.render.entity.PortalEntitySplicing.intersection(
+        return link != null && PortalEntitySplicing.intersection(
                 mc.player, mc.getTimer().getGameTimeDeltaPartialTick(false), link) != null;
     }
 
@@ -319,16 +362,17 @@ public final class TraversalPortalClient {
                 && guardedExit.dimension().equals(mc.level.dimension()) && id.toString().equals(guardedPortal);
     }
     private static void cancel() {
-        eyeSide = new com.skyeshade.skyesight.portal.PortalCrossingState();
+        eyeSide = new PortalCrossingState();
         if (prepared != null) prepared.close(); prepared = null; selected = null;
     }
     @SubscribeEvent public static void logout(ClientPlayerNetworkEvent.LoggingOut event) {
+        RecursivePortalRenderer.close();
         SecondaryTransition.closeAll();
         TraversalPortalStandby.clear();
         cancel(); motion = null; guardedPortal = null; guardedExit = null;
         awaitingArrivalEye = false;
         for(UUID id : REVISIONS.keySet()) SkyesightPortalApi.removePortalPair(SkyesightTraversalPayload.portalId(id,true),SkyesightTraversalPayload.portalId(id,false));
         DEFINITIONS.clear(); REVISIONS.clear(); lastSequence = 0;
-        com.skyeshade.skyesight.client.render.PlayerPerspectiveViews.clear();
+        PlayerPerspectiveViews.clear();
     }
 }

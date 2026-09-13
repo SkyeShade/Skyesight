@@ -1,19 +1,25 @@
 package com.skyeshade.skyesight.server;
 
+import com.skyeshade.skyesight.network.SkyesightChunkRequestPayload;
 import com.skyeshade.skyesight.Skyesight;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import com.skyeshade.skyesight.network.SkyesightChunkRequestPayload;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.level.ChunkEvent;
+import net.neoforged.neoforge.event.server.ServerStoppedEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /** Opt-in wall-time attribution, not a generation benchmark. Does not load chunks to inspect them. */
 @EventBusSubscriber(modid = Skyesight.MODID)
 public final class SkyesightRemoteLoadDiagnostics implements AutoCloseable {
     public static final boolean ENABLED = Boolean.getBoolean("skyesight.debug.remoteLoads");
     private static final ThreadLocal<SkyesightRemoteLoadDiagnostics> ACTIVE = new ThreadLocal<>();
-    private static final java.util.Map<String, Aggregate> LAST_LOG = new java.util.HashMap<>();
+    private static final Map<String, Aggregate> LAST_LOG = new HashMap<>();
     private final SkyesightRemoteLoadDiagnostics previous;
     private final ServerPlayer player;
     private final ServerLevel level;
@@ -67,7 +73,7 @@ public final class SkyesightRemoteLoadDiagnostics implements AutoCloseable {
                 sum.initiallyLoaded,sum.generated,sum.reloaded,sum.batches,sum.sent,
                 sum.total/1e6,sum.force/1e6,sum.acquire/1e6,sum.serialize/1e6,sum.watch/1e6);
     }
-    @SubscribeEvent public static void onTick(net.neoforged.neoforge.event.tick.ServerTickEvent.Post event) {
+    @SubscribeEvent public static void onTick(ServerTickEvent.Post event) {
         if (!ENABLED) return;
         long now = System.nanoTime();
         LAST_LOG.forEach((key,sum) -> { if (sum.dirty && now-sum.logged >= 2_000_000_000L) log(key,sum,now); });
@@ -83,8 +89,8 @@ public final class SkyesightRemoteLoadDiagnostics implements AutoCloseable {
             this.generation=generation; this.x=x; this.z=z; this.radius=radius; this.initiallyLoaded=loaded;
         }
     }
-    @SubscribeEvent public static void onStop(net.neoforged.neoforge.event.server.ServerStoppedEvent event) { LAST_LOG.clear(); }
-    @SubscribeEvent public static void onLogout(net.neoforged.neoforge.event.entity.player.PlayerEvent.PlayerLoggedOutEvent event) {
+    @SubscribeEvent public static void onStop(ServerStoppedEvent event) { LAST_LOG.clear(); }
+    @SubscribeEvent public static void onLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         String prefix=event.getEntity().getUUID()+"/"; LAST_LOG.keySet().removeIf(key -> key.startsWith(prefix));
     }
 }

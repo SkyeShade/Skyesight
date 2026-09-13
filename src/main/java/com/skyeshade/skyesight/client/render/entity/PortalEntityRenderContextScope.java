@@ -29,7 +29,18 @@ public final class PortalEntityRenderContextScope implements AutoCloseable {
             ResourceKey<Level> targetDimension,
             String source
     ) {
-        return new PortalEntityRenderContextScope(new State(viewId, targetDimension, source));
+        return enter(viewId, targetDimension, source, false);
+    }
+
+    public static PortalEntityRenderContextScope enter(ResourceLocation viewId, ResourceKey<Level> targetDimension,
+                                                       String source, boolean nestedObserver) {
+        return new PortalEntityRenderContextScope(new State(viewId, targetDimension, source, nestedObserver, new LinkedHashMap<>()));
+    }
+
+    /** A recursively transformed camera observes the player; it is not their first-person entry camera. */
+    public static boolean nestedObserver() {
+        State state = CURRENT.get();
+        return state != null && state.nestedObserver();
     }
 
     public static boolean active() {
@@ -84,6 +95,7 @@ public final class PortalEntityRenderContextScope implements AutoCloseable {
                 + state.targetDimension().location()
                 + " source="
                 + state.source()
+                + " nestedObserver=" + state.nestedObserver()
                 + " entries="
                 + state.entitiesById().size()
                 + " parts="
@@ -156,12 +168,9 @@ public final class PortalEntityRenderContextScope implements AutoCloseable {
             ResourceLocation viewId,
             ResourceKey<Level> targetDimension,
             String source,
+            boolean nestedObserver,
             Map<Integer, Entry> entitiesById
-    ) {
-        private State(ResourceLocation viewId, ResourceKey<Level> targetDimension, String source) {
-            this(viewId, targetDimension, source, new LinkedHashMap<>());
-        }
-    }
+    ) {}
 
     private record Entry(Entity entity, boolean passLocalPart, int parentEntityId) {}
 }

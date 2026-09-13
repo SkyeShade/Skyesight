@@ -1,11 +1,17 @@
 package com.skyeshade.skyesight.client.transition;
 
 import com.skyeshade.skyesight.api.SkyesightPortalApi;
+import com.skyeshade.skyesight.client.chunk.SkyesightPortalChunkStorage;
 import com.skyeshade.skyesight.client.portal.PortalDirectStencilRenderer;
 import com.skyeshade.skyesight.client.world.SkyesightClientChunkRequester;
 import com.skyeshade.skyesight.client.world.SkyesightVisualWorldManager;
+import com.skyeshade.skyesight.Skyesight;
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.Util;
+import net.minecraft.world.level.ChunkPos;
+
 import java.util.*;
 
 /** Short, connection-local leases for both directions of a nearby traversable pair. */
@@ -16,7 +22,7 @@ public final class TraversalPortalStandby {
     private static int cursor;
     private TraversalPortalStandby() {}
     public static void touch(String a, String b) {
-        long until = net.minecraft.Util.getMillis() + 15_000;
+        long until = Util.getMillis() + 15_000;
         HOT.put(ResourceLocation.parse(a), until);
         HOT.put(ResourceLocation.parse(b), until);
     }
@@ -27,7 +33,7 @@ public final class TraversalPortalStandby {
     }
     public static void clear() { HOT.clear(); FAILED_WARMUPS.clear(); lastWarm = 0; cursor = 0; }
     public static void tick() {
-        long now = net.minecraft.Util.getMillis();
+        long now = Util.getMillis();
         for (var id : List.copyOf(HOT.keySet())) {
             var portal = SkyesightPortalApi.getPortal(id.toString());
             if (portal == null || !portal.active() || now > HOT.get(id)) {
@@ -36,7 +42,7 @@ public final class TraversalPortalStandby {
                 PortalDirectStencilRenderer.invalidateViewCaches(id);
                 SkyesightVisualWorldManager.close(id);
                 SkyesightClientChunkRequester.reset(id);
-                com.skyeshade.skyesight.client.chunk.SkyesightPortalChunkStorage.clearView(id);
+                SkyesightPortalChunkStorage.clearView(id);
             } else {
                 var mc = Minecraft.getInstance();
                 boolean nearbySource = portal.source().dimension().equals(mc.level.dimension())
@@ -45,7 +51,7 @@ public final class TraversalPortalStandby {
                 // its chunk watch against the endpoint-centered standby request every tick.
                 if (!nearbySource || !SkyesightClientChunkRequester.hasDemand(id))
                     SkyesightClientChunkRequester.requestChunksFor(id, portal.target().dimension(),
-                            new net.minecraft.world.level.ChunkPos(net.minecraft.core.BlockPos.containing(portal.target().center())),
+                            new ChunkPos(BlockPos.containing(portal.target().center())),
                             mc.options.getEffectiveRenderDistance());
                 SkyesightClientChunkRequester.keepAlive(id);
             }
@@ -53,7 +59,7 @@ public final class TraversalPortalStandby {
         if (HOT.isEmpty()) PortalDirectStencilRenderer.closeStandbyTarget();
     }
     public static void warmFrame() {
-        long now = net.minecraft.Util.getMillis();
+        long now = Util.getMillis();
         if (HOT.isEmpty() || now - lastWarm < 50
                 || SecondaryTransition.concealsLoadingScreen() && !SecondaryTransition.preparingSuccessor()) return;
         lastWarm = now;
@@ -64,7 +70,7 @@ public final class TraversalPortalStandby {
             try { PortalDirectStencilRenderer.warmStandby(portal); }
             catch (RuntimeException failure) {
                 FAILED_WARMUPS.add(portal.id());
-                com.skyeshade.skyesight.Skyesight.LOGGER.warn("Unable to prewarm traversal view {}; normal portal rendering remains available", portal.id(), failure);
+                Skyesight.LOGGER.warn("Unable to prewarm traversal view {}; normal portal rendering remains available", portal.id(), failure);
             }
         }
     }

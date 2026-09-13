@@ -2,21 +2,43 @@ package com.skyeshade.skyesight.client.transition;
 
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.skyeshade.skyesight.Skyesight;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.skyeshade.skyesight.api.RegisteredPortalView;
+import com.skyeshade.skyesight.api.SkyesightPortalApi;
 import com.skyeshade.skyesight.api.SkyesightTransition;
+import com.skyeshade.skyesight.client.portal.PortalDirectStencilRenderer;
 import com.skyeshade.skyesight.client.render.*;
 import com.skyeshade.skyesight.client.view.SkyesightInternalCamera;
-import net.minecraft.Util;
-import net.minecraft.client.Minecraft;
+import com.skyeshade.skyesight.client.world.SkyesightVisualWorldManager;
+import com.skyeshade.skyesight.mixin.client.GameRendererSetupInvoker;
+import com.skyeshade.skyesight.mixin.client.GameRendererStateAccessor;
+import com.skyeshade.skyesight.portal.PortalTraversalMath;
+import com.skyeshade.skyesight.Skyesight;
 import net.minecraft.client.gui.screens.ReceivingLevelScreen;
+import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.Util;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.CollisionGetter;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4f;
+import org.joml.Quaternionf;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
-import java.util.Objects;
+
 import java.util.function.BooleanSupplier;
+import java.util.HashMap;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 
 /** Bounded secondary-scene presentation; never promotes a level or transfers chunk ownership. */
 public final class SecondaryTransition implements SkyesightTransition {
@@ -30,7 +52,7 @@ public final class SecondaryTransition implements SkyesightTransition {
     private Status status = Status.PREPARING;
     private Destination destination;
     // Gameplay arrival validation is player-eye based, independently of F5 camera offset.
-    private net.minecraft.world.phys.Vec3 expectedArrivalEye;
+    private Vec3 expectedArrivalEye;
     private TextureTarget image;
     private long deadline = Util.getMillis() + 10_000;
     private boolean authoritative, renderedDestination;
@@ -38,8 +60,8 @@ public final class SecondaryTransition implements SkyesightTransition {
     private long presentationStarted;
     private boolean live;
     private SecondarySceneFrame retainedScene;
-    private final java.util.Map<Object, Runnable> deferredCloses = new java.util.IdentityHashMap<>();
-    private com.skyeshade.skyesight.api.RegisteredPortalView portal;
+    private final Map<Object, Runnable> deferredCloses = new IdentityHashMap<>();
+    private RegisteredPortalView portal;
     private long lastPresentNanos;
     private double worstFrameMs;
     private int liveFrames;
@@ -50,14 +72,14 @@ public final class SecondaryTransition implements SkyesightTransition {
     private static boolean presentedThisFrame;
     private boolean chunksReported;
     private ReceivingLevelScreen suppressedLoadingScreen;
-    private final java.util.Map<Long, net.minecraft.world.level.chunk.LevelChunk> collisionChunks = new java.util.HashMap<>();
-    private java.util.Set<BlockPos> visibleTerrain = java.util.Set.of();
+    private final Map<Long, LevelChunk> collisionChunks = new HashMap<>();
+    private Set<BlockPos> visibleTerrain = Set.of();
     private int coverageReadyFrames;
     private boolean physicalFrameObserved;
     private boolean validatePhysicalPortals;
-    private java.util.Set<BlockPos> previousPhysicalCoverage = java.util.Set.of();
+    private Set<BlockPos> previousPhysicalCoverage = Set.of();
     private int lastMissingCoverage = -1;
-    public static net.minecraft.world.level.CollisionGetter collisionView(Level level, net.minecraft.world.entity.Entity entity) {
+    public static CollisionGetter collisionView(Level level, Entity entity) {
         var t = active;
         var mc = Minecraft.getInstance();
         if (t == null || !t.presenting() || !t.live || !t.authoritative || entity != mc.player
@@ -102,7 +124,7 @@ public final class SecondaryTransition implements SkyesightTransition {
         if (t != null && t.presenting() && t.live && scene != null && !Minecraft.getInstance().isPaused()) {
             var world = scene.visualWorld();
             if (world != null && !world.isClosed()
-                    && com.skyeshade.skyesight.client.world.SkyesightVisualWorldManager.get(t.viewId) != world) world.tick(t.viewId);
+                    && SkyesightVisualWorldManager.get(t.viewId) != world) world.tick(t.viewId);
         }
     }
 
@@ -156,7 +178,7 @@ public final class SecondaryTransition implements SkyesightTransition {
         this.validView = validView;
         this.source = mc.level == null ? null : mc.level.dimension();
         this.connection = mc.getConnection();
-        this.portal = com.skyeshade.skyesight.api.SkyesightPortalApi.getPortal(id.toString());
+        this.portal = SkyesightPortalApi.getPortal(id.toString());
     }
     public static SkyesightTransition prepare(ResourceLocation id, BooleanSupplier validView) {
         RenderSystem.assertOnRenderThread();
@@ -177,6 +199,11 @@ public final class SecondaryTransition implements SkyesightTransition {
         if (successor != null) successor.close();
         if (active != null) active.close();
     }
+    /** Explicit deletion overrides presentation retention, including an unselected predecessor. */
+    public static void invalidate(ResourceLocation id) {
+        if (successor != null && successor.viewId.equals(id)) successor.close();
+        if (active != null && active.viewId.equals(id)) active.close();
+    }
     @Override public Status status() { return status; }
     @Override public Destination destination() { return destination; }
     @Override public boolean begin() {
@@ -189,12 +216,12 @@ public final class SecondaryTransition implements SkyesightTransition {
         if (live && portal != null && mc.player != null) {
             // Walking backwards can leave the aperture outside the frustum, so its last captured
             // camera may be several blocks old. The warmed scene is still valid; refresh its pose.
-            var camera = ((com.skyeshade.skyesight.mixin.client.GameRendererStateAccessor) mc.gameRenderer).skyesight$getMainCameraField();
-            var rotation = com.skyeshade.skyesight.portal.PortalTraversalMath.rotation(portal.source().rotation(), portal.target().rotation());
-            expectedArrivalEye = com.skyeshade.skyesight.portal.PortalTraversalMath.position(portal.source(), portal.target(), mc.player.getEyePosition());
+            var camera = ((GameRendererStateAccessor) mc.gameRenderer).skyesight$getMainCameraField();
+            var rotation = PortalTraversalMath.rotation(portal.source().rotation(), portal.target().rotation());
+            expectedArrivalEye = PortalTraversalMath.position(portal.source(), portal.target(), mc.player.getEyePosition());
             destination = new Destination(portal.target().dimension(),
-                    com.skyeshade.skyesight.portal.PortalTraversalMath.position(portal.source(), portal.target(), camera.getPosition()),
-                    rotation.mul(new org.joml.Quaternionf(camera.rotation())), destination.projection());
+                    PortalTraversalMath.position(portal.source(), portal.target(), camera.getPosition()),
+                    rotation.mul(new Quaternionf(camera.rotation())), destination.projection());
         }
         if (active != this) {
             if (active != null) active.finish(Status.COMPLETE);
@@ -203,7 +230,7 @@ public final class SecondaryTransition implements SkyesightTransition {
         }
         status = Status.PRESENTING;
         if (live && retainedScene != null) {
-            var center = new net.minecraft.world.level.ChunkPos(BlockPos.containing(destination.eyePosition()));
+            var center = new ChunkPos(BlockPos.containing(destination.eyePosition()));
             for (int x = -1; x <= 1; x++) for (int z = -1; z <= 1; z++) {
                 var chunk = SecondaryCollisionView.received(retainedScene.level(), center.x + x, center.z + z);
                 if (chunk != null) collisionChunks.put(chunk.getPos().toLong(), chunk);
@@ -228,9 +255,9 @@ public final class SecondaryTransition implements SkyesightTransition {
         if (successor == this) successor = null;
         retainedScene = null;
         collisionChunks.clear();
-        visibleTerrain = java.util.Set.of();
-        previousPhysicalCoverage = java.util.Set.of();
-        var releases = java.util.List.copyOf(deferredCloses.values()); deferredCloses.clear();
+        visibleTerrain = Set.of();
+        previousPhysicalCoverage = Set.of();
+        var releases = List.copyOf(deferredCloses.values()); deferredCloses.clear();
         for (var release : releases) {
             try { release.run(); }
             catch (RuntimeException failure) { Skyesight.LOGGER.warn("Unable to release transition resource view={}", viewId, failure); }
@@ -263,7 +290,7 @@ public final class SecondaryTransition implements SkyesightTransition {
         if (capturing || transition == null || (transition.status != Status.PREPARING && transition.status != Status.READY)
                 || !transition.viewId.equals(original.viewId()) || transition.expired()) return;
         var mc = Minecraft.getInstance();
-        var center = new net.minecraft.world.level.ChunkPos(BlockPos.containing(original.view().camera().getPosition()));
+        var center = new ChunkPos(BlockPos.containing(original.view().camera().getPosition()));
         if (!transition.validView.getAsBoolean() || !original.options().terrain()
                 || SecondaryCollisionView.received(original.level(), center.x, center.z) == null) return;
         if (original.visualWorld() != null ? original.visualWorld().visibleChunkCount() == 0
@@ -273,7 +300,7 @@ public final class SecondaryTransition implements SkyesightTransition {
     }
 
     private static void render(SecondaryTransition transition, SecondarySceneFrame original,
-            net.minecraft.world.phys.Vec3 position, org.joml.Quaternionf rotation, float partialTick) {
+            Vec3 position, Quaternionf rotation, float partialTick) {
         var mc = Minecraft.getInstance();
         var saved = SecondarySceneOutputState.capture();
         capturing = true;
@@ -294,14 +321,14 @@ public final class SecondaryTransition implements SkyesightTransition {
             camera.setRotation(rotation);
             // Handoff takes over the player's viewport, including its FOV/aspect and bob phase.
             // A CCTV feed's custom FOV must not become a one-frame zoom before the physical view.
-            var physicalCamera = ((com.skyeshade.skyesight.mixin.client.GameRendererStateAccessor) mc.gameRenderer).skyesight$getMainCameraField();
-            var setup = (com.skyeshade.skyesight.mixin.client.GameRendererSetupInvoker) mc.gameRenderer;
+            var physicalCamera = ((GameRendererStateAccessor) mc.gameRenderer).skyesight$getMainCameraField();
+            var setup = (GameRendererSetupInvoker) mc.gameRenderer;
             var projection = mc.gameRenderer.getProjectionMatrix(setup.skyesight$getFov(physicalCamera, partialTick, true));
-            var bob = new com.mojang.blaze3d.vertex.PoseStack();
+            var bob = new PoseStack();
             setup.skyesight$bobHurt(bob, partialTick);
             if (mc.options.bobView().get()) setup.skyesight$bobView(bob, partialTick);
             projection.mul(bob.last().pose()); // Deliberately no exit oblique clipping.
-            var model = new org.joml.Matrix4f().rotation(new org.joml.Quaternionf(rotation).conjugate());
+            var model = new Matrix4f().rotation(new Quaternionf(rotation).conjugate());
             var frame = new SecondaryViewFrame(camera.minecraftCamera(), transition.image, width, height,
                     projection, model, projection, SkyesightFrustumFactory.create(camera.minecraftCamera(), model, projection));
             var policy = original.options();
@@ -325,7 +352,7 @@ public final class SecondaryTransition implements SkyesightTransition {
                 transition.finish(Status.FALLBACK); return;
             }
             if (transition.portal != null && transition.presenting() && transition.authoritative)
-                com.skyeshade.skyesight.client.portal.PortalDirectStencilRenderer.renderPrimaryPresentation(scene);
+                PortalDirectStencilRenderer.renderPrimaryPresentation(scene);
             SkyesightCameraOutput.makeOpaque(transition.image);
             if (transition.live) transition.visibleTerrain = SecondaryTerrainCoverage.visible(scene);
             transition.destination = new Destination(original.level().dimension(), camera.position(), camera.rotation(), projection);
@@ -387,10 +414,10 @@ public final class SecondaryTransition implements SkyesightTransition {
             // The physical graph can legitimately reject buried sections submitted by the
             // sparse visual world. Compare actual draws for graph-visible sections, and
             // require loaded chunks plus consecutive stable coverage before trusting culling.
-            var model = new org.joml.Matrix4f().rotation(new org.joml.Quaternionf(camera.rotation()).conjugate());
+            var model = new Matrix4f().rotation(new Quaternionf(camera.rotation()).conjugate());
             var frustum = SkyesightFrustumFactory.create(camera, model, t.destination.projection());
             int radius = Math.min(PlayerPerspectiveViews.radius(t.viewId, t.retainedScene.options().terrainRadius()), mc.options.getEffectiveRenderDistance());
-            java.util.Set<BlockPos> physicalVisible, physicalGraph;
+            Set physicalVisible, physicalGraph;
             try { physicalVisible = SecondaryTerrainCoverage.physicalDrawn(mc.levelRenderer); physicalGraph = SecondaryTerrainCoverage.physicalVisible(mc.levelRenderer); }
             catch (RuntimeException failure) {
                 Skyesight.LOGGER.warn("Unable to verify physical transition coverage view={}", t.viewId, failure);
@@ -399,7 +426,7 @@ public final class SecondaryTransition implements SkyesightTransition {
             int needed = 0, missing = 0;
             for (var pos : t.visibleTerrain) {
                 if (Math.abs((pos.getX() >> 4) - center.x) > radius || Math.abs((pos.getZ() >> 4) - center.z) > radius
-                        || !frustum.isVisible(new net.minecraft.world.phys.AABB(pos.getX(), pos.getY(), pos.getZ(),
+                        || !frustum.isVisible(new AABB(pos.getX(), pos.getY(), pos.getZ(),
                                 pos.getX() + 16, pos.getY() + 16, pos.getZ() + 16))) continue;
                 needed++;
                 var chunk = SecondaryCollisionView.received(mc.level, pos.getX() >> 4, pos.getZ() >> 4);
@@ -416,7 +443,7 @@ public final class SecondaryTransition implements SkyesightTransition {
                 // Camera motion may legitimately remove a section from the current view.
                 // Only disappearance from a still-visible region is a coverage regression.
                 if (physicalGraph.contains(pos) && !physicalVisible.contains(pos)
-                        && frustum.isVisible(new net.minecraft.world.phys.AABB(pos.getX(), pos.getY(), pos.getZ(),
+                        && frustum.isVisible(new AABB(pos.getX(), pos.getY(), pos.getZ(),
                                 pos.getX() + 16, pos.getY() + 16, pos.getZ() + 16))) {
                     var chunk = SecondaryCollisionView.received(mc.level, pos.getX() >> 4, pos.getZ() >> 4);
                     if (chunk == null || !chunk.getSection(chunk.getSectionIndex(pos.getY())).hasOnlyAir()) {
@@ -440,7 +467,7 @@ public final class SecondaryTransition implements SkyesightTransition {
             }
             // Live presentation consumes this same vanilla camera, including F5 offset,
             // front-view rotation, eye-height smoothing and camera collision.
-            var expected = ((com.skyeshade.skyesight.mixin.client.GameRendererStateAccessor) mc.gameRenderer).skyesight$getMainCameraField();
+            var expected = ((GameRendererStateAccessor) mc.gameRenderer).skyesight$getMainCameraField();
             if (camera.getPosition().distanceToSqr(expected.getPosition()) > .0025
                     || Math.abs(camera.rotation().dot(expected.rotation())) < Math.cos(Math.toRadians(.5) / 2)) {
                 t.coverageReadyFrames = 0;
@@ -476,16 +503,16 @@ public final class SecondaryTransition implements SkyesightTransition {
                 t.finish(Status.FALLBACK); return;
             }
             float partialTick = mc.getTimer().getGameTimeDeltaPartialTick(true);
-            var camera = ((com.skyeshade.skyesight.mixin.client.GameRendererStateAccessor) mc.gameRenderer).skyesight$getMainCameraField();
+            var camera = ((GameRendererStateAccessor) mc.gameRenderer).skyesight$getMainCameraField();
             var position = camera.getPosition();
-            var rotation = new org.joml.Quaternionf(camera.rotation());
+            var rotation = new Quaternionf(camera.rotation());
             if (!t.authoritative && t.awaitingDestinationPosition) {
                 // Respawn may be processed a frame before the position packet. The new
                 // LocalPlayer is at its default spawn, not another source movement sample.
                 position = t.destination.eyePosition(); rotation = t.destination.rotation();
             } else if (!t.authoritative && t.portal != null) {
-                position = com.skyeshade.skyesight.portal.PortalTraversalMath.position(t.portal.source(), t.portal.target(), position);
-                rotation = com.skyeshade.skyesight.portal.PortalTraversalMath.rotation(t.portal.source().rotation(), t.portal.target().rotation()).mul(rotation);
+                position = PortalTraversalMath.position(t.portal.source(), t.portal.target(), position);
+                rotation = PortalTraversalMath.rotation(t.portal.source().rotation(), t.portal.target().rotation()).mul(rotation);
             } else if (!t.authoritative) {
                 position = t.destination.eyePosition(); rotation = t.destination.rotation();
             }

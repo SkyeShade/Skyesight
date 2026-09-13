@@ -5,6 +5,9 @@ import com.skyeshade.skyesight.portal.PortalTraversalMath;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.ArrayList;
+import java.util.function.Predicate;
+import java.util.HashMap;
 import java.util.List;
 
 /**
@@ -12,7 +15,7 @@ import java.util.List;
  * '#' is open, '.' is closed. Adjacent open cells have no internal collision boundary.
  */
 public record PortalAperture(List<String> rows) {
-    public record Bound(PortalAperture shape, PortalEndpoint endpoint) implements java.util.function.Predicate<Vec3> {
+    public record Bound(PortalAperture shape, PortalEndpoint endpoint) implements Predicate<Vec3> {
         @Override
         public boolean test(Vec3 local) {
             return shape.contains(endpoint, local);
@@ -63,10 +66,10 @@ public record PortalAperture(List<String> rows) {
 
     public List<Rectangle> rectangles() {
         int width = rows.getFirst().length(), height = rows.size();
-        var result = new java.util.ArrayList<Rectangle>();
-        var previous = new java.util.HashMap<Long, Integer>();
+        var result = new ArrayList<Rectangle>();
+        var previous = new HashMap<Long, Integer>();
         for (int y = 0; y < height; y++) {
-            var current = new java.util.HashMap<Long, Integer>();
+            var current = new HashMap<Long, Integer>();
             for (int x = 0; x < width; ) {
                 if (rows.get(y).charAt(x) != '#') {
                     x++;
