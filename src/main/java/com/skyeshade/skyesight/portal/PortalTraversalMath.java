@@ -27,6 +27,12 @@ public final class PortalTraversalMath {
     public static boolean clearedExit(PortalEndpoint endpoint, Vec3 feet, double playerWidth) {
         return Math.abs(local(endpoint, feet).z) > playerWidth / 2 + .1;
     }
+    /** Full world AABB clearance, including horizontal and tilted planes. */
+    public static boolean clearedExit(PortalEndpoint endpoint, AABB bounds) {
+        Vec3 normal=normal(endpoint), center=bounds.getCenter();
+        double radius=Math.abs(normal.x)*bounds.getXsize()/2+Math.abs(normal.y)*bounds.getYsize()/2+Math.abs(normal.z)*bounds.getZsize()/2;
+        return Math.abs(local(endpoint,center).z)>radius+.01;
+    }
     /** Camera ownership includes the degenerate on-plane sample, unlike gameplay crossing. */
     public static Vec3 eyeCrossing(PortalEndpoint source, Vec3 previousEye, Vec3 eye,
                                    double eyeHeight, double width, double height) {

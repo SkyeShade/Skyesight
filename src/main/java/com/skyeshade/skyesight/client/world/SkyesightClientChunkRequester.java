@@ -28,6 +28,9 @@ public final class SkyesightClientChunkRequester {
 
     /** Portal callers already have a transformed destination chunk; share the same demand lifecycle. */
     public static void requestChunksFor(ResourceLocation viewId, ResourceKey<Level> dimension, ChunkPos center, int radius) {
+        center=com.skyeshade.skyesight.client.portal.PortalRegionClient.streamCenter(viewId,center);
+        var region=com.skyeshade.skyesight.client.portal.PortalRegionClient.definition(viewId);
+        if(region!=null)radius=region.renderRadiusChunks();
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.level == null || minecraft.player == null || minecraft.getConnection() == null) return;
         var registration = SkyesightRemoteViewRegistry.get(viewId).orElse(null);

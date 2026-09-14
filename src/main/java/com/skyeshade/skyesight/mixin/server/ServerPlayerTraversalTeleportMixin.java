@@ -16,10 +16,12 @@ public abstract class ServerPlayerTraversalTeleportMixin {
     private void skyesight$acceptedMovement(CallbackInfo ci) {
         // ensureRunningOnSameThread and vanilla movement/collision validation have completed.
         TraversalPortalManager.movementAccepted(player);
+        com.skyeshade.skyesight.server.portal.PortalRegionTraversal.movementAccepted(player);
     }
     /** Teleports are discontinuities, including short same-level teleports across an aperture. */
     @Inject(method = "teleport(DDDFFLjava/util/Set;)V", at = @At("TAIL"))
     private void skyesight$resetCrossingSample(CallbackInfo ci) {
         TraversalPortalManager.teleported(player);
+        com.skyeshade.skyesight.server.portal.PortalRegionTraversal.reset(player);
     }
 }

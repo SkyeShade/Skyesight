@@ -143,6 +143,10 @@ public final class SecondaryTransition implements SkyesightTransition {
         t.deferredCloses.put(resource, close);
         return true;
     }
+    /** A region window may leave the physical dimension while its scene still owns presentation. */
+    public static boolean retainsView(ResourceLocation id) {
+        return active!=null && active.viewId.equals(id) && active.presenting();
+    }
     public static boolean concealsLoadingScreen() {
         return active != null && active.status == Status.PRESENTING && active.live && active.retainedScene != null
                 && active.image != null && active.validView.getAsBoolean() && !active.expired();
@@ -293,10 +297,33 @@ public final class SecondaryTransition implements SkyesightTransition {
         var center = new ChunkPos(BlockPos.containing(original.view().camera().getPosition()));
         if (!transition.validView.getAsBoolean() || !original.options().terrain()
                 || SecondaryCollisionView.received(original.level(), center.x, center.z) == null) return;
-        if (original.visualWorld() != null ? original.visualWorld().visibleChunkCount() == 0
-                : !SecondarySodiumTerrainPass.hasRenderedTerrain(original.context(), original.level())) return;
+        if ((original.visualWorld() != null ? original.visualWorld().visibleChunkCount() == 0
+                : !SecondarySodiumTerrainPass.hasRenderedTerrain(original.context(), original.level()))
+                && !emptyRegionView(original.viewId(), original.level(), original.view().camera(), original.view().frustum())) return;
         transition.retainedScene = original;
         render(transition, original, original.view().camera().getPosition(), original.view().camera().rotation(), original.partialTick());
+    }
+
+    /** Looking up through a horizontal region can legitimately contain only sky. Prove that
+     * received terrain in the bounded view is empty, rather than mistaking missing meshes for sky. */
+    private static boolean emptyRegionView(ResourceLocation id, net.minecraft.client.multiplayer.ClientLevel level,
+            net.minecraft.client.Camera camera, net.minecraft.client.renderer.culling.Frustum frustum) {
+        var region = com.skyeshade.skyesight.client.portal.PortalRegionClient.definition(id);
+        if (region == null) return false;
+        var center = new ChunkPos(BlockPos.containing(camera.getPosition()));
+        int radius = region.renderRadiusChunks();
+        for (int x = center.x-radius; x <= center.x+radius; x++) for (int z = center.z-radius; z <= center.z+radius; z++) {
+            if (!frustum.isVisible(new AABB(x*16.0, level.getMinBuildHeight(), z*16.0,
+                    x*16.0+16, level.getMaxBuildHeight(), z*16.0+16))) continue;
+            var chunk = SecondaryCollisionView.received(level, x, z);
+            if (chunk == null) return false;
+            for (int i=0; i<chunk.getSections().length; i++) {
+                if (chunk.getSection(i).hasOnlyAir()) continue;
+                int y=level.getSectionYFromSectionIndex(i)*16;
+                if (frustum.isVisible(new AABB(x*16.0,y,z*16.0,x*16.0+16,y+16,z*16.0+16))) return false;
+            }
+        }
+        return true;
     }
 
     private static void render(SecondaryTransition transition, SecondarySceneFrame original,
@@ -400,10 +427,16 @@ public final class SecondaryTransition implements SkyesightTransition {
         for (int x = -1; x <= 1; x++) for (int z = -1; z <= 1; z++)
             if (SecondaryCollisionView.received(mc.level, center.x + x, center.z + z) == null) return;
         if (!t.chunksReported) { t.chunksReported = true; trace("requiredChunksObserved"); }
-        if (!mc.level.isOutsideBuildHeight(mc.player.blockPosition()) && !mc.levelRenderer.isSectionCompiled(mc.player.blockPosition())) return;
-        if (!mc.levelRenderer.hasRenderedAllSections()) return;
-        if (mc.levelRenderer.countRenderedSections() == 0) return;
         var camera = mc.gameRenderer.getMainCamera();
+        boolean emptyRegion = false;
+        if (mc.levelRenderer.countRenderedSections() == 0) {
+            var model = new Matrix4f().rotation(new Quaternionf(camera.rotation()).conjugate());
+            emptyRegion = emptyRegionView(t.viewId, mc.level, camera,
+                    SkyesightFrustumFactory.create(camera, model, t.destination.projection()));
+        }
+        if (!emptyRegion && !mc.level.isOutsideBuildHeight(mc.player.blockPosition()) && !mc.levelRenderer.isSectionCompiled(mc.player.blockPosition())) return;
+        if (!mc.levelRenderer.hasRenderedAllSections()) return;
+        if (mc.levelRenderer.countRenderedSections() == 0 && !emptyRegion) return;
         if (!t.live && (camera.getPosition().distanceToSqr(t.destination.eyePosition()) > 4
                 || Math.abs(camera.rotation().dot(t.destination.rotation())) < Math.cos(Math.toRadians(5) / 2))) {
             t.finish(Status.FALLBACK); return;

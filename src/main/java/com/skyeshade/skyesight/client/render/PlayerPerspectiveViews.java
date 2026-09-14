@@ -14,6 +14,8 @@ public final class PlayerPerspectiveViews {
     public static void clear() { VIEWS.clear(); }
     public static boolean contains(ResourceLocation id) { return VIEWS.contains(id); }
     public static int radius(ResourceLocation id, int independentRadius) {
+        var region = com.skyeshade.skyesight.client.portal.PortalRegionClient.definition(id);
+        if (region != null) return region.renderRadiusChunks();
         return contains(id) ? Minecraft.getInstance().options.getEffectiveRenderDistance() : independentRadius;
     }
 }

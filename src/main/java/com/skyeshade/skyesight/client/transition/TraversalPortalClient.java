@@ -78,6 +78,8 @@ public final class TraversalPortalClient {
     private static long arrivalDeadline;
     private TraversalPortalClient() {}
     public static PortalSidedness sides(RegisteredPortalView portal) {
+        var regionSides = com.skyeshade.skyesight.client.portal.PortalRegionClient.sides(portal.id());
+        if (regionSides != null) return regionSides;
         for (var entry : DEFINITIONS.entrySet()) {
             for (boolean fromA : new boolean[]{true, false})
                 if (portal.id().toString().equals(SkyesightTraversalPayload.portalId(entry.getKey(), fromA)))
@@ -154,50 +156,54 @@ public final class TraversalPortalClient {
         } else if (Objects.equals(REVISIONS.get(owner), message.revision()) && DEFINITIONS.containsKey(owner)) {
             if (message.action() == SkyesightTraversalPayload.BEGIN && message.sequence() > lastSequence) {
                 lastSequence = message.sequence();
-                String source = message.fromA() ? a : b;
-                var mc = Minecraft.getInstance();
-                var portal = SkyesightPortalApi.getPortal(source);
-                if (portal != null && mc.player != null && mc.level != null
-                        && portal.source().dimension().equals(mc.level.dimension())) {
-                    guardedPortal = message.fromA() ? b : a;
-                    guardedExit = portal.target();
-                    arrivalSide = PortalTraversalMath.local(guardedExit, message.destinationFeet()).z >= 0 ? 1 : -1;
-                    awaitingArrivalEye = true;
-                    arrivalDeadline = Util.getMillis() + 2000;
-                    // Vanilla absolute position packets zero velocity. Preserve the actual local
-                    // motion (server player deltaMovement omits walking) across this ordered teleport.
-                    motion = new Motion(portal.target().dimension(), message.destinationFeet(),
-                            PortalTraversalMath.rotate(mc.player.getDeltaMovement(), PortalTraversalMath.rotation(
-                                    portal.source().rotation(), portal.target().rotation())),
-                            Util.getMillis() + 2000, mc.getConnection(), mc.player.onGround(), mc.player.fallDistance,
-                            mc.player.getPose(), transformedYaw(portal, mc.player.getYHeadRot()), transformedYaw(portal, mc.player.yBodyRot),
-                            mc.player.walkDist, mc.player.walkDistO, mc.player.bob, mc.player.oBob, mc.player.isSprinting(),
-                            PortalTraversalMath.rotate(new Vec3(mc.player.xo, mc.player.yo, mc.player.zo).subtract(mc.player.position()),
-                                    PortalTraversalMath.rotation(portal.source().rotation(), portal.target().rotation())),
-                            PortalTraversalMath.rotate(new Vec3(mc.player.xOld, mc.player.yOld, mc.player.zOld).subtract(mc.player.position()),
-                                    PortalTraversalMath.rotation(portal.source().rotation(), portal.target().rotation())),
-                            transformedYaw(portal, mc.player.yRotO), mc.player.xRotO, FirstPersonState.capture(portal, mc.player));
-                    if (Boolean.getBoolean("skyesight.debugTraversal")) Skyesight.LOGGER.info(
-                            "[TraversalMotion] sourceFeet={} sourceEye={} predictedFeet={} requestedFeet={} velocity={} previousOffset={} ground={} fall={} pose={}",
-                            mc.player.position(), mc.player.getEyePosition(), PortalTraversalMath.position(portal.source(), portal.target(), mc.player.position()),
-                            message.destinationFeet(), motion.velocity, motion.previousOffset, motion.onGround, motion.fallDistance, motion.pose);
-                }
-                if (portal != null && (!source.equals(selected) || prepared == null)) {
-                    if (SecondaryTransition.canPrepareSuccessor()) { prepared = null; selected = null; }
-                    else cancel();
-                    selected = source;
-                    prepared = SkyesightTransitionApi.preparePortalTransition(ResourceLocation.parse(source));
-                }
-                // A fast reverse packet can beat the next render/tick preparation. Bootstrap
-                // from its already-hot scene before processing the following vanilla teleport.
-                if (portal != null && prepared != null && prepared.status() == SkyesightTransition.Status.PREPARING)
-                    PortalDirectStencilRenderer.warmStandby(portal);
-                boolean began = source.equals(selected) && prepared != null && prepared.beginLive();
-                if (!began) cancel();
-                if (Boolean.getBoolean("skyesight.debugTraversal")) Skyesight.LOGGER.info(
-                        "[Traversal] token={} source={} prepared={}", message.sequence(), source, began);
+                beginTraversal(message.fromA() ? a : b, message.fromA() ? b : a, message.destinationFeet(), message.sequence());
             }
         }
+    }
+    /** Shared ordered handoff for finite portals and region views. */
+    public static void beginTraversal(String source, String reverse, Vec3 destinationFeet, long token) {
+
+        var mc = Minecraft.getInstance();
+        var portal = SkyesightPortalApi.getPortal(source);
+        if (portal != null && mc.player != null && mc.level != null
+                && portal.source().dimension().equals(mc.level.dimension())) {
+            guardedPortal = reverse;
+            guardedExit = portal.target();
+            arrivalSide = PortalTraversalMath.local(guardedExit, destinationFeet).z >= 0 ? 1 : -1;
+            awaitingArrivalEye = true;
+            arrivalDeadline = Util.getMillis() + 2000;
+            // Vanilla absolute position packets zero velocity. Preserve the actual local
+            // motion (server player deltaMovement omits walking) across this ordered teleport.
+            motion = new Motion(portal.target().dimension(), destinationFeet,
+                    PortalTraversalMath.rotate(mc.player.getDeltaMovement(), PortalTraversalMath.rotation(
+                            portal.source().rotation(), portal.target().rotation())),
+                    Util.getMillis() + 2000, mc.getConnection(), mc.player.onGround(), mc.player.fallDistance,
+                    mc.player.getPose(), transformedYaw(portal, mc.player.getYHeadRot()), transformedYaw(portal, mc.player.yBodyRot),
+                    mc.player.walkDist, mc.player.walkDistO, mc.player.bob, mc.player.oBob, mc.player.isSprinting(),
+                    PortalTraversalMath.rotate(new Vec3(mc.player.xo, mc.player.yo, mc.player.zo).subtract(mc.player.position()),
+                            PortalTraversalMath.rotation(portal.source().rotation(), portal.target().rotation())),
+                    PortalTraversalMath.rotate(new Vec3(mc.player.xOld, mc.player.yOld, mc.player.zOld).subtract(mc.player.position()),
+                            PortalTraversalMath.rotation(portal.source().rotation(), portal.target().rotation())),
+                    transformedYaw(portal, mc.player.yRotO), mc.player.xRotO, FirstPersonState.capture(portal, mc.player));
+            if (Boolean.getBoolean("skyesight.debugTraversal")) Skyesight.LOGGER.info(
+                    "[TraversalMotion] sourceFeet={} sourceEye={} predictedFeet={} requestedFeet={} velocity={} previousOffset={} ground={} fall={} pose={}",
+                    mc.player.position(), mc.player.getEyePosition(), PortalTraversalMath.position(portal.source(), portal.target(), mc.player.position()),
+                    destinationFeet, motion.velocity, motion.previousOffset, motion.onGround, motion.fallDistance, motion.pose);
+        }
+        if (portal != null && (!source.equals(selected) || prepared == null)) {
+            if (SecondaryTransition.canPrepareSuccessor()) { prepared = null; selected = null; }
+            else cancel();
+            selected = source;
+            prepared = SkyesightTransitionApi.preparePortalTransition(ResourceLocation.parse(source));
+        }
+        // A fast reverse packet can beat the next render/tick preparation. Bootstrap
+        // from its already-hot scene before processing the following vanilla teleport.
+        if (portal != null && prepared != null && prepared.status() == SkyesightTransition.Status.PREPARING)
+            PortalDirectStencilRenderer.warmStandby(portal);
+        boolean began = source.equals(selected) && prepared != null && prepared.beginLive();
+        if (!began) cancel();
+        if (Boolean.getBoolean("skyesight.debugTraversal")) Skyesight.LOGGER.info(
+                "[Traversal] token={} source={} prepared={}", token, source, began);
     }
     public static void authoritativePosition() {
         var pending = motion; motion = null;
@@ -260,7 +266,9 @@ public final class TraversalPortalClient {
     }
     private static void prepareNearest(Minecraft mc) {
         if (guardedExit != null && guardedExit.dimension().equals(mc.level.dimension())
-                && !awaitingArrivalEye && PortalTraversalMath.clearedExit(guardedExit, mc.player.position(), mc.player.getBbWidth())) {
+                && !awaitingArrivalEye && (com.skyeshade.skyesight.client.portal.PortalRegionClient.definition(ResourceLocation.parse(guardedPortal))!=null
+                ? PortalTraversalMath.clearedExit(guardedExit,mc.player.getBoundingBox())
+                : PortalTraversalMath.clearedExit(guardedExit, mc.player.position(), mc.player.getBbWidth()))) {
             guardedPortal = null; guardedExit = null;
         }
         if (prepared != null && (prepared.status() == SkyesightTransition.Status.PRESENTING || prepared.status() == SkyesightTransition.Status.PREDICTING)) {
@@ -279,6 +287,16 @@ public final class TraversalPortalClient {
             double d = mc.player.position().distanceToSqr(portal.source().center());
             if (d < distance && Math.abs(local.x) < 2 && Math.abs(local.y) < 3) { distance = d; nearest = id; }
         }
+        for(var portal:com.skyeshade.skyesight.client.portal.PortalRegionClient.traversableViews()) {
+            if(!portal.source().dimension().equals(mc.level.dimension())) continue;
+            var region=com.skyeshade.skyesight.client.portal.PortalRegionClient.definition(portal.id());
+            double d=Math.abs(region.source().local(mc.player.getEyePosition()).z);
+            double approach=Math.min(region.activationDistance(),Math.max(12,mc.player.getDeltaMovement().length()*20));
+            if(d<approach && region.containsWorld(mc.player.getEyePosition()) && !portal.id().toString().equals(guardedPortal)) {
+                com.skyeshade.skyesight.client.portal.CrossDimPortalViewUpdater.requestInitialTerrainWarmup(mc,mc.gameRenderer.getMainCamera(),portal);
+                if(nearest==null || d*d<distance) { nearest=portal.id().toString();distance=d*d; }
+            }
+        }
         if (!Objects.equals(selected, nearest)) {
             cancel();
             if (nearest != null) {
@@ -293,8 +311,14 @@ public final class TraversalPortalClient {
     /** Render-frame eye sampling, independent of server feet-crossing authority. */
     public static void beforePresentation() {
         var mc = Minecraft.getInstance();
+        if(mc.player!=null && mc.level!=null) com.skyeshade.skyesight.client.portal.PortalRegionClient.update();
         if (mc.player != null && mc.level != null) prepareNearest(mc);
         TraversalPortalStandby.warmFrame();
+        if (selected != null && prepared != null && prepared.status() == SkyesightTransition.Status.PREPARING
+                && com.skyeshade.skyesight.client.portal.PortalRegionClient.definition(ResourceLocation.parse(selected)) != null) {
+            var portal = SkyesightPortalApi.getPortal(selected);
+            if (portal != null) PortalDirectStencilRenderer.warmStandby(portal);
+        }
     }
     /** Resolve against the Camera actually passed to LevelRenderer, before any primary world draw. */
     public static void beforeWorld(Camera camera) {
@@ -316,12 +340,14 @@ public final class TraversalPortalClient {
         double distance = PortalTraversalMath.local(portal.source(), eye).z;
         int stableSide = eyeSide.stableSide();
                 var gameplayLink = interactionLinks(mc.level.dimension()).stream().filter(l -> l.id().equals(portal.id())).findFirst().orElse(null);
-        if(gameplayLink == null) return;
-        var confirmed = eyeSide.update(portal.source(), eye.subtract(0, mc.player.getEyeHeight(), 0),
+        var region=com.skyeshade.skyesight.client.portal.PortalRegionClient.definition(portal.id());
+        if(gameplayLink == null && region==null) return;
+        var confirmed = region!=null ? eyeSide.update(portal.source(),eye,region::containsWorld)
+                : eyeSide.update(portal.source(), eye.subtract(0, mc.player.getEyeHeight(), 0),
                 point -> ((PortalAperture.Bound)gameplayLink.aperture()).shape().fitsPlayer(portal.source(),point,mc.player.getBbWidth(),mc.player.getBbHeight()));
         if (stableSide == 0 && (confirmed != null || eyeSide.hasPendingCrossing()))
             stableSide = confirmed != null ? -eyeSide.stableSide() : eyeSide.stableSide();
-        if (!gameplayLink.sidedness().allows(stableSide)) return;
+        if (!(region!=null?region.sidedness():gameplayLink.sidedness()).allows(stableSide)) return;
         if (prepared.status() == SkyesightTransition.Status.PREDICTING) {
             // Render interpolation can briefly revisit the source side after correction.
             // Roll back only a meaningful retreat of the actual local body, not eye jitter.
@@ -364,6 +390,11 @@ public final class TraversalPortalClient {
     private static void cancel() {
         eyeSide = new PortalCrossingState();
         if (prepared != null) prepared.close(); prepared = null; selected = null;
+    }
+    public static boolean retains(ResourceLocation id) {
+        return SecondaryTransition.retainsView(id) || id.toString().equals(selected) && prepared!=null
+                && (prepared.status()==SkyesightTransition.Status.PRESENTING || prepared.status()==SkyesightTransition.Status.PREDICTING
+                || prepared.status()==SkyesightTransition.Status.READY || prepared.status()==SkyesightTransition.Status.PREPARING);
     }
     @SubscribeEvent public static void logout(ClientPlayerNetworkEvent.LoggingOut event) {
         RecursivePortalRenderer.close();

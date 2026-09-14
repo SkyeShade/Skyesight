@@ -181,6 +181,17 @@ public final class PortalDirectStencilRenderer {
             camera.setPositionPublic(portal.target().center());
             camera.setRotationPublic(portal.target().rotation());
             int radius = minecraft.options.getEffectiveRenderDistance();
+            var region = PortalRegionClient.definition(portal.id());
+            if (region != null) {
+                // Compile from the observer's mapped pose, not a wall-portal orientation.
+                if (portal.source().dimension().equals(minecraft.level.dimension())) {
+                    var main = minecraft.gameRenderer.getMainCamera();
+                    var rotation = PortalTraversalMath.rotation(portal.source().rotation(), portal.target().rotation());
+                    camera.setPositionPublic(PortalTraversalMath.position(portal.source(), portal.target(), main.getPosition()));
+                    camera.setRotationPublic(rotation.mul(new Quaternionf(main.rotation())).normalize());
+                }
+                radius = region.renderRadiusChunks();
+            }
             var projection = new Matrix4f().perspective((float) Math.toRadians(120), 1, .05f, radius * 32f);
             var model = new Matrix4f().rotation(new Quaternionf(camera.rotation()).conjugate());
             var frustum = new Frustum(model, projection);
@@ -437,8 +448,8 @@ public final class PortalDirectStencilRenderer {
         return new PortalFrame(
                 endpoint.center(),
                 endpoint.rotation(),
-                endpoint.width(),
-                endpoint.height()
+                PortalRegionClient.renderWidth(endpoint),
+                PortalRegionClient.renderHeight(endpoint)
         );
     }
 
@@ -909,6 +920,7 @@ public final class PortalDirectStencilRenderer {
     }
 
     private static void onPortalStencilMaskWorldStage(RenderLevelStageEvent event) {
+        PortalRegionClient.update();
         Minecraft minecraft = Minecraft.getInstance();
         Camera camera = event.getCamera();
         resetStencilMaskFrameDiagnosticFields(event.getRenderTick());

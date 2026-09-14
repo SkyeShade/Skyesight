@@ -41,6 +41,18 @@ public final class PortalChunkTicketController {
         }
     }
 
+    /** Moving mapped regions retain overlapping forced ownership; only the center simulation ticket moves. */
+    public static void moveRegionTickets(ServerLevel level, Region previous, Region next, int margin) {
+        var server = level.getServer();
+        var oldLevel = server.getLevel(previous.dimension());
+        if (oldLevel != null) oldLevel.getChunkSource().removeRegionTicket(SIMULATION_TICKET,
+                new ChunkPos(previous.centerChunkX(),previous.centerChunkZ()),previous.loadRadiusChunks()+margin,
+                previous.playerId()+"/"+previous.viewId(),true);
+        for(long chunk:previous.chunks())
+            if(!previous.dimension().equals(next.dimension()) || !next.chunks().contains(chunk))
+                SkyesightForcedChunkTickets.release(server,previous.dimension(),chunk,"simulation",previous.playerId(),previous.viewId());
+    }
+
     public static long lastTicketRefreshTick(Region region) {
         return LAST_TICKET_REFRESH_TICKS.getOrDefault(new Key(region.playerId(), region.viewId()), -1L);
     }

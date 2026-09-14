@@ -42,6 +42,7 @@ public final class TraversalPortalManager {
     private static final Map<UUID, Map<SideKey, PortalCrossingState>> SIDES = new HashMap<>();
     private static long revision, sequence;
     public static boolean ownsView(ResourceLocation id) {
+        if(PortalRegionManager.forView(id)!=null) return true;
         for (UUID owner : PAIRS.keySet()) {
             if (id.toString().equals(SkyesightTraversalPayload.portalId(owner, true))
                     || id.toString().equals(SkyesightTraversalPayload.portalId(owner, false))) return true;
@@ -181,8 +182,6 @@ public final class TraversalPortalManager {
                 var pose = PortalTraversalMath.transform(source, target, current, incomingVelocity, player.getYRot(), player.getXRot());
                 Vec3 velocity = pose.velocity();
                 float yaw = pose.yaw(), pitch = pose.pitch();
-                float headYaw = PortalTraversalMath.yaw(PortalTraversalMath.rotate(Vec3.directionFromRotation(0, player.getYHeadRot()), rotation));
-                float bodyYaw = PortalTraversalMath.yaw(PortalTraversalMath.rotate(Vec3.directionFromRotation(0, player.yBodyRot), rotation));
                 // current is already strictly past the source plane; the geometric re-entry
                 // guard prevents ping-pong. An extra exit offset disagrees with the rendered eye.
                 Vec3 position = pose.position();
@@ -191,10 +190,7 @@ public final class TraversalPortalManager {
                 long token = ++sequence;
                 PacketDistributor.sendToPlayer(player, new SkyesightTraversalPayload(entry.getKey(), pair.revision,
                         token, SkyesightTraversalPayload.BEGIN, fromA, null, null, position));
-                player.teleportTo(destination, position.x, position.y, position.z, Set.of(), yaw, pitch);
-                player.setYHeadRot(headYaw); player.yHeadRotO = headYaw;
-                player.yBodyRot = bodyYaw; player.yBodyRotO = bodyYaw;
-                player.setDeltaMovement(velocity);
+                PortalTransfers.player(player, source, target, pose);
 
                 PREVIOUS.put(id, new Sample(target.dimension(), position));
                 // Teleport reset the old samples. Seed the reverse endpoint at arrival;
