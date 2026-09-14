@@ -39,11 +39,15 @@ public record PortalRegionWindow(double centerU, double centerV, int visibleSize
     }
     private static Set<Long> cells(PortalRegionShape shape,double minU,double minV,double maxU,double maxV) {
         var cells=new HashSet<Long>();
-        for(int u=(int)Math.floor(minU/CELL);u<Math.ceil(maxU/CELL);u++)
-            for(int v=(int)Math.floor(minV/CELL);v<Math.ceil(maxV/CELL);v++)
-                for(var s:shape.strips())if(s.minU()<(u+1)*CELL && s.maxU()>u*CELL && s.minV()<(v+1)*CELL && s.maxV()>v*CELL) {
-                    cells.add(((long)u<<32) ^ (v&0xffffffffL));break;
-                }
+        // Intersect strips first: empty space and total strip length never produce cell scans.
+        for(var s:shape.strips()) {
+            double left=Math.max(minU,s.minU()),right=Math.min(maxU,s.maxU());
+            double bottom=Math.max(minV,s.minV()),top=Math.min(maxV,s.maxV());
+            if(left>=right || bottom>=top) continue;
+            for(int u=(int)Math.floor(left/CELL);u<Math.ceil(right/CELL);u++)
+                for(int v=(int)Math.floor(bottom/CELL);v<Math.ceil(top/CELL);v++)
+                    cells.add(((long)u<<32) ^ (v&0xffffffffL));
+        }
         return cells;
     }
     public Vec3 center(PortalRegionDefinition d){return d.source().world(centerU,centerV,0);}

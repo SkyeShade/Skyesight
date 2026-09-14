@@ -53,6 +53,9 @@ public final class SkyesightServerChunkSender {
             ServerLevel level = player.server.getLevel(payload.dimension());
             // ChunkMap clamps normal server view distance to 2..32; mirror its upper bound.
             int serverMaximum = Math.max(0, Math.min(32, player.server.getPlayerList().getViewDistance()));
+            var region = com.skyeshade.skyesight.server.portal.PortalRegionManager.forView(payload.viewId());
+            // Only server-registered regions may authorize an extent beyond vanilla view distance.
+            if (region != null) serverMaximum = region.renderRadiusChunks();
             int loadRadius = SkyesightRemoteRadiusPolicy.accepted(payload.radius(),serverMaximum);
             if (SkyesightRemoteCenterDiagnostics.due("radius-"+player.getUUID(),payload.viewId(),payload.viewGeneration()))
                 Skyesight.LOGGER.info("REMOTE_RADIUS_ACCEPTED player={} view={} requested={} serverMax={} accepted={}",

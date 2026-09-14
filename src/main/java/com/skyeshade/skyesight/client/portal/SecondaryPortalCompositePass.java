@@ -552,6 +552,29 @@ public final class SecondaryPortalCompositePass {
         }
     }
 
+    /** Write only the masked portal's physical depth; retain destination color and source occluders. */
+    public static void restorePortalSurfaceDepth(PoseStack poses, Camera camera, PortalFrame portal,
+            int stencilBits, int stencilRef, PortalStencilMask mask, ResourceLocation viewId) {
+        if (!beginExistingStencilApertureRead(stencilBits, stencilRef).succeeded()) return;
+        boolean depthClamp = GL11.glIsEnabled(GL32.GL_DEPTH_CLAMP);
+        try {
+            RenderSystem.colorMask(false, false, false, false);
+            RenderSystem.enableDepthTest();
+            RenderSystem.depthFunc(GL11.GL_ALWAYS);
+            RenderSystem.depthMask(true);
+            RenderSystem.disableCull();
+            RenderSystem.setShader(GameRenderer::getPositionColorShader);
+            GL11.glEnable(GL32.GL_DEPTH_CLAMP);
+            drawPortalMask(poses, camera, portal, mask, viewId);
+        } finally {
+            if (!depthClamp) GL11.glDisable(GL32.GL_DEPTH_CLAMP);
+            RenderSystem.colorMask(true, true, true, true);
+            RenderSystem.depthFunc(GL11.GL_LEQUAL);
+            RenderSystem.enableCull();
+            restoreStencilState();
+        }
+    }
+
     private static void drawPortalMask(
             PoseStack poseStack,
             Camera camera,
@@ -580,12 +603,14 @@ public final class SecondaryPortalCompositePass {
             );
             poseStack.mulPose(new Quaternionf(portal.rotation()));
             // Bias toward the physical viewer without changing the registered plane.
-            double offset = DirectStencilPortalMath.apertureOffset(portal, cameraPosition, PORTAL_Z_OFFSET);
+            boolean region = stencilMask != null && stencilMask.rectangles() != null;
+            double offset = region ? 0 : DirectStencilPortalMath.apertureOffset(portal, cameraPosition, PORTAL_Z_OFFSET);
             poseStack.translate(0, 0, offset - PORTAL_Z_OFFSET);
 
             Matrix4f matrix = poseStack.last().pose();
-            float halfWidth = Math.max(0.0F, portal.width() * 0.5F - PORTAL_APERTURE_EDGE_INSET_BLOCKS);
-            float halfHeight = Math.max(0.0F, portal.height() * 0.5F - PORTAL_APERTURE_EDGE_INSET_BLOCKS);
+            float inset = region ? 0 : PORTAL_APERTURE_EDGE_INSET_BLOCKS;
+            float halfWidth = Math.max(0.0F, portal.width() * 0.5F - inset);
+            float halfHeight = Math.max(0.0F, portal.height() * 0.5F - inset);
 
             if(stencilMask!=null && stencilMask.rectangles()!=null) {
                 var buffer=Tesselator.getInstance().begin(VertexFormat.Mode.QUADS,DefaultVertexFormat.POSITION_COLOR);

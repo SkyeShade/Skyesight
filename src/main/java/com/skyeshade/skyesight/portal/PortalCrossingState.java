@@ -26,28 +26,35 @@ public final class PortalCrossingState {
     }
     /** Shared sweep/side history; callers choose body containment or player overlap policy. */
     public Vec3 update(PortalEndpoint endpoint, Vec3 feet, Predicate<Vec3> aperture) {
+        return update(endpoint, feet, aperture, EXIT_PLANE);
+    }
+    /** Camera and authoritative player eye share a swept threshold, without the body contact band. */
+    public Vec3 updateEye(PortalEndpoint endpoint, Vec3 eye, Predicate<Vec3> aperture) {
+        return update(endpoint, eye, aperture, 1e-7);
+    }
+    private Vec3 update(PortalEndpoint endpoint, Vec3 feet, Predicate<Vec3> aperture, double threshold) {
         double d = PortalTraversalMath.local(endpoint, feet).z;
         if (previous == null) {
             previous = feet; pending = null;
-            stableSide = Math.abs(d) >= EXIT_PLANE ? (d > 0 ? 1 : -1) : 0;
+            stableSide = Math.abs(d) >= threshold ? (d > 0 ? 1 : -1) : 0;
             return null;
         }
         double before = PortalTraversalMath.local(endpoint, previous).z;
         // A first accepted sweep can cross from inside the contact band. Its segment
         // supplies the entry side even if neither earlier tick established a stable side.
-        if (stableSide == 0 && Math.abs(before) > ENTER_PLANE && before * d < 0)
+        if (stableSide == 0 && Math.abs(before) > Math.min(ENTER_PLANE, threshold) && before * d < 0)
             stableSide = before > 0 ? 1 : -1;
         if (stableSide == 0) {
-            if (Math.abs(d) >= EXIT_PLANE) stableSide = d > 0 ? 1 : -1;
+            if (Math.abs(d) >= threshold) stableSide = d > 0 ? 1 : -1;
         } else {
             if (before * stableSide >= 0 && d * stableSide <= 0 && before != d) {
                 var hit = previous.lerp(feet, before / (before - d));
                 pending = aperture.test(hit) ? hit : null;
             }
             // Do not retain a crossing after leaving the opening while straddling it.
-            if (Math.abs(d) < EXIT_PLANE && !aperture.test(feet)
+            if (Math.abs(d) < threshold && !aperture.test(feet)
                     || d * stableSide > ENTER_PLANE) pending = null;
-            if (d * stableSide <= -EXIT_PLANE) {
+            if (d * stableSide <= -threshold) {
                 var hit = pending;
                 stableSide = -stableSide; pending = null; previous = feet;
                 return hit;

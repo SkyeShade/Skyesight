@@ -31,6 +31,12 @@ public final class PortalRenderDistanceGate {
             return false;
         }
 
+        var region = PortalRegionClient.definition(view.id());
+        if (region != null) {
+            // Region activation is caller-owned and measured from its plane, not a finite portal's center.
+            return Math.abs(region.source().local(camera.getPosition()).z) <= region.activationDistance();
+        }
+
         if (maxDistanceBlocks < 0.0D) {
             return true;
         }

@@ -23,6 +23,9 @@ public final class SecondarySceneRenderer {
     private SecondarySceneRenderer() {}
 
     public static boolean renderContents(SecondarySceneFrame scene) {
+        return renderContents(scene, null);
+    }
+    public static boolean renderContents(SecondarySceneFrame scene, Runnable beforeTranslucent) {
         if (scene.visualWorld() != null && !scene.visualWorld().environmentReady()) return false;
         boolean terrainRendered = true;
         var minecraft = Minecraft.getInstance();
@@ -45,11 +48,13 @@ public final class SecondarySceneRenderer {
                 switch (pass) {
                     case TERRAIN -> {
                         prepare(scene);
-                        if (scene.visualWorld() != null) {
-                            scene.visualWorld().renderTerrain(frame.camera(), frame.frustum(), frame.modelViewMatrix(),
-                                    frame.projectionMatrix(), options.terrainRadius(), options.translucent());
-                        } else {
-                            terrainRendered = SecondarySodiumTerrainPass.render(frame, scene.context(), minecraft, partialTick);
+                        try (var composition = new SecondaryTerrainComposition(beforeTranslucent)) {
+                            if (scene.visualWorld() != null) {
+                                scene.visualWorld().renderTerrain(frame.camera(), frame.frustum(), frame.modelViewMatrix(),
+                                        frame.projectionMatrix(), options.terrainRadius(), options.translucent());
+                            } else {
+                                terrainRendered = SecondarySodiumTerrainPass.render(frame, scene.context(), minecraft, partialTick);
+                            }
                         }
                     }
                     // Preserve the established direct secondary order: terrain (including translucent),

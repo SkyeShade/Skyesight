@@ -11,6 +11,8 @@ public record PortalRegionDefinition(ResourceLocation id, PortalRegionFrame sour
         PortalRegionShape shape, PortalSidedness sidedness, boolean bidirectional,
         double activationDistance, int renderRadiusChunks, int entityRadiusChunks, int simulationRadiusChunks,
         PortalBehavior behavior, PortalRegionWindowSettings windowSettings) {
+    /** At most 1,046,529 chunk keys per observer; prevents quadratic allocation/loop overflow. */
+    public static final int MAX_RENDER_RADIUS_CHUNKS = 511;
     public PortalRegionDefinition(ResourceLocation id, PortalRegionFrame source, PortalRegionFrame destination,
             PortalRegionShape shape, PortalSidedness sidedness, boolean bidirectional,
             double activationDistance, int renderRadiusChunks, int entityRadiusChunks, int simulationRadiusChunks) {
@@ -26,8 +28,8 @@ public record PortalRegionDefinition(ResourceLocation id, PortalRegionFrame sour
         Objects.requireNonNull(id); Objects.requireNonNull(source); Objects.requireNonNull(destination);
         Objects.requireNonNull(shape); Objects.requireNonNull(sidedness);
         Objects.requireNonNull(behavior); Objects.requireNonNull(windowSettings);
-        if (!Double.isFinite(activationDistance) || activationDistance <= 0 || activationDistance > 256
-                || renderRadiusChunks < 1 || renderRadiusChunks > 16 || entityRadiusChunks < 0
+        if (!Double.isFinite(activationDistance) || activationDistance <= 0
+                || renderRadiusChunks < 1 || renderRadiusChunks > MAX_RENDER_RADIUS_CHUNKS || entityRadiusChunks < 0
                 || entityRadiusChunks > renderRadiusChunks || simulationRadiusChunks < 0
                 || simulationRadiusChunks > entityRadiusChunks) throw new IllegalArgumentException("Invalid local region radii");
         if(renderRadiusChunks<windowSettings.minimumChunkRadius()) throw new IllegalArgumentException("Terrain radius must contain the warm window");

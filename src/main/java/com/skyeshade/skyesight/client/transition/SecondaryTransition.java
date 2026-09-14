@@ -375,11 +375,11 @@ public final class SecondaryTransition implements SkyesightTransition {
             var scene = new SecondarySceneFrame(original.viewId(), original.level(), original.visualWorld(), frame,
                     original.context(), partialTick, transition.image, () -> {}, options);
             SecondarySceneEnvironmentRenderer.renderBackground(scene, original.context().clouds());
-            if (!SecondarySceneRenderer.renderContents(scene)) {
+            Runnable composePortals = transition.portal != null && transition.presenting() && transition.authoritative
+                    ? () -> PortalDirectStencilRenderer.renderPrimaryPresentation(scene) : null;
+            if (!SecondarySceneRenderer.renderContents(scene, composePortals)) {
                 transition.finish(Status.FALLBACK); return;
             }
-            if (transition.portal != null && transition.presenting() && transition.authoritative)
-                PortalDirectStencilRenderer.renderPrimaryPresentation(scene);
             SkyesightCameraOutput.makeOpaque(transition.image);
             if (transition.live) transition.visibleTerrain = SecondaryTerrainCoverage.visible(scene);
             transition.destination = new Destination(original.level().dimension(), camera.position(), camera.rotation(), projection);

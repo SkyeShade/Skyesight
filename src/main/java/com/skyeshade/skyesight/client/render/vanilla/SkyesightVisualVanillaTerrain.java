@@ -179,6 +179,7 @@ public final class SkyesightVisualVanillaTerrain implements SkyesightVisualTerra
                     modelMatrix,
                     projectionMatrix
             );
+            com.skyeshade.skyesight.client.render.SecondaryTerrainComposition.beforeTranslucent();
             if (renderTranslucent) {
                 bridge.skyesight$renderSecondarySectionLayer(
                         RenderType.translucent(), cameraPosition.x(), cameraPosition.y(), cameraPosition.z(),
