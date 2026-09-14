@@ -23,7 +23,14 @@ public final class SkyesightPayloads {
         }
 
         PayloadRegistrar registrar = event.registrar(Skyesight.MODID)
-                .versioned("13");
+                .versioned("15");
+
+        registrar.playToClient(SkyesightRegionTraversalPayload.TYPE,SkyesightRegionTraversalPayload.STREAM_CODEC,
+                (payload,context)->context.enqueueWork(()->com.skyeshade.skyesight.client.portal.PortalRegionClient.traverse(payload)));
+
+        registrar.playToClient(SkyesightPortalRegionPayload.TYPE, SkyesightPortalRegionPayload.STREAM_CODEC,
+                (payload, context) -> context.enqueueWork(() ->
+                        com.skyeshade.skyesight.client.portal.PortalRegionClient.receive(payload)));
 
         registrar.playToServer(SkyesightPortalInteractionPayload.TYPE, SkyesightPortalInteractionPayload.STREAM_CODEC,
                 (payload, context) -> context.enqueueWork(() -> {

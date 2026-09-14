@@ -587,6 +587,18 @@ public final class SecondaryPortalCompositePass {
             float halfWidth = Math.max(0.0F, portal.width() * 0.5F - PORTAL_APERTURE_EDGE_INSET_BLOCKS);
             float halfHeight = Math.max(0.0F, portal.height() * 0.5F - PORTAL_APERTURE_EDGE_INSET_BLOCKS);
 
+            if(stencilMask!=null && stencilMask.rectangles()!=null) {
+                var buffer=Tesselator.getInstance().begin(VertexFormat.Mode.QUADS,DefaultVertexFormat.POSITION_COLOR);
+                for(var r:stencilMask.rectangles()) {
+                    float x0=(float)((r.left()-.5)*halfWidth*2),x1=(float)((r.right()-.5)*halfWidth*2);
+                    float y0=(float)((.5-r.bottom())*halfHeight*2),y1=(float)((.5-r.top())*halfHeight*2);
+                    buffer.addVertex(matrix,x0,y0,PORTAL_Z_OFFSET).setColor(255,255,255,255);
+                    buffer.addVertex(matrix,x1,y0,PORTAL_Z_OFFSET).setColor(255,255,255,255);
+                    buffer.addVertex(matrix,x1,y1,PORTAL_Z_OFFSET).setColor(255,255,255,255);
+                    buffer.addVertex(matrix,x0,y1,PORTAL_Z_OFFSET).setColor(255,255,255,255);
+                }
+                BufferUploader.drawWithShader(buffer.buildOrThrow());return;
+            }
             PortalStencilMaskCache.LoadedMask loadedMask = PortalStencilMaskCache.get(stencilMask);
             if (loadedMask == null) {
                 drawRectangularMask(matrix, halfWidth, halfHeight);
@@ -633,7 +645,9 @@ public final class SecondaryPortalCompositePass {
                     continue;
                 }
                 float x0 = left + x * cellWidth;
-                float x1 = x0 + cellWidth;
+                // Adjacent pixels share one planar row strip; no duplicated cell borders.
+                while (x + 1 < mask.width() && mask.isSolid(x + 1, y)) x++;
+                float x1 = left + (x + 1) * cellWidth;
                 float y1 = bottom + (mask.height() - y) * cellHeight;
                 float y0 = y1 - cellHeight;
                 buffer.addVertex(matrix, x0, y0, PORTAL_Z_OFFSET).setColor(255, 255, 255, 255);

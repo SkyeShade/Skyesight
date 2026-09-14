@@ -110,6 +110,11 @@ public class PortalSimulationCoordinator {
             int centerChunkZ,
             int radiusChunks
     ) {
+        var mappedRegion = com.skyeshade.skyesight.server.portal.PortalRegionManager.forView(viewId);
+        if (mappedRegion != null) {
+            if (mappedRegion.simulationRadiusChunks() == 0) { remove(player, viewId); return; }
+            radiusChunks = mappedRegion.simulationRadiusChunks();
+        }
         if (!PORTAL_SIMULATION_ENABLED || player == null || viewId == null || dimension == null) {
             return;
         }
@@ -150,7 +155,7 @@ public class PortalSimulationCoordinator {
         }
         LongSet nextChunks = PortalRegionTracker.buildChunkSet(centerChunkX, centerChunkZ, radius);
 
-        if (previous != null) {
+        if (previous != null && mappedRegion == null) {
             removeRegionTickets(server, previous);
         }
 
@@ -167,6 +172,10 @@ public class PortalSimulationCoordinator {
                 server.getTickCount(),
                 sameDim
         );
+        if (mappedRegion != null && previous != null) {
+            PortalChunkTicketController.moveRegionTickets(level, previous, region,
+                    PORTAL_SIMULATION_PATHFINDING_CHUNK_MARGIN);
+        }
         addRegionTickets(level, region);
         PortalRegionTracker.put(region);
     }

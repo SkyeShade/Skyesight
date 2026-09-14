@@ -18,6 +18,7 @@ import java.util.Set;
 
 public final class PortalStencilMaskCache {
     private static final Map<ResourceLocation, LoadedMask> CACHE = new HashMap<>();
+    private static final Map<com.skyeshade.skyesight.api.PortalAperture, LoadedMask> APERTURES = new java.util.WeakHashMap<>();
     private static final Set<ResourceLocation> WARNED_FAILURES = new HashSet<>();
 
     private PortalStencilMaskCache() {
@@ -25,11 +26,15 @@ public final class PortalStencilMaskCache {
 
     public static LoadedMask get(PortalStencilMask mask) {
         if (mask != null && mask.aperture() != null) {
+            var cached = APERTURES.get(mask.aperture());
+            if (cached != null) return cached;
             var rows = mask.aperture().rows(); int width = rows.getFirst().length();
             boolean[] solid = new boolean[width * rows.size()]; int count = 0;
             for (int y=0;y<rows.size();y++) for(int x=0;x<width;x++)
                 if(rows.get(y).charAt(x)=='#') { solid[y*width+x]=true; count++; }
-            return new LoadedMask(mask.texture(),mask.texture(),width,rows.size(),solid,count);
+            var loaded = new LoadedMask(mask.texture(),mask.texture(),width,rows.size(),solid,count);
+            APERTURES.put(mask.aperture(),loaded);
+            return loaded;
         }
         if (mask == null || mask.texture() == null) {
             return null;
@@ -48,6 +53,7 @@ public final class PortalStencilMaskCache {
 
     public static void clear() {
         CACHE.clear();
+        APERTURES.clear();
         WARNED_FAILURES.clear();
     }
 

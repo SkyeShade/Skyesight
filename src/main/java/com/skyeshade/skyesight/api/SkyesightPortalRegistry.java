@@ -81,6 +81,22 @@ public final class SkyesightPortalRegistry {
         return false;
     }
 
+    /** Internal moving-region aperture update. The mapping, destination and lease identity must stay fixed. */
+    public static synchronized void moveRegionWindow(ResourceLocation id, PortalEndpoint source,
+                                                      PortalEndpoint target, PortalStencilMask mask) {
+        var old = PORTALS.get(id);
+        if (old == null || !"portal_region".equals(old.sourceTag()))
+            throw new IllegalArgumentException("Not an active region view: " + id);
+        if (!old.source().dimension().equals(source.dimension()) || !old.target().dimension().equals(target.dimension()))
+            throw new IllegalArgumentException("Region dimension change requires replacement");
+        if (!old.source().rotation().equals(source.rotation()) || !old.target().rotation().equals(target.rotation())
+                || com.skyeshade.skyesight.portal.PortalTraversalMath.position(old.source(),old.target(),source.center())
+                .distanceToSqr(target.center()) > 1e-6)
+            throw new IllegalArgumentException("Moving a region window must preserve its mapping");
+        PORTALS.put(id, new RegisteredPortalView(id,source,target,old.renderSettings().withStencilMask(mask),
+                old.renderEnabled(),old.pairedId(),old.groupId(),old.sourceTag(),old.renderBackface(),old.generation(),false));
+    }
+
     public static synchronized boolean disableRetainingCache(ResourceLocation id) {
         if (id == null) {
             return false;

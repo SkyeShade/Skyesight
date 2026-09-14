@@ -44,6 +44,9 @@ public final class PortalEntityTraversal {
     private static final Map<Entity, Integer> ARRIVED_TICK = new WeakHashMap<>();
     private static final Map<Entity, PortalEndpoint> EXIT_GUARDS = new WeakHashMap<>();
     private PortalEntityTraversal() {}
+    private static List<Link> links(net.minecraft.resources.ResourceKey<net.minecraft.world.level.Level> dimension) {
+        var result=new ArrayList<>(TraversalPortalManager.links(dimension)); result.addAll(PortalRegionManager.links(dimension));return result;
+    }
     private static boolean eligible(Entity entity) {
         return entity.level() instanceof ServerLevel && !(entity instanceof ServerPlayer)
                 && !(entity instanceof Marker) && !entity.isRemoved() && !entity.isSpectator()
@@ -58,8 +61,10 @@ public final class PortalEntityTraversal {
         ARRIVED_TICK.remove(entity);
         var exit = EXIT_GUARDS.get(entity);
         if (exit != null && (!exit.dimension().equals(entity.level().dimension())
-                || PortalTraversalMath.clearedExit(exit, entity.position(), entity.getBbWidth()))) EXIT_GUARDS.remove(entity);
-        if (eligible(entity) && !TraversalPortalManager.links(entity.level().dimension()).isEmpty())
+                || (PortalRegionManager.forView(ResourceLocation.parse(exit.id())) != null
+                    ? PortalTraversalMath.clearedExit(exit, entity.getBoundingBox())
+                    : PortalTraversalMath.clearedExit(exit, entity.position(), entity.getBbWidth())))) EXIT_GUARDS.remove(entity);
+        if (eligible(entity) && !links(entity.level().dimension()).isEmpty())
             SAMPLES.put(entity, new Sample((ServerLevel) entity.level(), entity.position()));
     }
     @SubscribeEvent public static void leave(EntityLeaveLevelEvent event) {
@@ -71,7 +76,7 @@ public final class PortalEntityTraversal {
         if (!(entity.level() instanceof ServerLevel)) return;
         Sample sample = SAMPLES.remove(entity);
         if (sample == null || sample.level != entity.level() || !eligible(entity)) return;
-        var links = TraversalPortalManager.links(entity.level().dimension());
+        var links = links(entity.level().dimension());
         if (links.isEmpty()) { SIDES.remove(entity); EXIT_GUARDS.remove(entity); return; }
         if (EXIT_GUARDS.containsKey(entity) && links.stream().noneMatch(link -> link.source().equals(EXIT_GUARDS.get(entity))))
             EXIT_GUARDS.remove(entity);
@@ -110,7 +115,7 @@ public final class PortalEntityTraversal {
         // Collision behind an aperture belongs to the destination. Let the native tick finish
         // its drag/gravity update, then perform the ordered dimension transition at tick end.
         Vec3 end = sample.position.add(entity.getDeltaMovement());
-        for (Link link : TraversalPortalManager.links(entity.level().dimension())) {
+        for (Link link : links(entity.level().dimension())) {
             if (link.source().equals(EXIT_GUARDS.get(entity)) || !link.sidedness().allows(PortalTraversalMath.local(link.source(),sample.position).z)) continue;
             Vec3 a = PortalTraversalMath.local(link.source(), sample.position), b = PortalTraversalMath.local(link.source(), end);
             if (a.z * b.z >= 0 || a.z == b.z) continue;
@@ -124,6 +129,11 @@ public final class PortalEntityTraversal {
         }
     }
     private static boolean fits(Entity entity, Link link, Vec3 at) {
+        var region=PortalRegionManager.forView(link.id());
+        if(region!=null) {
+            if(link.id().getPath().endsWith("/b")) region=region.reversed();
+            return region.containsWorld(at);
+        }
         return PortalAperture.fits(link, entity.getBoundingBox().move(at.subtract(entity.position())));
     }
     private static boolean teleport(Entity entity, Link link, Vec3 intersection) {
@@ -136,7 +146,7 @@ public final class PortalEntityTraversal {
                 var exitLink=TraversalPortalManager.links(link.target().dimension()).stream()
                 .filter(l -> l.id().equals(SkyesightTraversalPayload.pairedPortalId(link.id()))).findFirst().orElse(null);
         var exitBounds=PortalCollisionMath.transform(entity.getBoundingBox().move(intersection.subtract(entity.position())),link.source(),link.target());
-        if(exitLink==null || !PortalAperture.fits(exitLink,exitBounds)) return false;
+        if(PortalRegionManager.forView(link.id())==null && (exitLink==null || !PortalAperture.fits(exitLink,exitBounds))) return false;
         destination.getChunkAt(BlockPos.containing(pose.position()));
         Entity owner = entity instanceof Projectile projectile ? projectile.getOwner() : null;
         float head = entity.getYHeadRot();
@@ -174,7 +184,7 @@ public final class PortalEntityTraversal {
         }
         SIDES.remove(entity); SAMPLES.remove(entity);
         var arrivals = SIDES.computeIfAbsent(moved, ignored -> new HashMap<>());
-        for (Link reverse : TraversalPortalManager.links(destination.dimension())) {
+        for (Link reverse : links(destination.dimension())) {
             var side = new PortalCrossingState(); side.arrive(reverse.source(), moved.position());
             arrivals.put(new Key(reverse.id(), reverse.revision()), side);
         }

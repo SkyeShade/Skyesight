@@ -210,8 +210,8 @@ public final class CrossDimPortalViewUpdater {
         return new PortalFrame(
                 endpoint.center(),
                 endpoint.rotation(),
-                endpoint.width(),
-                endpoint.height()
+                PortalRegionClient.renderWidth(endpoint),
+                PortalRegionClient.renderHeight(endpoint)
         );
     }
 

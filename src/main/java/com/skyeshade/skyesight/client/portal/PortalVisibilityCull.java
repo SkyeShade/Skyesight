@@ -208,8 +208,8 @@ public final class PortalVisibilityCull {
         Vec3 right = rotate(endpoint.rotation(), 1.0F, 0.0F, 0.0F);
         Vec3 up = rotate(endpoint.rotation(), 0.0F, 1.0F, 0.0F);
         Vec3 normal = rotate(endpoint.rotation(), 0.0F, 0.0F, 1.0F);
-        double halfWidth = endpoint.width() * 0.5D;
-        double halfHeight = endpoint.height() * 0.5D;
+        double halfWidth = PortalRegionClient.renderWidth(endpoint) * 0.5D;
+        double halfHeight = PortalRegionClient.renderHeight(endpoint) * 0.5D;
         Vec3 bottomLeft = center.subtract(right.scale(halfWidth)).subtract(up.scale(halfHeight));
         Vec3 bottomRight = center.add(right.scale(halfWidth)).subtract(up.scale(halfHeight));
         Vec3 topRight = center.add(right.scale(halfWidth)).add(up.scale(halfHeight));
@@ -219,8 +219,8 @@ public final class PortalVisibilityCull {
                 right,
                 up,
                 normal,
-                endpoint.width(),
-                endpoint.height(),
+                PortalRegionClient.renderWidth(endpoint),
+                PortalRegionClient.renderHeight(endpoint),
                 bottomLeft,
                 bottomRight,
                 topRight,

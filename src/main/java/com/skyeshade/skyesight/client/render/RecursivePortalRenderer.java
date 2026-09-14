@@ -66,6 +66,7 @@ public final class RecursivePortalRenderer {
         double distance = Math.min(parent.options().terrainRadius()*16.0, SkyesightClientConfig.PORTAL_RENDER_DISTANCE_BLOCKS.get());
         var candidates = SkyesightPortalApi.getAllPortals().stream()
                 .filter(p -> p.active() && p.renderSettings().enabled() && p.renderSettings().rendersView())
+                .filter(p -> !"portal_region".equals(p.sourceTag())) // Region observer activation is depth-1 only.
                 // This surface is the current scene's exit boundary, not another portal in it.
                 // Keep other/repeated directions eligible so genuine tunnels remain recursive.
                 .filter(p -> !isPairedExit(entered,p.id()))
