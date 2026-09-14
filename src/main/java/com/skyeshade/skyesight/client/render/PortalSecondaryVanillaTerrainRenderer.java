@@ -109,6 +109,7 @@ final class PortalSecondaryVanillaTerrainRenderer {
                     modelView,
                     projection
             );
+            SecondaryTerrainComposition.beforeTranslucent();
             if (frame.diagnostics().renderTranslucent()) {
                 bridge.skyesight$renderSecondarySectionLayer(
                         RenderType.translucent(), cameraPosition.x(), cameraPosition.y(), cameraPosition.z(),

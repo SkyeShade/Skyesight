@@ -715,7 +715,7 @@ public final class PortalDirectStencilRenderer {
             RenderSystem.applyModelViewMatrix();
             var poses = new PoseStack();
             poses.mulPose(frame.modelViewMatrix());
-            var event = new RenderLevelStageEvent(RenderLevelStageEvent.Stage.AFTER_LEVEL, minecraft.levelRenderer,
+            var event = new RenderLevelStageEvent(RenderLevelStageEvent.Stage.AFTER_CUTOUT_BLOCKS, minecraft.levelRenderer,
                     poses, frame.modelViewMatrix(), frame.projectionMatrix(), minecraft.levelRenderer.getTicks(),
                     minecraft.getTimer(), frame.camera(), frame.frustum());
             // Deliberately call the same stages once, not the event bus or recursive scene rendering.
@@ -734,9 +734,17 @@ public final class PortalDirectStencilRenderer {
 
         if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_SKY) {
             onPortalSkyAfterSkyStage(event);
-        } else if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_BLOCK_ENTITIES) {
+        } else if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_CUTOUT_BLOCKS) {
+            // Chunk-layer events carry an empty PoseStack. Rebuild it from the supplied
+            // view matrix (AFTER_BLOCK_ENTITIES used to supply this already).
+            var poses = new PoseStack();
+            poses.mulPose(event.getModelViewMatrix());
+            event = new RenderLevelStageEvent(event.getStage(), Minecraft.getInstance().levelRenderer,
+                    poses, event.getModelViewMatrix(), event.getProjectionMatrix(), event.getRenderTick(),
+                    event.getPartialTick(), event.getCamera(), event.getFrustum());
             onPortalStencilMaskWorldStage(event);
-        } else if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_LEVEL) {
+            // Destination color must exist before the source world's translucent terrain,
+            // translucent entities and particles blend over it (including Fabulous targets).
             updateCrossDimPortalStorage(Minecraft.getInstance(), event.getCamera());
             onPortalDirectLateStage(event);
         }
@@ -1404,6 +1412,11 @@ public final class PortalDirectStencilRenderer {
             SecondaryPortalCompositePass.restoreStencilState();
             restoreMainStateAfterDirect(minecraft, state);
             restorePortalViewportState(state);
+            // Secondary rendering cleared/replaced depth inside the stencil. Restore the
+            // physical surface so later source geometry tests against the seam, not remote terrain.
+            SecondaryPortalCompositePass.restorePortalSurfaceDepth(event.getPoseStack(), mainCamera,
+                    instance.entrancePortal(), directStencilBits, stencilRef,
+                    instance.renderConfig().stencilMask(), behaviorViewId);
         }
     }
 
@@ -1416,7 +1429,8 @@ public final class PortalDirectStencilRenderer {
             int stencilRef,
             String portalName
     ) {
-        if (!PORTAL_MAIN_PARTICLE_OCCLUSION_FIX || "E".equals(portalName)) {
+        if (event.getStage() == RenderLevelStageEvent.Stage.AFTER_CUTOUT_BLOCKS
+                || !PORTAL_MAIN_PARTICLE_OCCLUSION_FIX || "E".equals(portalName)) {
             return;
         }
 

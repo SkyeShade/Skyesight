@@ -33,13 +33,21 @@ public final class PortalServerViewCacheInvalidator {
         if (cachePolicy == PortalCachePolicy.SOFT_REPLACE) {
             return;
         }
-        ResourceLocation viewId = view.id();
         MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
         if (server == null) return;
-        if (!server.isSameThread()) {
-            server.execute(() -> invalidate(oldView, newView, reason, cachePolicy));
-            return;
-        }
+        dispatch(server, () -> server.isStopped() || ServerLifecycleHooks.getCurrentServer() != server,
+                () -> invalidateOnServer(server, view, newView, cachePolicy));
+    }
+
+    /** MinecraftServer.execute runs inline after stop, even on a foreign thread. Never redispatch recursively. */
+    static void dispatch(java.util.concurrent.Executor executor, java.util.function.BooleanSupplier stopped, Runnable action) {
+        if (stopped.getAsBoolean()) return;
+        executor.execute(() -> { if (!stopped.getAsBoolean()) action.run(); });
+    }
+
+    private static void invalidateOnServer(MinecraftServer server, RegisteredPortalView view,
+            RegisteredPortalView newView, PortalCachePolicy cachePolicy) {
+        ResourceLocation viewId = view.id();
         var current = SkyesightPortalRegistry.get(viewId);
         if (current != null && current.generation() != view.generation()
                 && (newView == null || current.generation() != newView.generation())) return;

@@ -169,7 +169,9 @@ public final class TraversalPortalClient {
                 && portal.source().dimension().equals(mc.level.dimension())) {
             guardedPortal = reverse;
             guardedExit = portal.target();
-            arrivalSide = PortalTraversalMath.local(guardedExit, destinationFeet).z >= 0 ? 1 : -1;
+            boolean region = com.skyeshade.skyesight.client.portal.PortalRegionClient.definition(portal.id()) != null;
+            var arrivalReference = region ? destinationFeet.add(mc.player.getEyePosition().subtract(mc.player.position())) : destinationFeet;
+            arrivalSide = PortalTraversalMath.local(guardedExit, arrivalReference).z >= 0 ? 1 : -1;
             awaitingArrivalEye = true;
             arrivalDeadline = Util.getMillis() + 2000;
             // Vanilla absolute position packets zero velocity. Preserve the actual local
@@ -301,14 +303,16 @@ public final class TraversalPortalClient {
             cancel();
             if (nearest != null) {
                 selected = nearest; prepared = SkyesightTransitionApi.preparePortalTransition(ResourceLocation.parse(nearest));
-                if (selected.equals(guardedPortal)) eyeSide.arrive(SkyesightPortalApi.getPortal(selected).source(), mc.player.position());
+                if (selected.equals(guardedPortal)) eyeSide.arrive(SkyesightPortalApi.getPortal(selected).source(),
+                        com.skyeshade.skyesight.client.portal.PortalRegionClient.definition(ResourceLocation.parse(selected)) != null
+                                ? mc.player.getEyePosition() : mc.player.position());
             }
         } else if (nearest != null && prepared != null && prepared.status() != SkyesightTransition.Status.READY
                 && prepared.status() != SkyesightTransition.Status.PREPARING) {
             cancel(); // Reprepare on the following tick after a completed/fallback handoff.
         }
     }
-    /** Render-frame eye sampling, independent of server feet-crossing authority. */
+    /** Render-frame eye sampling; regions use the same eye sweep for server authority. */
     public static void beforePresentation() {
         var mc = Minecraft.getInstance();
         if(mc.player!=null && mc.level!=null) com.skyeshade.skyesight.client.portal.PortalRegionClient.update();
@@ -329,7 +333,8 @@ public final class TraversalPortalClient {
                 && PortalTraversalMath.local(guardedExit, camera.getPosition()).z * arrivalSide >= 0) {
             awaitingArrivalEye = false;
             if (Objects.equals(selected, guardedPortal) && mc.player != null)
-                eyeSide.arrive(guardedExit, camera.getPosition().subtract(0, mc.player.getEyeHeight(), 0));
+                eyeSide.arrive(guardedExit, com.skyeshade.skyesight.client.portal.PortalRegionClient.definition(ResourceLocation.parse(guardedPortal)) != null
+                        ? camera.getPosition() : camera.getPosition().subtract(0, mc.player.getEyeHeight(), 0));
         }
         if (prepared == null || selected == null || mc.player == null || mc.level == null
                 || !mc.options.getCameraType().isFirstPerson()) return;
@@ -342,7 +347,7 @@ public final class TraversalPortalClient {
                 var gameplayLink = interactionLinks(mc.level.dimension()).stream().filter(l -> l.id().equals(portal.id())).findFirst().orElse(null);
         var region=com.skyeshade.skyesight.client.portal.PortalRegionClient.definition(portal.id());
         if(gameplayLink == null && region==null) return;
-        var confirmed = region!=null ? eyeSide.update(portal.source(),eye,region::containsWorld)
+        var confirmed = region!=null ? eyeSide.updateEye(portal.source(),eye,region::containsWorld)
                 : eyeSide.update(portal.source(), eye.subtract(0, mc.player.getEyeHeight(), 0),
                 point -> ((PortalAperture.Bound)gameplayLink.aperture()).shape().fitsPlayer(portal.source(),point,mc.player.getBbWidth(),mc.player.getBbHeight()));
         if (stableSide == 0 && (confirmed != null || eyeSide.hasPendingCrossing()))
@@ -351,7 +356,7 @@ public final class TraversalPortalClient {
         if (prepared.status() == SkyesightTransition.Status.PREDICTING) {
             // Render interpolation can briefly revisit the source side after correction.
             // Roll back only a meaningful retreat of the actual local body, not eye jitter.
-            double bodyDistance = PortalTraversalMath.local(portal.source(), mc.player.position()).z;
+            double bodyDistance = PortalTraversalMath.local(portal.source(), region != null ? mc.player.getEyePosition() : mc.player.position()).z;
             if (bodyDistance * predictedSourceSide > .1) cancel();
             return;
         }

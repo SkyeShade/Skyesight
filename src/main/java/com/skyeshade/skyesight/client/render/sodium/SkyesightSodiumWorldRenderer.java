@@ -190,6 +190,7 @@ public final class SkyesightSodiumWorldRenderer implements AutoCloseable {
             drawTerrainLayer(RenderType.solid(), matrices, cameraPos);
             drawTerrainLayer(RenderType.cutoutMipped(), matrices, cameraPos);
             drawTerrainLayer(RenderType.cutout(), matrices, cameraPos);
+            com.skyeshade.skyesight.client.render.SecondaryTerrainComposition.beforeTranslucent();
             if (renderTranslucent) {
                 drawTerrainLayer(RenderType.translucent(), matrices, cameraPos);
             }

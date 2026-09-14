@@ -11,11 +11,11 @@ import org.joml.Vector3d;
 public final class PortalTraversalMath {
     private PortalTraversalMath() {}
     public static Quaternionf rotation(Quaternionf source, Quaternionf target) {
-        return new Quaternionf(target).rotateY((float) Math.PI)
+        return new Quaternionf(target).mul(new Quaternionf(0, 1, 0, 0))
                 .mul(new Quaternionf(source).conjugate()).normalize();
     }
     public static Vec3 rotate(Vec3 vector, Quaternionf rotation) {
-        Vector3d result = new Vector3d(vector.x, vector.y, vector.z).rotate(new Quaterniond(rotation));
+        Vector3d result = new Vector3d(vector.x, vector.y, vector.z).rotate(new Quaterniond(rotation).normalize());
         return new Vec3(result.x, result.y, result.z);
     }
     public static Vec3 local(PortalEndpoint endpoint, Vec3 point) {
@@ -47,6 +47,16 @@ public final class PortalTraversalMath {
         return target.center().add(rotate(point.subtract(source.center()), rotation(source.rotation(), target.rotation())));
     }
     public record Pose(Vec3 position, Vec3 velocity, float yaw, float pitch) {}
+    /** Map the crossing eye and its residual sweep, then recover the upright entity root.
+     * The offset is sampled from the actual current pose, never a fixed standing eye height.
+     */
+    public static Pose transformAtEyeCrossing(PortalEndpoint source, PortalEndpoint target, Vec3 hit,
+            Vec3 eye, Vec3 eyeOffset, Vec3 velocity, float yaw, float pitch) {
+        var rotation = rotation(source.rotation(), target.rotation());
+        var mappedEye = position(source, target, hit).add(rotate(eye.subtract(hit), rotation));
+        var pose = transform(source, target, eye, velocity, yaw, pitch);
+        return new Pose(mappedEye.subtract(eyeOffset), pose.velocity(), pose.yaw(), pose.pitch());
+    }
     public static Pose transform(PortalEndpoint source, PortalEndpoint target, Vec3 position,
                                  Vec3 velocity, float yaw, float pitch) {
         var rotation = rotation(source.rotation(), target.rotation());

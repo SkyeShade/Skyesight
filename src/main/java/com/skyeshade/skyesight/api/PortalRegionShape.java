@@ -4,10 +4,11 @@ import java.util.List;
 
 /** Union of integer-aligned rectangles in surface U/V coordinates, including disconnected strips/holes. */
 public record PortalRegionShape(List<Strip> strips) {
-    public static final int MAX_STRIPS = 256;
+    /** 512 KiB of rectangle coordinates, leaving room in the 1 MiB clientbound payload. */
+    public static final int MAX_STRIPS = 32_768;
     public PortalRegionShape {
+        if (strips.isEmpty() || strips.size() > MAX_STRIPS) throw new IllegalArgumentException("1.."+MAX_STRIPS+" strips required");
         strips = List.copyOf(strips);
-        if (strips.isEmpty() || strips.size() > MAX_STRIPS) throw new IllegalArgumentException("1..256 strips required");
     }
     public record Strip(int minU, int minV, int maxU, int maxV) {
         public Strip {

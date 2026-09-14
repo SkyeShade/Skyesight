@@ -362,6 +362,7 @@ final class PortalSecondarySodiumTerrainRenderer {
             } finally {
                 RenderType.solid().clearRenderState();
             }
+            SecondaryTerrainComposition.beforeTranslucent();
             if (frame.diagnostics().renderToCurrentTarget() && PortalSecondaryRenderConfig.DIRECT_RENDER_TERRAIN_DRAW_SOLID_ONLY) {
                 renderDirectTranslucentTerrainIfEnabled(frame, renderer, matrices, usingMainSodiumRenderer);
                 return true;
