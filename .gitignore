@@ -12,6 +12,7 @@ build/
 out/
 !**/src/**/out/
 
+### IntelliJ run configurations ###
 .run/
 ### personal notes
 /docs/
